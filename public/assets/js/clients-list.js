@@ -17,7 +17,7 @@
         // Viewing follows the existing list/detail route access checks. The legacy
         // can_read Gate flag is not used by this list (permissions_as_gates is off).
         var actions = ['<a href="' + url + '" class="client-row-action" aria-label="View ' + escapeHtml(row.names || 'client') + '"><span class="material-symbols-outlined" aria-hidden="true">visibility</span>View</a>'];
-        if (row.can_update) actions.push('<a href="' + url + '/edit" class="client-row-action" aria-label="Edit ' + escapeHtml(row.names || 'client') + '"><span class="material-symbols-outlined" aria-hidden="true">edit_document</span>Edit</a>');
+        if (row.can_update) actions.push('<a href="' + url + '/edit" class="client-row-action" aria-label="Edit ' + escapeHtml(row.names || 'client') + '"><span class="material-symbols-outlined" aria-hidden="true">edit_square</span>Edit</a>');
         return actions.length ? '<div class="client-row-actions">' + actions.join('') + '</div>' : '<span class="client-list-missing">Not available</span>';
     }
     global.ChipsClientsList = { escapeHtml: escapeHtml, displayText: displayText, clientUrl: clientUrl, clientActions: clientActions };
@@ -86,11 +86,14 @@
                 { data: 'names', className: 'client-list-name', render: function (value, type, row) {
                     if (type !== 'display') return value || '';
                     var label = displayText(value);
-                    return '<a href="' + escapeHtml(clientUrl(page.dataset.clientsUrl, row.encrypted_id)) + '">' + label + '</a>';
+                    var reference = row.reference_number && row.reference_number !== '-'
+                        ? '<span class="client-list-reference">' + escapeHtml(row.reference_number) + '</span>'
+                        : '';
+                    return '<a href="' + escapeHtml(clientUrl(page.dataset.clientsUrl, row.encrypted_id)) + '">' + label + '</a>' + reference;
                 } },
                 { data: 'mobile_number', className: 'client-list-nowrap', render: renderCell },
                 { data: 'national_id', className: 'client-list-nowrap', render: renderCell },
-                { data: 'reference_number', className: 'client-list-nowrap', render: renderCell },
+                { data: 'reference_number', visible: false, render: renderCell },
                 { data: 'registered_date', className: 'client-list-nowrap', render: renderCell },
                 { data: 'encrypted_id', orderable: false, searchable: false, render: function (value, type, row) { return type === 'display' ? clientActions(page.dataset.clientsUrl, row) : ''; } }
             ],

@@ -17,8 +17,8 @@
     justify-content: space-between;
     align-items: center;
     flex-wrap: wrap;
-    gap: 20px;
-    padding: clamp(16px, 2.4vw, 32px);
+    gap: 8px 16px;
+    padding: 12px clamp(10px, 1.6vw, 20px);
     background: #f3f8fc;
     border-bottom: 1px solid var(--tenant-border);
     border-radius: 16px 16px 0 0;
@@ -27,22 +27,11 @@
 #tenant-listing .tenant-directory-eyebrow {
     margin: 0 0 6px;
     color: var(--tenant-blue);
-    font-size: .75rem;
-    font-weight: 700;
-    letter-spacing: .1em;
-    text-transform: uppercase;
 }
 
 #tenant-listing h1 {
     margin: 0;
     color: var(--tenant-ink);
-    font-size: clamp(1.65rem, 2.5vw, 2.2rem);
-    font-weight: 750;
-}
-
-#tenant-listing .tenant-directory-description {
-    margin: 8px 0 0;
-    color: var(--tenant-muted);
 }
 
 #tenant-listing .tenant-directory-actions,
@@ -56,8 +45,8 @@
 #tenant-listing .tenant-directory-actions .btn { border-radius: 9px; }
 #tenant-listing .tenant-directory-actions .btn-primary { background: var(--tenant-blue); border-color: var(--tenant-blue); }
 #tenant-listing .tenant-secondary-button { color: var(--tenant-ink); background: #fff; border: 1px solid var(--tenant-border); }
-#tenant-listing .tenant-directory-body { padding: clamp(12px, 1.6vw, 24px); }
-#tenant-listing .tenant-directory-toolbar { justify-content: space-between; margin-bottom: 16px; }
+#tenant-listing .tenant-directory-body { padding: clamp(8px, 1.4vw, 18px); }
+#tenant-listing .tenant-directory-toolbar { justify-content: space-between; margin-bottom: 8px; }
 
 #tenant-listing #status-filter {
     display: flex;
@@ -74,7 +63,6 @@
     color: var(--tenant-muted);
     border: 1px solid transparent;
     border-radius: 7px;
-    font-weight: 600;
 }
 
 #tenant-listing #status-filter button.active {
@@ -84,24 +72,22 @@
     box-shadow: 0 1px 3px #17304a12;
 }
 
-#tenant-listing .tenant-result-count { color: var(--tenant-muted); font-size: .875rem; }
+#tenant-listing .tenant-result-count { color: var(--tenant-muted); }
 #tenant-listing .tenant-result-count strong { color: var(--tenant-ink); }
-#tenant-listing #tenants-table { min-width: 850px; border-bottom: 1px solid var(--tenant-border); }
+#tenant-listing #tenants-table { min-width: 720px; border-bottom: 1px solid var(--tenant-border); }
 #tenant-listing #tenants-table thead { color: var(--tenant-ink); background: #f4f8fc; }
-#tenant-listing #tenants-table :is(th, td) { padding: 10px 12px; border-color: var(--tenant-border); vertical-align: middle; }
-#tenant-listing #tenants-table tbody td { background: #fff; box-shadow: none; color: var(--tenant-ink); font-size: .875rem; }
+#tenant-listing #tenants-table :is(th, td) { padding: 7px 9px; border-color: var(--tenant-border); vertical-align: middle; }
+#tenant-listing #tenants-table tbody td { background: #fff; box-shadow: none; color: var(--tenant-ink); }
 #tenant-listing #tenants-table tbody tr:hover td { background: #f3f8fe; }
-#tenant-listing #tenants-table tbody td:nth-child(2) { font-weight: 650; }
 #tenant-listing #tenants-table tbody td:nth-child(3) { text-align: left; white-space: nowrap; }
 #tenant-listing #tenants-table tbody .tenant-exited td { color: var(--tenant-muted); }
-#tenant-listing #tenants-table .col-filter { min-width: 88px; height: 32px; border: 1px solid var(--tenant-border); border-radius: 6px; font-weight: 400; }
 #tenant-listing .col-filter-wrap { position: relative; }
 #tenant-listing .col-filter-wrap .col-filter { padding-right: 24px; }
 #tenant-listing .filter-spinner { display: none; position: absolute; right: 7px; top: 9px; width: 14px; height: 14px; border: 2px solid var(--tenant-border); border-top-color: var(--tenant-blue); border-radius: 50%; }
 #tenant-listing .col-filter-wrap.loading .filter-spinner { display: block; animation: tenant-listing-spin .6s linear infinite; }
 @keyframes tenant-listing-spin { to { transform: rotate(360deg); } }
 
-#tenant-listing .tenant-status { display: inline-block; padding: 4px 9px; border-radius: 20px; font-size: .75rem; font-weight: 700; white-space: nowrap; }
+#tenant-listing .tenant-status { display: inline-block; padding: 4px 9px; border-radius: 20px; white-space: nowrap; }
 #tenant-listing .tenant-status-active { background: #e7f5ed; color: #17633f; }
 #tenant-listing .tenant-status-pending { background: #fff2da; color: #805316; }
 #tenant-listing .tenant-status-exited { background: #f2edf1; color: #695362; }
@@ -110,3 +96,16 @@
 #tenant-listing .tenant-row-actions a:hover { background: #dcecfb; }
 #tenant-listing .tenant-row-actions .material-symbols-outlined { font-size: 18px; }
 #tenant-listing :is(a, button, input, select):focus-visible { outline: 2px solid var(--tenant-blue); outline-offset: 2px; }
+
+#tenant-filters { display: grid; gap: 8px; margin-bottom: 10px; }
+#tenant-filters label { display: grid; gap: 4px; margin: 0; min-width: 0; }
+#tenant-filters > label { width: min(100%, 24rem); }
+#tenant-filters summary { color: var(--tenant-blue); cursor: pointer; }
+#tenant-filters .tenant-extra-filters {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
+    gap: 8px;
+    padding: 8px 0 2px;
+}
+#tenant-listing .tenant-unit { display: block; color: var(--tenant-muted); }
+#tenant-listing .dt-layout-end { flex-wrap: wrap; gap: 6px; }

@@ -14,7 +14,6 @@
                         <div>
                             <p class="tenant-directory-eyebrow">Management</p>
                             <h1 id="tenant-directory-title">Tenants</h1>
-                            <p class="tenant-directory-description">Find tenant records, manage unit assignments, and onboard new tenants.</p>
                         </div>
                         <div class="tenant-directory-actions">
                             <a href="{{ route('units.tenants.create') }}" class="btn btn-primary d-inline-flex align-items-center gap-2">
@@ -23,7 +22,7 @@
                             <div class="dropdown">
                                 <button class="btn tenant-secondary-button dropdown-toggle d-flex align-items-center" type="button" id="tenantActionsDropdown" data-bs-toggle="dropdown" aria-expanded="false">
                                     <span class="material-symbols-outlined me-1" style="font-size:18px;">more_vert</span>
-                                    <span>Actions</span>
+                                    <span>Tenant actions</span>
                                 </button>
                                 <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="tenantActionsDropdown">
                                     <li>
@@ -53,6 +52,20 @@
                                 <strong id="result_count">0</strong> matching tenants
                             </span>
                         </div>
+                        <div id="tenant-filters">
+                            <label>Search by tenant name
+                                <input type="search" class="form-control col-filter" data-filter="filter_names" placeholder="At least 3 characters">
+                            </label>
+                            <details>
+                                <summary>More filters</summary>
+                                <div class="tenant-extra-filters">
+                                    <label>Property<input type="search" class="form-control col-filter" data-filter="filter_property"></label>
+                                    <label>Landlord<input type="search" class="form-control col-filter" data-filter="filter_landlord"></label>
+                                    <label>Phone<input type="search" class="form-control col-filter" data-filter="filter_phone"></label>
+                                    <label>ID number<input type="search" class="form-control col-filter" data-filter="filter_id_number"></label>
+                                </div>
+                            </details>
+                        </div>
                         <div class="table-responsive custom-scrollbar">
                             <table class="display" id="tenants-table" style="width:100%;">
                                 <thead>
@@ -65,16 +78,6 @@
                                         <th>Landlord</th>
                                         <th>Status</th>
                                         <th>Actions</th>
-                                    </tr>
-                                    <tr class="column-filters">
-                                        <th></th>
-                                        <th><input type="text" class="form-control form-control-sm col-filter" data-filter="filter_names" aria-label="Filter by tenant name" placeholder="Name" /></th>
-                                        <th><input type="text" class="form-control form-control-sm col-filter" data-filter="filter_phone" aria-label="Filter by phone number" placeholder="Phone" /></th>
-                                        <th><input type="text" class="form-control form-control-sm col-filter" data-filter="filter_id_number" aria-label="Filter by ID number" placeholder="ID number" /></th>
-                                        <th><input type="text" class="form-control form-control-sm col-filter" data-filter="filter_property" aria-label="Filter by property" placeholder="Property" /></th>
-                                        <th><input type="text" class="form-control form-control-sm col-filter" data-filter="filter_landlord" aria-label="Filter by landlord" placeholder="Landlord" /></th>
-                                        <th></th>
-                                        <th></th>
                                     </tr>
                                 </thead>
                                 <tbody></tbody>
@@ -133,6 +136,9 @@
 <script>
     $(document).ready(function () {
         var currentStatus = 'active';
+        var pendingRequest;
+        const textRenderer = $.fn.dataTable.render.text();
+        const escapeText = textRenderer.display;
 
         var table = $('#tenants-table').DataTable({
             data: [],
@@ -143,10 +149,23 @@
                     searchable: false,
                     render: function (d, t, r, m) { return m.row + 1; }
                 },
-                { data: 'names' },
+                {
+                    data: 'names',
+                    render: function (name, type, row) {
+                        if (type !== 'display') return name;
+                        return '<a href="/tenants/' + encodeURIComponent(row.encrypted_id) + '">' + escapeText(name) + '</a>';
+                    }
+                },
                 { data: 'mobile_number' },
                 { data: 'national_id' },
-                { data: 'property_name' },
+                {
+                    data: 'property_name',
+                    render: function (property, type, row) {
+                        if (type !== 'display') return property;
+                        const unit = row.unit_code ? '<span class="tenant-unit">Unit ' + escapeText(row.unit_code) + '</span>' : '';
+                        return escapeText(property) + unit;
+                    }
+                },
                 { data: 'landlord_name' },
                 {
                     data: null,
@@ -171,7 +190,7 @@
                     render: function (d, t, r) {
                         var html = '<div class="tenant-row-actions">' +
                             '<a href="/tenants/' + r.encrypted_id + '" title="View Details" aria-label="View Details">' +
-                            '<span class="material-symbols-outlined" aria-hidden="true">folder_eye</span></a>' +
+                            '<span class="material-symbols-outlined" aria-hidden="true">visibility</span></a>' +
                             '<a href="' + '{{ route("move.in.inspections.create") }}?tenant=' + r.encrypted_id + '" title="Record Move-In Inspection" aria-label="Record Move-In Inspection">' +
                             '<span class="material-symbols-outlined" aria-hidden="true">search_check</span></a>';
                         if (r.pending_unit) {
@@ -193,7 +212,7 @@
             lengthChange: true,
             searching: false,
             ordering: true,
-            orderCellsTop: true,
+            layout: { topStart: null, topEnd: null, bottomStart: 'info', bottomEnd: ['pageLength', 'paging'] },
             order: [[1, 'asc']],
             pageLength: 50,
             language: {
@@ -205,7 +224,7 @@
         });
 
         // Wrap each filter input with a spinner element
-        $('#tenants-table thead .column-filters input.col-filter').each(function () {
+        $('#tenant-filters input.col-filter').each(function () {
             $(this).wrap('<div class="col-filter-wrap"></div>');
             $(this).after('<span class="filter-spinner"></span>');
         });
@@ -213,19 +232,21 @@
         var debounceTimer;
 
         function loadData() {
-            var $activeFilters = $('#tenants-table thead .column-filters .col-filter-wrap').filter(function () {
+            if (pendingRequest) pendingRequest.abort();
+            $('#tenant-filters .col-filter-wrap').removeClass('loading');
+            var $activeFilters = $('#tenant-filters .col-filter-wrap').filter(function () {
                 return $(this).find('input').val().trim().length >= 3;
             });
             $activeFilters.addClass('loading');
 
             var params = { status: currentStatus };
-            $('#tenants-table thead .column-filters input.col-filter').each(function () {
+            $('#tenant-filters input.col-filter').each(function () {
                 var key = $(this).data('filter');
                 var val = $(this).val().trim();
                 if (val.length >= 3) params[key] = val;
             });
 
-            $.ajax({
+            pendingRequest = $.ajax({
                 url: '{{ route("ajax.tenants.listing.data") }}',
                 type: 'GET',
                 data: params,
@@ -239,7 +260,8 @@
                         table.draw();
                     }
                 },
-                error: function (xhr) {
+                error: function (xhr, status) {
+                    if (status === 'abort') return;
                     $activeFilters.removeClass('loading');
                     var msg = 'Failed to load tenants.';
                     if (xhr.responseJSON && xhr.responseJSON.message) msg = xhr.responseJSON.message;
@@ -253,11 +275,12 @@
             $('#status-filter button').removeClass('active').attr('aria-pressed', 'false');
             $(this).addClass('active').attr('aria-pressed', 'true');
             currentStatus = $(this).data('status');
+            clearTimeout(debounceTimer);
             loadData();
         });
 
         // Column filters with debounce (3+ chars)
-        $('#tenants-table thead .column-filters input.col-filter').on('keyup', function () {
+        $('#tenant-filters input.col-filter').on('input', function () {
             clearTimeout(debounceTimer);
             debounceTimer = setTimeout(loadData, 400);
         });

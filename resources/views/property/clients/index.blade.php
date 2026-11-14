@@ -10,13 +10,14 @@
                 <div>
                     <span class="client-list-eyebrow">Management</span>
                     <h1 id="clientsListTitle">Clients</h1>
-                    <p>Find a client or add a new one.</p>
                 </div>
-                @permission('create_clients')
-                <a href="{{ route('property.clients.create') }}" class="btn btn-primary client-add-button">
-                    <span class="material-symbols-outlined" aria-hidden="true">add</span>Add Client
-                </a>
-                @endpermission
+                <div class="d-flex align-items-center flex-wrap gap-2">
+                    @permission('create_clients')
+                    <a href="{{ route('property.clients.create') }}" class="btn btn-primary client-add-button">
+                        <span class="material-symbols-outlined" aria-hidden="true">add</span>Add Client
+                    </a>
+                    @endpermission
+                </div>
             </header>
             <div class="card-body client-list-body">
                 <div class="client-list-toolbar">
@@ -68,7 +69,7 @@
                                     <th scope="col">ID number</th>
                                     <th scope="col">Client reference</th>
                                     <th scope="col">Registered</th>
-                                    <th scope="col">Action</th>
+                                    <th scope="col">Actions</th>
                                 </tr>
                             </thead>
                             <tbody></tbody>

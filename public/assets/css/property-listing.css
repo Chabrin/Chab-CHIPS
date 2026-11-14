@@ -17,54 +17,75 @@
     justify-content: space-between;
     align-items: center;
     flex-wrap: wrap;
-    gap: 20px;
-    padding: clamp(16px, 2.4vw, 32px);
+    gap: 8px 16px;
+    padding: 12px clamp(10px, 1.6vw, 20px);
     background: #f3f8fc;
     border-bottom: 1px solid var(--property-border);
     border-radius: 16px 16px 0 0;
 }
 
 #property-listing .property-directory-eyebrow {
-    margin: 0 0 6px;
+    margin: 0 0 2px;
     color: var(--property-blue);
-    font-size: .75rem;
-    font-weight: 700;
-    letter-spacing: .1em;
-    text-transform: uppercase;
 }
 
 #property-listing h1 {
     margin: 0;
     color: var(--property-ink);
-    font-size: clamp(1.65rem, 2.5vw, 2.2rem);
-    font-weight: 750;
 }
 
-#property-listing .property-directory-description { margin: 8px 0 0; color: var(--property-muted); }
-#property-listing .property-directory-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
-#property-listing .property-directory-actions .btn { border-radius: 9px; }
+#property-listing .property-directory-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; }
+#property-listing .property-directory-actions .btn { border-radius: 7px; padding: 6px 9px; white-space: normal; }
 #property-listing .property-directory-actions .btn-primary { background: var(--property-blue); border-color: var(--property-blue); }
-#property-listing .property-secondary-button { background: #fff; color: var(--property-ink); border: 1px solid var(--property-border); }
-#property-listing .property-directory-body { padding: clamp(12px, 1.6vw, 24px); }
-
-#property-listing :is(.dt-length, .dt-search, .dataTables_length, .dataTables_filter) { margin-bottom: 12px; color: var(--property-muted); }
-#property-listing :is(.dt-search, .dataTables_filter) input { width: min(16rem, 100%); max-width: 100%; }
-#property-listing :is(.dt-search, .dt-length, .dataTables_filter, .dataTables_length) :is(input, select) {
-    margin-inline: 6px;
-    border: 1px solid var(--property-border);
-    border-radius: 7px;
-    padding: 6px 8px;
+#property-listing .property-secondary-button { color: var(--property-blue); background: transparent; }
+#property-listing .property-secondary-button:hover { background: #e4eef8; }
+#property-listing .property-directory-body { padding: clamp(8px, 1.4vw, 18px); }
+#property-listing .property-directory-filters {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 8px;
 }
+#property-listing .property-directory-filters label { min-width: 0; margin: 0; color: var(--property-ink); }
+#property-listing .property-directory-filters :is(input, select) { width: 100%; margin-top: 3px; border-color: var(--property-border); }
+#property-listing .dt-layout-row:last-child { flex-wrap: wrap; gap: 6px; margin-block: 8px 0; }
+#property-listing .dt-layout-end { flex-wrap: wrap; gap: 6px; }
+#property-listing .dt-length { color: var(--property-muted); white-space: nowrap; }
 
-#property-listing #propertiesTable { border-bottom: 1px solid var(--property-border); }
-#property-listing #propertiesTable thead { background: #f4f8fc; color: var(--property-ink); }
-#property-listing #propertiesTable :is(th, td) { padding: 10px 12px; border-color: var(--property-border); vertical-align: middle; }
-#property-listing #propertiesTable tbody td { background: #fff; box-shadow: none; color: var(--property-ink); font-size: .875rem; }
-#property-listing #propertiesTable tbody tr:hover td { background: #f3f8fe; }
-#property-listing #propertiesTable tbody td a { color: var(--property-blue); font-weight: 650; }
-#property-listing #propertiesTable .column-filters input { min-width: 76px; height: 32px; border-color: var(--property-border); border-radius: 6px; font-weight: 400; }
-#property-listing .property-row-actions { display: flex; align-items: center; gap: 5px; }
-#property-listing .property-row-actions a { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 7px; background: #eef5fc; }
-#property-listing .property-row-actions a:hover { background: #dcecfb; }
-#property-listing .property-row-actions .material-symbols-outlined { font-size: 18px; }
+#property-listing :is(#propertiesTable, #slaTable) { border-bottom: 1px solid var(--property-border); }
+#property-listing :is(#propertiesTable, #slaTable) thead { background: #f4f8fc; color: var(--property-ink); }
+#property-listing :is(#propertiesTable, #slaTable) :is(th, td) { padding: 7px 9px; border-color: var(--property-border); vertical-align: middle; overflow-wrap: anywhere; }
+#property-listing .property-name-column { width: 40%; }
+#property-listing :is(#propertiesTable, #slaTable) tbody td { background: #fff; box-shadow: none; color: var(--property-ink); }
+#property-listing :is(#propertiesTable, #slaTable) tbody tr:hover td { background: #f3f8fe; }
+#property-listing :is(#propertiesTable, #slaTable) tbody td a { color: var(--property-blue); }
+#property-listing .property-reference { display: block; color: var(--property-muted); }
+#property-listing .directory-row-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+#property-listing .directory-icon-action {
+    display: inline-grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: #eef5fc;
+    color: var(--property-blue);
+    text-decoration: none;
+}
+#property-listing .directory-icon-action:hover { background: #dcecfb; }
+#property-listing .directory-icon-action .material-symbols-outlined { font-size: 18px; }
+#property-listing .sla-directory-filters { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); max-width: 38rem; }
+#property-listing #slaTable { min-width: 700px; }
+#property-listing #slaTable .btn-link.sla-view-link { padding: 0; color: var(--property-blue); text-align: start; }
 #property-listing :is(a, button, input, select):focus-visible { outline: 2px solid var(--property-blue); outline-offset: 2px; }
+
+@media (max-width: 500px) {
+    #property-listing .property-directory-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    #property-listing .property-directory-filters label:first-child { grid-column: 1 / -1; }
+    #property-listing .sla-directory-filters { grid-template-columns: minmax(0, 1fr); }
+    #property-listing #propertiesTable { table-layout: fixed; }
+    #property-listing #propertiesTable :is(th, td) { padding-inline: 5px; }
+    #property-listing #propertiesTable th:nth-child(2) { width: 16%; }
+    #property-listing #propertiesTable th.property-action-column { width: 17%; }
+}
