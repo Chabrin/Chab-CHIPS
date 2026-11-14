@@ -10,7 +10,10 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class StaffMessagingController extends Controller
 {
@@ -18,7 +21,8 @@ class StaffMessagingController extends Controller
     {
         $this->requireStaff($request);
 
-        return response()->view('staff-messaging.index')->header('Cache-Control', 'no-store');
+        return response()->view('staff-messaging.index', ['uploadLimits' => $this->uploadLimits()])
+            ->header('Cache-Control', 'no-store');
     }
 
     public function directory(Request $request): JsonResponse
@@ -44,7 +48,7 @@ class StaffMessagingController extends Controller
         $this->requireStaff($request);
         $userId = (int) $request->user()->id;
         $conversations = StaffConversation::forUser($userId)
-            ->with(['firstUser:id,name', 'secondUser:id,name', 'latestMessage'])
+            ->with(['firstUser:id,name', 'secondUser:id,name', 'latestMessage' => fn ($query) => $query->withCount('attachments')])
             ->withCount(['messages as unread_count' => fn ($query) => $query
                 ->where('sender_id', '!=', $userId)->whereNull('read_at')])
             ->orderByDesc('updated_at')->orderByDesc('id')->simplePaginate(25);
@@ -116,7 +120,7 @@ class StaffMessagingController extends Controller
             'before_id' => 'nullable|integer|min:1|prohibits:after_id',
             'after_id' => 'nullable|integer|min:1|prohibits:before_id',
         ]);
-        $query = $conversation->messages();
+        $query = $conversation->messages()->with('attachments');
         $forward = isset($validated['after_id']);
         if ($forward) {
             $query->where('id', '>', $validated['after_id']);
@@ -147,13 +151,20 @@ class StaffMessagingController extends Controller
     public function sendMessage(Request $request, int $conversation): JsonResponse
     {
         $conversation = $this->participantConversation($request, $conversation);
+        $limits = $this->uploadLimits();
         $validated = $request->validate([
-            'body' => 'required|string|max:5000',
+            'body' => 'nullable|string|max:5000',
             'client_token' => 'required|uuid',
+            'attachments' => 'sometimes|array|list|max:'.$limits['count'],
+            'attachments.*' => 'required|file|max:'.intdiv($limits['file'], 1024).'|mimes:pdf,docx,xlsx,jpeg,png|extensions:pdf,docx,xlsx,jpg,jpeg,png',
         ]);
-        $body = trim($validated['body']);
-        if ($body === '') {
-            throw ValidationException::withMessages(['body' => 'Enter a message.']);
+        $body = trim($validated['body'] ?? '');
+        $files = $validated['attachments'] ?? [];
+        if (array_sum(array_map(fn ($file) => $file->getSize(), $files)) > $limits['total']) {
+            throw ValidationException::withMessages(['attachments' => 'These files are too large to send together. Send them in separate messages.']);
+        }
+        if ($body === '' && !$files) {
+            throw ValidationException::withMessages(['body' => 'Enter a message or attach a file.']);
         }
         $userId = (int) $request->user()->id;
         $otherId = (int) $conversation->first_user_id === $userId
@@ -161,7 +172,21 @@ class StaffMessagingController extends Controller
         abort_unless(User::findOrFail($otherId)->canUseStaffMessaging(), 422,
             'This staff member is unavailable for messaging.');
 
-        $message = DB::transaction(function () use ($conversation, $userId, $validated, $body) {
+        $metadata = array_map(static function ($file) {
+            $extension = strtolower($file->getClientOriginalExtension());
+            $name = preg_replace('/[^\pL\pN ._()-]/u', '_', pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME));
+
+            return [
+                'original_name' => Str::substr(trim($name ?? '', ' .') ?: 'attachment', 0, 200).'.'.$extension,
+                'mime_type' => $file->getMimeType(),
+                'size_bytes' => $file->getSize(),
+                'checksum' => hash_file('sha256', $file->getPathname()),
+            ];
+        }, $files);
+        $stored = [];
+        $disk = Storage::disk('staff-attachments');
+        try {
+            $message = DB::transaction(function () use ($conversation, $userId, $validated, $body, $files, $metadata, $disk, &$stored) {
             // Serialize sends and read markers in this conversation.
             StaffConversation::whereKey($conversation->id)->lockForUpdate()->firstOrFail();
             $message = StaffMessage::firstOrCreate([
@@ -172,17 +197,54 @@ class StaffMessagingController extends Controller
             abort_unless((int) $message->conversation_id === (int) $conversation->id
                 && $message->body === $body, 409, 'This send token was already used for another message.');
             if ($message->wasRecentlyCreated) {
+                foreach ($files as $index => $file) {
+                    $path = (string) Str::uuid();
+                    $stored[] = $path;
+                    if ($disk->putFileAs('', $file, $path) === false) {
+                        throw new \RuntimeException('Could not store staff message attachment.');
+                    }
+                    $message->attachments()->create($metadata[$index] + ['storage_path' => $path]);
+                }
                 $conversation->touch();
             }
 
+            $message->load('attachments');
+            abort_unless($message->attachments->map(fn ($file) => $file->only([
+                'original_name', 'mime_type', 'size_bytes', 'checksum',
+            ]))->all() === $metadata, 409, 'This send token was already used with different attachments.');
+
             return $message;
-        });
+            });
+        } catch (\Throwable $error) {
+            if ($stored) {
+                try {
+                    $disk->delete($stored);
+                } catch (\Throwable $cleanupError) {
+                    report($cleanupError);
+                }
+            }
+            throw $error;
+        }
 
         if ($message->wasRecentlyCreated) {
             $this->notifyParticipants($conversation, 'message_created', $userId, (int) $message->id);
         }
 
         return $this->json(['message' => $this->messageData($message)], $message->wasRecentlyCreated ? 201 : 200);
+    }
+
+    public function downloadAttachment(Request $request, int $conversation, int $message, int $attachment): StreamedResponse
+    {
+        $conversation = $this->participantConversation($request, $conversation);
+        $file = $conversation->messages()->findOrFail($message)->attachments()->findOrFail($attachment);
+        $disk = Storage::disk('staff-attachments');
+        abort_unless($disk->exists($file->storage_path), 404);
+
+        return $disk->download($file->storage_path, $file->original_name, [
+            'Content-Type' => 'application/octet-stream',
+            'Cache-Control' => 'private, no-store',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
     }
 
     public function markRead(Request $request, int $conversation): JsonResponse
@@ -218,6 +280,18 @@ class StaffMessagingController extends Controller
             ->whereHas('conversation', fn ($query) => $query->forUser($userId))->count();
     }
 
+    private function uploadLimits(): array
+    {
+        $post = ini_parse_quantity((string) ini_get('post_max_size'));
+        $upload = ini_parse_quantity((string) ini_get('upload_max_filesize'));
+
+        return [
+            'file' => min(10 * 1024 * 1024, $upload > 0 ? $upload : PHP_INT_MAX),
+            'total' => min(25 * 1024 * 1024, $post > 0 ? max(0, $post - 64 * 1024) : PHP_INT_MAX),
+            'count' => min(20, max(0, (int) ini_get('max_file_uploads'))),
+        ];
+    }
+
     private function requireStaff(Request $request): void
     {
         abort_unless($request->user()->canUseStaffMessaging(), 403, 'Messaging requires an active staff account.');
@@ -237,6 +311,14 @@ class StaffMessagingController extends Controller
             'conversation_id' => $message->conversation_id,
             'sender_id' => $message->sender_id,
             'body' => $message->body,
+            'attachment_count' => $message->attachments_count ?? ($message->relationLoaded('attachments') ? $message->attachments->count() : 0),
+            'attachments' => $message->relationLoaded('attachments') ? $message->attachments->map(fn ($file) => [
+                'name' => $file->original_name,
+                'size_bytes' => $file->size_bytes,
+                'url' => route('staff-messaging.attachments.download', [
+                    'conversation' => $message->conversation_id, 'message' => $message->id, 'attachment' => $file->id,
+                ], false),
+            ])->all() : [],
             'created_at' => $message->created_at->toIso8601String(),
             'read_at' => $message->read_at?->toIso8601String(),
         ];

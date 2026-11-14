@@ -8,11 +8,13 @@ use App\Models\StaffMessage;
 use App\Models\User;
 use App\Services\StaffPasswordPolicy;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -63,6 +65,7 @@ class StaffMessagingTest extends TestCase
         });
         (require base_path('database/migrations/2026_11_06_141825_create_staff_messaging_tables.php'))->up();
         (require base_path('database/migrations/2026_11_06_160000_add_client_token_to_staff_messages.php'))->up();
+        (require base_path('database/migrations/2026_11_11_170000_create_staff_message_attachments_table.php'))->up();
 
         foreach ([1 => 1, 2 => 4, 3 => 1, 4 => 2, 5 => 1, 7 => 1, 8 => 1] as $id => $status) {
             DB::table('sys_staff')->insert(['id' => $id, 'current_status_id' => $status]);
@@ -84,6 +87,57 @@ class StaffMessagingTest extends TestCase
     private function conversation(int $first = 1, int $second = 2): StaffConversation
     {
         return StaffConversation::create(['first_user_id' => $first, 'second_user_id' => $second]);
+    }
+
+    public function test_attachments_are_private_and_a_retry_does_not_store_them_twice(): void
+    {
+        $disk = Storage::fake('staff-attachments');
+        $conversation = $this->conversation();
+        $url = "/staff-messaging/conversations/{$conversation->id}/messages";
+        $pdf = "%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF";
+        $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aZ3sAAAAASUVORK5CYII=');
+        $token = (string) Str::uuid();
+        $makeUpload = function ($name, $contents) {
+            $fake = UploadedFile::fake()->createWithContent($name, $contents);
+            // Use an actual UploadedFile for MIME detection rather than the fake's filename-based MIME.
+            return [$fake, new UploadedFile($fake->getPathname(), $name, null, UPLOAD_ERR_OK, true)];
+        };
+        $send = function ($contents) use ($makeUpload, $url, $token, $png) {
+            [$pdfTemp, $pdfFile] = $makeUpload('note.pdf', $contents);
+            [$pngTemp, $pngFile] = $makeUpload('photo.png', $png);
+
+            return $this->post($url, ['client_token' => $token, 'attachments' => [$pdfFile, $pngFile]], ['Accept' => 'application/json']);
+        };
+
+        $result = $send($pdf)->assertCreated()
+            ->assertJsonPath('message.body', '')->assertJsonPath('message.attachment_count', 2)
+            ->assertJsonMissingPath('message.attachments.0.storage_path')->json('message');
+        $send($pdf)->assertOk()->assertJsonPath('message.id', $result['id']);
+        $send($pdf."\nchanged")->assertConflict();
+        $this->assertCount(2, $disk->allFiles());
+        $this->assertSame(1, StaffMessage::count());
+
+        $this->actingAs(User::findOrFail(2));
+        $this->getJson($url)->assertOk()->assertJsonPath('messages.0.attachments.1.name', 'photo.png');
+        $this->getJson('/staff-messaging/conversations')->assertOk()->assertJsonPath('conversations.0.latest_message.attachment_count', 2);
+        $download = $this->get($result['attachments'][0]['url'])->assertOk()->assertDownload('note.pdf');
+        $this->assertSame($pdf, $download->streamedContent());
+        $this->actingAs(User::findOrFail(3));
+        $this->getJson($result['attachments'][0]['url'])->assertNotFound();
+    }
+
+    public function test_disguised_file_is_rejected_without_creating_a_message(): void
+    {
+        $disk = Storage::fake('staff-attachments');
+        $conversation = $this->conversation();
+        $temp = UploadedFile::fake()->createWithContent('fake.png', '<html>Not an image</html>');
+        $file = new UploadedFile($temp->getPathname(), 'fake.png', 'image/png', UPLOAD_ERR_OK, true);
+        $this->post("/staff-messaging/conversations/{$conversation->id}/messages", [
+            'client_token' => (string) Str::uuid(),
+            'attachments' => [$file],
+        ], ['Accept' => 'application/json'])->assertUnprocessable()->assertJsonValidationErrors('attachments.0');
+        $this->assertSame([], $disk->allFiles());
+        $this->assertSame(0, StaffMessage::count());
     }
 
     private function message(StaffConversation $conversation, int $sender, string $body = 'Hello'): StaffMessage

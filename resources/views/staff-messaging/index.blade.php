@@ -32,10 +32,15 @@
                     <ol id="sm-messages" class="sm-messages" aria-label="Message history"></ol>
                     <p id="sm-history-status" class="sm-list-status" role="status"></p>
                 </div>
-                <form id="sm-compose" class="sm-compose" hidden>
+                <form id="sm-compose" class="sm-compose" data-file-max="{{ $uploadLimits['file'] }}" data-upload-max="{{ $uploadLimits['total'] }}" data-upload-count="{{ $uploadLimits['count'] }}" hidden>
                     <label for="sm-body">Message</label>
+                    <input type="file" id="sm-files" accept=".pdf,.docx,.xlsx,.jpg,.jpeg,.png" multiple hidden>
+                    <ul id="sm-draft-files" class="sm-draft-files" aria-label="Selected attachments" hidden></ul>
                     <div class="sm-compose-input">
-                        <textarea id="sm-body" rows="2" maxlength="5000" placeholder="Write a message…" aria-describedby="sm-compose-hint" required></textarea>
+                        <button type="button" class="sm-attach-icon" id="sm-attach" aria-label="Attach documents or images" title="Attach PDF, Word, Excel, JPEG or PNG">
+                            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m20.8 11.6-8.6 8.6a5 5 0 0 1-7.1-7.1l9.2-9.2a3.5 3.5 0 0 1 5 5l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"/></svg>
+                        </button>
+                        <textarea id="sm-body" rows="2" maxlength="5000" placeholder="Write a message…" aria-describedby="sm-compose-hint"></textarea>
                         <button type="submit" class="sm-send-icon" id="sm-send" aria-label="Send message" title="Send message">
                             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m22 2-7 20-4-9-9-4 20-7Z M22 2 11 13"/></svg>
                         </button>

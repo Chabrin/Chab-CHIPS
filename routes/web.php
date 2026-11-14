@@ -82,6 +82,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/staff-messaging/conversations', [\App\Http\Controllers\StaffMessagingController::class, 'conversations'])->name('staff-messaging.conversations');
     Route::get('/staff-messaging/unread-count', [\App\Http\Controllers\StaffMessagingController::class, 'unreadCount'])->name('staff-messaging.unread-count');
     Route::get('/staff-messaging/conversations/{conversation}/messages', [\App\Http\Controllers\StaffMessagingController::class, 'messages'])->whereNumber('conversation')->name('staff-messaging.messages');
+    Route::get('/staff-messaging/conversations/{conversation}/messages/{message}/attachments/{attachment}', [\App\Http\Controllers\StaffMessagingController::class, 'downloadAttachment'])->whereNumber(['conversation', 'message', 'attachment'])->name('staff-messaging.attachments.download');
     Route::post('/staff-messaging/conversations/{conversation}/messages', [\App\Http\Controllers\StaffMessagingController::class, 'sendMessage'])->whereNumber('conversation')->middleware('throttle:60,1')->name('staff-messaging.send');
     Route::post('/staff-messaging/conversations/{conversation}/read', [\App\Http\Controllers\StaffMessagingController::class, 'markRead'])->whereNumber('conversation')->name('staff-messaging.read');
     Route::post(

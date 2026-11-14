@@ -127,6 +127,9 @@ function initializeInbox(page, userId, api) {
     const composer = element('sm-compose');
     const body = element('sm-body');
     const sendButton = element('sm-send');
+    const attachButton = element('sm-attach');
+    const fileInput = element('sm-files');
+    const draftFiles = element('sm-draft-files');
     const errorBox = element('sm-error');
     let mode = 'inbox';
     let listPage = 1;
@@ -137,6 +140,54 @@ function initializeInbox(page, userId, api) {
     let inboxTimer;
     let listBusy = false;
     let listPending = false;
+
+    function fileSize(bytes) {
+        return bytes >= 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.ceil(bytes / 1024)} KB`;
+    }
+
+    function renderDraftFiles() {
+        draftFiles.replaceChildren();
+        draftFiles.hidden = !current?.files.length;
+        attachButton.disabled = !current?.canSend || current.sending;
+        for (const file of current?.files ?? []) {
+            const item = document.createElement('li');
+            const name = document.createElement('span');
+            name.textContent = `${file.name} · ${fileSize(file.size)}`;
+            const remove = document.createElement('button');
+            remove.type = 'button';
+            remove.textContent = '×';
+            remove.setAttribute('aria-label', `Remove ${file.name}`);
+            remove.disabled = current.sending;
+            remove.addEventListener('click', () => {
+                current.files = current.files.filter(candidate => candidate !== file);
+                renderDraftFiles();
+                attachButton.focus();
+            });
+            item.append(name, remove);
+            draftFiles.append(item);
+        }
+    }
+
+    attachButton.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', () => {
+        const picked = Array.from(fileInput.files);
+        fileInput.value = '';
+        if (!picked.length || !current?.canSend || current.sending) return;
+        const files = [...current.files, ...picked];
+        const max = Number(composer.dataset.fileMax);
+        const invalid = picked.find(file => !/\.(pdf|docx|xlsx|jpe?g|png)$/i.test(file.name) || !file.size || file.size > max);
+        if (invalid) {
+            showError(new Error(`${invalid.name}: choose a nonempty PDF, Word, Excel, JPEG or PNG up to ${fileSize(max)}.`));
+            return;
+        }
+        if (files.length > Number(composer.dataset.uploadCount) || files.reduce((sum, file) => sum + file.size, 0) > Number(composer.dataset.uploadMax)) {
+            showError(new Error('These files exceed the limit for one upload. Send them in separate messages.'));
+            return;
+        }
+        clearError();
+        current.files = files;
+        renderDraftFiles();
+    });
 
     function resizeWorkspace() {
         const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
@@ -167,7 +218,8 @@ function initializeInbox(page, userId, api) {
 
     function showError(error) {
         const errors = error.response?.data?.errors;
-        errorBox.textContent = errors ? Object.values(errors).flat().join(' ')
+        errorBox.textContent = error.response?.status === 413 ? 'This upload is too large. Try smaller files or send them separately.'
+            : errors ? Object.values(errors).flat().join(' ')
             : error.response?.data?.message ?? error.message ?? 'The request failed. Please retry.';
         errorBox.hidden = false;
     }
@@ -197,7 +249,7 @@ function initializeInbox(page, userId, api) {
             const preview = document.createElement('span');
             preview.className = 'sm-entry-preview';
             preview.textContent = mode === 'staff' ? person.role
-                : entry.latest_message?.body ?? 'No messages yet';
+                : entry.latest_message?.body || (entry.latest_message?.attachment_count ? 'Attachment' : 'No messages yet');
             copy.append(name, preview);
             button.append(avatar, copy);
             if (mode === 'inbox' && entry.unread_count > 0) {
@@ -286,6 +338,13 @@ function initializeInbox(page, userId, api) {
             const text = document.createElement('div');
             text.className = 'sm-message-body';
             text.textContent = message.body;
+            for (const file of message.attachments ?? []) {
+                const download = document.createElement('a');
+                download.className = 'sm-file-download';
+                download.href = file.url;
+                download.textContent = `${file.name} · ${fileSize(file.size_bytes)}`;
+                text.append(download);
+            }
             const time = document.createElement('time');
             time.className = 'sm-message-time';
             time.dateTime = message.created_at;
@@ -354,6 +413,7 @@ function initializeInbox(page, userId, api) {
                     : 'This colleague is currently unavailable for new messages.';
                 body.disabled = !state.canSend;
                 sendButton.disabled = !state.canSend || state.sending;
+                renderDraftFiles();
                 composer.hidden = false;
                 renderMessages(state, !newest || nearBottom);
                 if (newest && result.has_more) state.pending = true;
@@ -373,7 +433,7 @@ function initializeInbox(page, userId, api) {
     function openConversation(id) {
         clearError();
         current = { id: Number(id), messages: new Map(), hasOlder: false, loading: false,
-            pending: false, cursor: 0, readThrough: 0, canSend: false, sending: false, pendingSend: null };
+            pending: false, cursor: 0, readThrough: 0, canSend: false, sending: false, pendingSend: null, files: [] };
         page.dataset.activeConversation = String(current.id);
         element('sm-empty').hidden = true;
         element('sm-chat-title').textContent = 'Loading conversation…';
@@ -383,6 +443,7 @@ function initializeInbox(page, userId, api) {
         messageList.replaceChildren();
         older.hidden = true;
         body.value = '';
+        renderDraftFiles();
         sendButton.setAttribute('aria-label', 'Send message');
         sendButton.title = 'Send message';
         sendButton.removeAttribute('aria-busy');
@@ -420,20 +481,28 @@ function initializeInbox(page, userId, api) {
         event.preventDefault();
         const state = current;
         const text = body.value.trim();
-        if (!state || state.sending || !state.canSend || !text) return;
+        if (!state || state.sending || !state.canSend || (!text && !state.files.length)) return;
         clearError();
         state.sending = true;
         sendButton.disabled = true;
+        renderDraftFiles();
         sendButton.setAttribute('aria-label', 'Sending message');
         sendButton.title = 'Sending message…';
         sendButton.setAttribute('aria-busy', 'true');
-        if (state.pendingSend?.body !== text) {
-            state.pendingSend = { body: text, client_token: crypto.randomUUID() };
+        if (state.pendingSend?.body !== text || state.pendingSend?.files !== state.files) {
+            state.pendingSend = { body: text, files: state.files, client_token: crypto.randomUUID() };
         }
         try {
-            const result = await api(`/conversations/${state.id}/messages`, { method: 'POST', data: state.pendingSend });
+            const data = { body: text, client_token: state.pendingSend.client_token };
+            const payload = state.files.length ? new FormData() : data;
+            if (state.files.length) {
+                Object.entries(data).forEach(([key, value]) => payload.append(key, value));
+                state.files.forEach(file => payload.append('attachments[]', file));
+            }
+            const result = await api(`/conversations/${state.id}/messages`, { method: 'POST', data: payload });
             state.messages.set(Number(result.message.id), result.message);
             state.pendingSend = null;
+            state.files = [];
             if (state === current) {
                 if (body.value.trim() === text) body.value = '';
                 renderMessages(state, true);
@@ -448,6 +517,7 @@ function initializeInbox(page, userId, api) {
             state.sending = false;
             if (state === current) {
                 sendButton.disabled = !state.canSend;
+                renderDraftFiles();
                 sendButton.setAttribute('aria-label', 'Send message');
                 sendButton.title = 'Send message';
                 sendButton.removeAttribute('aria-busy');
