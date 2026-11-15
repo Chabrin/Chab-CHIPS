@@ -775,7 +775,8 @@ class ClientReturnsController extends Controller
                     $totals['service_charge'] += $amt;
                 }
 
-                if ((float) ($l->vat_amount ?? 0) > 0) {
+                // The COMMISSION line repeats the VAT its rent lines already carry, so it is not added again
+                if ((float) ($l->vat_amount ?? 0) > 0 && $et !== 'COMMISSION') {
                     $tenantRows[$key]['vat'] += (float) $l->vat_amount;
                     $totals['vat'] += (float) $l->vat_amount;
                 }
@@ -2043,7 +2044,8 @@ class ClientReturnsController extends Controller
                     $totals['service_charge'] += $amt;
                 }
 
-                if ((float) ($l->vat_amount ?? 0) > 0) {
+                // The COMMISSION line repeats the VAT its rent lines already carry, so it is not added again
+                if ((float) ($l->vat_amount ?? 0) > 0 && $et !== 'COMMISSION') {
                     $tenantRows[$key]['vat'] += (float) $l->vat_amount;
                     $totals['vat'] += (float) $l->vat_amount;
                 }

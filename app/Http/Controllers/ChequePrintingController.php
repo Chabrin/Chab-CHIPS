@@ -28,17 +28,24 @@ class ChequePrintingController extends Controller
     }
 
     /**
-     * AJAX: fetch unprinted vouchers for DataTable.
+     * AJAX: fetch unprinted vouchers for DataTable. Pending ones from the last 3 days, and Approved ones from the last
+     * 30 days, because a cheque is normally printed once its voucher is approved.
      */
     public function getData()
     {
         try {
-            $cutoff = now()->subDays(3)->startOfDay();
+            $pendingCutoff = now()->subDays(3)->startOfDay();
+            $approvedCutoff = now()->subDays(30)->startOfDay();
 
             $vouchers = PaymentVoucherHeader::where('is_printed', 0)
                 ->where('is_deleted', 0)
-                ->where('voucher_status', 'Pending')
-                ->where('created_at', '>=', $cutoff)
+                ->where(function ($query) use ($pendingCutoff, $approvedCutoff) {
+                    $query->where(function ($pending) use ($pendingCutoff) {
+                        $pending->where('voucher_status', 'Pending')->where('created_at', '>=', $pendingCutoff);
+                    })->orWhere(function ($approved) use ($approvedCutoff) {
+                        $approved->where('voucher_status', 'Approved')->where('created_at', '>=', $approvedCutoff);
+                    });
+                })
                 ->orderByDesc('id')
                 ->get();
 
@@ -53,6 +60,7 @@ class ChequePrintingController extends Controller
                     'debit_amount'   => number_format($v->debit_amount ?? 0, 2),
                     'cheque_number'  => $v->cheque_number ?? '-',
                     'prepared_by'    => $v->prepared_by ?? '-',
+                    'voucher_status' => $v->voucher_status ?? 'Pending',
                     'is_printed'     => $v->is_printed,
                 ];
             });

@@ -50,6 +50,7 @@
                                         <th>Cheque No.</th>
                                         <th class="text-end">Amount</th>
                                         <th>Prepared By</th>
+                                        <th>Status</th>
                                         <th>Actions</th>
                                     </tr>
                                 </thead>
@@ -113,6 +114,13 @@ $(document).ready(function () {
                 }
             },
             { data: 'prepared_by' },
+            {
+                data: 'voucher_status',
+                render: function (d) {
+                    var cls = d === 'Approved' ? 'badge-light-success' : 'badge-light-warning';
+                    return '<span class="badge ' + cls + '">' + (d || 'Pending') + '</span>';
+                }
+            },
             {
                 data: null, orderable: false,
                 render: function (d, t, r) {
