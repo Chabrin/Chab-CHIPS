@@ -4,7 +4,9 @@ namespace App\Services\BankStatement;
 
 /**
  * The Equity Bank statement template: TRAN_DATE, SECURITY NO., TRAN_AMT, TRAN_TYPE, VALUE_DATE, REF_NUM, TRAN_RMKS,
- * SECURITY NO 2, TRAN_PARTICULAR, MODE OF PAYMENT. The payer writes the unit code first in TRAN_PARTICULAR, for example
+ * SECURITY NO 2, TRAN_PARTICULAR, MODE OF PAYMENT. On a real file REF_NUM holds the unit code for cash and agent deposits
+ * (it repeats the start of TRAN_PARTICULAR); app payments carry it inside TRAN_PARTICULAR ("APP|375F-61/Rent/..."), a
+ * cheque in TRAN_RMKS, and M-Pesa paybill lines carry none. The payer writes the unit code first in TRAN_PARTICULAR, for example
  * "187G-8/Akinyi/KECYeUNL8Lvb/KECYeUNL8Lvb/10-11-2026" (unit code, payer, bank reference twice, date). Only CREDIT lines
  * are payments.
  */
@@ -41,7 +43,8 @@ class EquityStatementParser extends StatementParser
         $type = $this->text($row['TRAN_TYPE'] ?? null);
         $amount = $this->amount($row['TRAN_AMT'] ?? null);
         $date = $this->date($row['TRAN_DATE'] ?? null);
-        $reference = $this->text($row['REF_NUM'] ?? null);
+        // A cheque has no REF_NUM; the bank's own transaction number in SECURITY NO. stands in for it
+        $reference = $this->text($row['REF_NUM'] ?? null) ?? $this->text($row['SECURITY NO.'] ?? null);
         $unitCode = $this->unitCode($particular, $this->text($row['TRAN_RMKS'] ?? null));
 
         $judged = $this->judge($amount, $date, $reference);

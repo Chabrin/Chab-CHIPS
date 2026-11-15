@@ -96,6 +96,11 @@ class BankStatementManualMatchTest extends TestCase
             $table->string('names')->nullable();
             $table->string('reference_number')->nullable();
             $table->string('type_id')->nullable();
+            $table->string('mobile_number')->nullable();
+        });
+        Schema::create('cb_tenant_records', function ($table) {
+            $table->integer('id')->primary();
+            $table->string('phone')->nullable();
         });
         Schema::create('sys_pm_properties', function ($table) {
             $table->increments('id');
@@ -508,5 +513,92 @@ class BankStatementManualMatchTest extends TestCase
         $this->expectExceptionMessage('That line does not exist');
 
         $this->service()->matchByHand('equity', 99999, 7, 101, self::MATCHER);
+    }
+
+    /**
+     * A mobile number is read from the bank's details however it is written, and only when it is the one number in them.
+     */
+    public function test_a_mobile_number_is_read_from_the_details_in_any_written_form(): void
+    {
+        $service = $this->service();
+
+        $this->assertSame('703952213', $service->mobileIn('UKDBR1QDM2~254703952213~01148039906100~MPESAC2B_400200~MICHAEL'));
+        $this->assertSame('712345678', $service->mobileIn('paid by 0712 345678') ?? $service->mobileIn('paid by 0712345678'));
+        $this->assertSame('712345678', $service->mobileIn('from +254712345678'));
+        $this->assertSame('112345678', $service->mobileIn('from 0112345678'));
+        $this->assertNull($service->mobileIn('account 01148039906100 ref 043026378775'), 'long digit runs are accounts, not mobiles');
+        $this->assertNull($service->mobileIn('254712345678 and 254722345678'), 'two numbers cannot say who paid');
+        $this->assertNull($service->mobileIn(null));
+    }
+
+    /**
+     * A line with no unit code but a mobile number in its details recommends the tenant who has that number, whichever way
+     * the number is stored (client record or tenant record, 07..., +254... or 254...), with their Active lease; and not when
+     * the number is shared or the line already has a unit code that points to a unit.
+     */
+    public function test_a_mobile_number_in_the_details_recommends_the_tenant_who_has_it(): void
+    {
+        DB::table('sys_pm_clients')->where('id', 901)->update(['mobile_number' => '+254 712 345 678']);
+        DB::table('cb_tenant_records')->insert(['id' => 902, 'phone' => '0712345678']);
+        $id = $this->line();
+        DB::table('cb_equity_statement_lines')->where('id', $id)->update(['tran_particular' => 'UKD1~254712345678~0114~MPESAC2B~JOHN']);
+
+        // 901 holds the number on the client record and 902 on the tenant record: two tenants, so both are shown
+        $page = $this->service()->page('equity', $id, self::MATCHER);
+
+        $this->assertSame('0712 345 678', $page['mobile']);
+        $this->assertNull($page['suggestion']);
+        $this->assertSame([101, 102], collect($page['candidates'])->pluck('lease_id')->sort()->values()->all());
+        $first = collect($page['candidates'])->firstWhere('lease_id', 101);
+        $this->assertSame('NAO AUTO SPARES', $first['tenant']);
+        $this->assertSame('Active', $first['status']);
+        $this->assertSame(['id' => 5, 'name' => 'CASA MUNET', 'reference' => 'PRO-5'], $first['property']);
+        $this->assertSame('187G-8', $first['unit']['code']);
+        $this->assertSame('CASA MUNET LTD', $first['client']['names']);
+
+        // Someone who cannot match gets no recommendation
+        $this->assertSame([], $this->service()->page('equity', $id, self::UPLOADER)['candidates']);
+
+        // A number that more than three tenants share recommends nobody
+        foreach ([903, 904, 905] as $tenant) {
+            DB::table('sys_pm_clients')->insert(['id' => $tenant, 'names' => 'T' . $tenant, 'type_id' => '2', 'mobile_number' => '0712345678']);
+        }
+        $shared = $this->service()->page('equity', $id, self::MATCHER);
+        $this->assertSame('0712 345 678', $shared['mobile']);
+        $this->assertSame([], $shared['candidates']);
+
+        // A unit code that already names the unit is the better lead
+        DB::table('cb_equity_statement_lines')->where('id', $id)->update(['unit_code' => '187G-8']);
+        $coded = $this->service()->page('equity', $id, self::MATCHER);
+        $this->assertNotNull($coded['suggestion']);
+        $this->assertNull($coded['mobile']);
+    }
+
+    /**
+     * A tenant whose leases have all ended is recommended by the latest one, and a landlord with the same number is not.
+     */
+    public function test_a_tenant_with_only_ended_leases_gets_the_latest_and_landlords_are_ignored(): void
+    {
+        DB::table('sys_pm_clients')->where('id', 902)->update(['mobile_number' => '0799111222']);
+        DB::table('sys_pm_clients')->where('id', 1)->update(['mobile_number' => '0799111222']);
+
+        $found = $this->service()->candidatesByMobile('799111222');
+
+        $this->assertCount(1, $found);
+        $this->assertSame(102, $found[0]['lease_id']);
+        $this->assertSame('Terminated', $found[0]['status']);
+        $this->assertSame([], $this->service()->candidatesByMobile('700000000'));
+    }
+
+    /**
+     * Unit codes are compared as capitals without spaces, because units are stored in mixed case.
+     */
+    public function test_a_unit_code_is_found_whatever_its_case_or_spacing(): void
+    {
+        DB::table('sys_pm_units')->insert(['id' => 20, 'property_id' => 5, 'unit_code' => '1000E-038d']);
+        DB::table('sys_pm_units')->insert(['id' => 21, 'property_id' => 5, 'unit_code' => '137 F-001']);
+
+        $this->assertSame(20, $this->service()->suggestion('1000E-038D')['unit']['id']);
+        $this->assertSame(21, $this->service()->suggestion('137F-001')['unit']['id']);
     }
 }

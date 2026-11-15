@@ -141,7 +141,7 @@ abstract class StatementParser
 
         $written = trim((string) $value);
 
-        foreach (['d/m/Y', 'd-m-Y', 'Y-m-d', 'd-M-y', 'd-M-Y', 'd/m/y', 'Y/m/d', 'd/m/Y H:i:s', 'd-m-Y H:i:s', 'Y-m-d H:i:s'] as $format) {
+        foreach (['d/m/Y', 'd-m-Y', 'Y-m-d', 'd-M-y', 'd-M-Y', 'd/m/y', 'Y/m/d', 'd/m/Y H:i:s', 'd-m-Y H:i:s', 'Y-m-d H:i:s', 'd-M-Y H:i:s', 'd-M-Y H:i', 'd-M-y H:i:s'] as $format) {
             $parsed = DateTime::createFromFormat('!' . $format, $written);
             $errors = DateTime::getLastErrors();
 
@@ -173,8 +173,8 @@ abstract class StatementParser
 
     /**
      * The unit code the payer quoted, looked for in the given texts in order. A unit code is the property reference
-     * and the unit, like 187G-8 or 406A-F2-23. The first part of a "/" separated text is tried first, then every word;
-     * a text with two different codes in it gives none, because the right one cannot be told.
+     * and the unit, like 187G-8 or 406A-F2-23. The first part of a text separated by "/", "~" or "|" is tried first,
+     * then every word; a text with two different codes in it gives none, because the right one cannot be told.
      *
      * @param string|null ...$texts the text cells that may hold it
      */
@@ -184,13 +184,13 @@ abstract class StatementParser
                 continue;
             }
 
-            $first = strtoupper(trim(explode('/', $text)[0]));
+            $first = strtoupper(trim(preg_split('/[\/~|]/', $text)[0]));
             if (preg_match(self::UNIT_CODE, $first)) {
                 return $first;
             }
 
             $found = [];
-            foreach (preg_split('/[\/\s,;:]+/', strtoupper($text), -1, PREG_SPLIT_NO_EMPTY) as $word) {
+            foreach (preg_split('/[\/~|\s,;:]+/', strtoupper($text), -1, PREG_SPLIT_NO_EMPTY) as $word) {
                 if (preg_match(self::UNIT_CODE, $word)) {
                     $found[$word] = true;
                 }
@@ -204,6 +204,19 @@ abstract class StatementParser
     }
 
     const UNIT_CODE = '/^\d+[A-Z]+-[A-Z0-9][A-Z0-9-]*$/';
+
+    /**
+     * A cell that holds nothing but a unit code, read whole. Some real unit codes have a "/", a "." or a space in them
+     * (12F-B/S, 331B-B/S-B, 191E-M.HSE), which the word search above would cut, so a cell kept for the code is taken
+     * as it is when it looks like one. Null when it does not.
+     *
+     * @param string|null $cell
+     */
+    public function unitCodeCell(?string $cell): ?string {
+        $code = strtoupper(trim((string) $cell));
+
+        return preg_match('/^\d+ ?[A-Z]+-[A-Z0-9][A-Z0-9 \/.\-]{0,28}$/', $code) ? $code : null;
+    }
 
     /**
      * Judge a parsed line: Invalid when the amount, date or reference cannot be read, Pending otherwise.

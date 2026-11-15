@@ -57,18 +57,21 @@ class BankStatementMatchService
      */
     private function matchChunk($chunk, array $definition): void {
         $table = $definition['table'];
-        $codes = $chunk->pluck('unit_code')->filter()->unique()->values()->all();
-        $references = $chunk->pluck($definition['ref'])->filter()->unique()->values()->all();
+        $codes = $chunk->pluck('unit_code')->filter()->map(fn ($code) => self::codeKey($code))->unique()->values()->all();
+        $keySql = DB::getQueryGrammar()->wrap('u.unit_code');
+        $keySql = 'UPPER(REPLACE(' . $keySql . ", ' ', ''))";
 
+        // Units are stored in mixed case and a few with a space, so the file's code and the unit's are compared as capitals without spaces
         $leases = $codes
             ? DB::table('sys_pm_units as u')
                 ->join('sys_pm_lease_agreements as l', 'l.unit_id', '=', 'u.id')
                 ->where('l.lease_status', 'Active')
-                ->whereIn('u.unit_code', $codes)
-                ->get(['u.unit_code', 'u.id as unit_id', 'u.property_id', 'l.id as lease_id', 'l.tenant_id'])
-                ->groupBy('unit_code')
+                ->whereIn(DB::raw($keySql), $codes)
+                ->get([DB::raw($keySql . ' as code_key'), 'u.id as unit_id', 'u.property_id', 'l.id as lease_id', 'l.tenant_id'])
+                ->groupBy('code_key')
             : collect();
-        $knownCodes = $codes ? DB::table('sys_pm_units')->whereIn('unit_code', $codes)->pluck('unit_code')->flip() : collect();
+        $knownCodes = $codes ? DB::table('sys_pm_units as u')->whereIn(DB::raw($keySql), $codes)->select(DB::raw($keySql . ' as code_key'))->get()->pluck('code_key')->flip() : collect();
+        $references = $chunk->pluck($definition['ref'])->filter()->unique()->values()->all();
 
         // A transaction is the reference together with the amount and, in a statement line, the date
         $seen = [];
@@ -93,21 +96,30 @@ class BankStatementMatchService
                 $result['match_note'] = 'This transaction is already in a matched statement line or already recorded as a payment.';
             } elseif (!$line->unit_code) {
                 $result['match_note'] = 'No unit code found in the line.';
-            } elseif (!isset($knownCodes[$line->unit_code])) {
+            } elseif (!isset($knownCodes[self::codeKey($line->unit_code)])) {
                 $result['match_note'] = 'Unit code ' . $line->unit_code . ' does not exist.';
-            } elseif (!isset($leases[$line->unit_code])) {
+            } elseif (!isset($leases[self::codeKey($line->unit_code)])) {
                 $result['match_note'] = 'Unit ' . $line->unit_code . ' has no Active lease.';
-            } elseif ($leases[$line->unit_code]->count() > 1) {
+            } elseif ($leases[self::codeKey($line->unit_code)]->count() > 1) {
                 $result['match_status'] = 'Ambiguous';
-                $result['match_note'] = 'Unit code ' . $line->unit_code . ' has ' . $leases[$line->unit_code]->count() . ' Active leases (' . $leases[$line->unit_code]->pluck('lease_id')->implode(', ') . ').';
+                $result['match_note'] = 'Unit code ' . $line->unit_code . ' has ' . $leases[self::codeKey($line->unit_code)]->count() . ' Active leases (' . $leases[self::codeKey($line->unit_code)]->pluck('lease_id')->implode(', ') . ').';
             } else {
-                $lease = $leases[$line->unit_code]->first();
+                $lease = $leases[self::codeKey($line->unit_code)]->first();
                 $result = ['match_status' => 'Matched', 'match_note' => null, 'unit_id' => $lease->unit_id, 'lease_id' => $lease->lease_id, 'tenant_id' => $lease->tenant_id, 'property_id' => $lease->property_id];
                 $seen[$key] = true;
             }
 
             DB::table($table)->where('id', $line->id)->update($result + ['updated_at' => now()]);
         }
+    }
+
+    /**
+     * A unit code as compared: capitals, no spaces.
+     *
+     * @param string $code
+     */
+    public static function codeKey(string $code): string {
+        return strtoupper(str_replace(' ', '', trim($code)));
     }
 
     /**

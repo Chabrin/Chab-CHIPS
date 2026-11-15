@@ -4,9 +4,9 @@ namespace App\Services\BankStatement;
 
 /**
  * The Co-operative Bank statement template: REFERENCE, POSTINGDATE, VALUEDATE, CODE, ST_NAME, CREDITACCOUNT, AMOUNT,
- * USERID, PAYMENTMETHOD, CHEQUENUMBER, NARRATION. The template came with headers only, so CODE is assumed to hold the
- * unit code the payer quoted (the NARRATION is tried when CODE has none) and ST_NAME the payer's name. Check both
- * against a real file.
+ * USERID, PAYMENTMETHOD, CHEQUENUMBER, NARRATION. CODE holds the unit code the payer quoted (confirmed on a real file of
+ * 1,011 rows; ST_NAME repeats it). When CODE is blank the NARRATION is tried: its first "~" part, then any code in it.
+ * POSTINGDATE comes as "13-NOV-2026 00:21:34".
  */
 class CoopStatementParser extends StatementParser
 {
@@ -55,7 +55,7 @@ class CoopStatementParser extends StatementParser
             'payment_method' => $this->text($row['PAYMENTMETHOD'] ?? null),
             'cheque_number' => $this->text($row['CHEQUENUMBER'] ?? null),
             'narration' => $narration,
-            'unit_code' => $this->unitCode($code, $narration),
+            'unit_code' => $this->unitCodeCell($code) ?? $this->unitCodeCell(explode('~', (string) $narration)[0]) ?? $this->unitCode($code, $narration),
             'payer_name' => $this->text($row['ST_NAME'] ?? null),
         ] + $this->judge($amount, $date, $reference);
     }

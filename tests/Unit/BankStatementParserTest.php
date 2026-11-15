@@ -87,7 +87,7 @@ class BankStatementParserTest extends TestCase
             [46336, 'S1', 5000, 'DEBIT', 46336, 'R1', '', '', '187G-8/X', 'CASH'],
             [46336, 'S2', 'abc', 'CREDIT', 46336, 'R2', '', '', '187G-8/X', 'CASH'],
             ['not a date', 'S3', 100, 'CREDIT', 'x', 'R3', '', '', '187G-8/X', 'CASH'],
-            [46336, 'S4', 100, 'CREDIT', 46336, '', '', '', '187G-8/X', 'CASH'],
+            [46336, '', 100, 'CREDIT', 46336, '', '', '', '187G-8/X', 'CASH'],
         ]);
 
         $lines = (new EquityStatementParser())->parse($path);
@@ -150,5 +150,57 @@ class BankStatementParserTest extends TestCase
         $this->expectException(BankStatementException::class);
 
         (new CoopStatementParser())->parse($path);
+    }
+
+    /**
+     * The Co-op file as the bank sends it: capitals month with a time and trailing tabs, the unit code in CODE (even with
+     * a "/" or a space in it), and a blank CODE read from the first "~" part or any code in the narration.
+     */
+    public function test_a_real_coop_file_is_read_with_its_dates_and_every_form_of_unit_code(): void
+    {
+        $tabs = "\n\t\t\t";
+        $path = $this->sheet([
+            self::COOP_HEADERS,
+            ['UKDC5238L9' . $tabs, '13-NOV-2026 00:21:34' . $tabs, '13-NOV-2026 00:00:00', '49c-025' . $tabs, '49c-025', '0114', '100' . $tabs, 'FIVUSR', 'IBAPS', '0', 'UKDC5238L9~759625~254722796519~49c-025~WAFULA~2026-11-13'],
+            ['U2', '13-NOV-2026 08:00:00', '13-NOV-2026', '12F-B/S', '12F-B/S', '0114', '500', 'U', 'POS', '0', 'POS'],
+            ['27E-28~M.D', '13-NOV-2026 09:00:00', '13-NOV-2026', '', '', '0114', '300', 'U', 'BR', '0', '73E-SHOP 1~000013~NEW SUNCITY -ROOM No. SHOP 1'],
+            ['UKCUH81YND', '13-NOV-2026 10:00:00', '13-NOV-2026', '', '', '0114', '200', 'U', 'FPC', '0', '752624:MBANKING~UKCUH81YND   4165147   179G-B101 ~E CHANNELS~ENOV3'],
+            ['UKDBR1QDM2', '13-NOV-2026 11:00:00', '13-NOV-2026', '', '', '0114', '100', 'U', 'IBAPS', '0', 'UKDBR1QDM2~254703952213~01148039906100~MPESAC2B_400200~MICHAEL KANYARA'],
+        ]);
+
+        $lines = (new CoopStatementParser())->parse($path);
+
+        $this->assertSame('2026-11-13', $lines[0]['posting_date']);
+        $this->assertSame('Pending', $lines[0]['match_status']);
+        $this->assertSame(100.0, $lines[0]['amount']);
+        $this->assertSame('49C-025', $lines[0]['unit_code']);
+        $this->assertSame('12F-B/S', $lines[1]['unit_code'], 'the slash is part of the code');
+        $this->assertSame('73E-SHOP 1', $lines[2]['unit_code']);
+        $this->assertSame('179G-B101', $lines[3]['unit_code']);
+        $this->assertNull($lines[4]['unit_code'], 'an M-Pesa line carries a mobile number, not a unit code');
+    }
+
+    /**
+     * The Equity file as the bank sends it: the code in REF_NUM, inside "APP|code/Rent", or in TRAN_RMKS for a cheque,
+     * whose missing REF_NUM falls back to the bank's own transaction number.
+     */
+    public function test_a_real_equity_file_finds_app_and_cheque_codes_and_gives_a_cheque_a_reference(): void
+    {
+        $path = $this->sheet([
+            self::EQUITY_HEADERS,
+            [46339, 'S1', 21100, 'CREDIT', 46339, '56G-B9', 'MIKE ROOM B9', '194460', '56G-B9/MIKE MAYAS RO/631713521341/13-11-2026 09:', 'CASH'],
+            [46339, 'S2', 3000, 'CREDIT', 46339, '00KEyXHH7fZIeN', '', 'KEyXHH7fZIeN', 'APP|375F-61/Rent/KEyXHH7fZIeN', 'CASH'],
+            [46339, 'S3', 24000, 'CREDIT', 46343, '', '170F-B05', '', 'Chq:009190 ASHLEYS KENYA LTD', 'CHEQUE'],
+            [46339, 'S4', 12000, 'CREDIT', 46338, '001fXGL4mEgyjO', '', 'UKD9T1SRB7', 'FRIDAH GAKII|UKD9T1SRB7 FRIDAH GAKII 043026378775', 'CASH'],
+        ]);
+
+        $lines = (new EquityStatementParser())->parse($path);
+
+        $this->assertSame('56G-B9', $lines[0]['unit_code']);
+        $this->assertSame('375F-61', $lines[1]['unit_code']);
+        $this->assertSame('170F-B05', $lines[2]['unit_code']);
+        $this->assertSame('S3', $lines[2]['ref_num']);
+        $this->assertSame('Pending', $lines[2]['match_status']);
+        $this->assertNull($lines[3]['unit_code'], 'a paybill line quotes no unit code');
     }
 }

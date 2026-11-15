@@ -73,6 +73,17 @@
                     </div>
                 </div>
 
+                @if(!empty($page['mobile']))
+                <div class="bs-info" id="mobile-hint">
+                    @if(count($page['candidates']))
+                    <b>Probable tenant by mobile number {{ $page['mobile'] }}</b> (the number in the bank's details). Check it is the right person, then use it to fill the three steps:
+                    <div id="mobile-candidates"></div>
+                    @else
+                    The bank's details hold the mobile number <b>{{ $page['mobile'] }}</b>, but no single tenant in the system has it (or several share it), so choose the tenant yourself.
+                    @endif
+                </div>
+                @endif
+
                 <div id="suggest-note" class="bs-info d-none">
                     The file named unit <b>{{ $page['unit_code'] }}</b>, so the client and property are already chosen and the unit list shows that unit's leases, ended ones included in case the tenant has left. Type in the unit box to search the whole property, or <a href="#" id="suggest-clear">show the whole property</a>.
                 </div>
@@ -326,6 +337,28 @@ $(function() {
     });
 
     // When the file's unit code points to one unit, the client and property are already chosen and the unit list starts on that unit
+    // A mobile number in the details names probable tenants: each one fills the client, property and lease in one click
+    function useCandidate(c) {
+        sel.client = { id: c.client.id, names: c.client.names, reference: c.client.reference };
+        sel.property = { id: c.property.id, name: c.property.name, reference: c.property.reference };
+        sel.lease = { id: c.lease_id, unit_id: c.unit.id, unit_code: c.unit.code, unit_name: c.unit.name, unit_number: c.unit.number, tenant: c.tenant, reference: c.tenant_reference, status: c.status };
+        $client.empty().append(new Option(sel.client.names, sel.client.id, true, true)).trigger('change');
+        $property.empty().append(new Option(sel.property.name, sel.property.id, true, true)).trigger('change').prop('disabled', false);
+        $lease.empty().append(new Option(leaseText(sel.lease), sel.lease.id, true, true)).trigger('change').prop('disabled', false);
+        $('#ended-toggle').prop('checked', c.status !== 'Active');
+        refresh();
+        $('#confirm-btn').trigger('focus');
+    }
+
+    $.each(page.candidates || [], function(i, c) {
+        var row = $('<div class="bs-cand">').css({ display: 'flex', gap: '12px', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0' });
+        var text = $('<div>').appendTo(row);
+        $('<div class="bs-opt-main">').text(c.tenant + ' · unit ' + c.unit.code).appendTo(text);
+        $('<div class="bs-opt-sub">').text(c.property.name + ' · client ' + c.client.names + ' · lease ' + (c.status || '')).appendTo(text);
+        $('<button type="button" class="bs-btn bs-btn-light">').text('Use this tenant').on('click', function() { useCandidate(c); }).appendTo(row);
+        $('#mobile-candidates').append(row);
+    });
+
     if (page.suggestion) {
         var sug = page.suggestion;
 

@@ -114,7 +114,7 @@ class BankStatementManualMatchService
             'note' => $line->match_note,
             'refusal' => $refusal,
             'suggestion' => $refusal ? null : $this->suggestion($line->unit_code),
-        ];
+        ] + $this->mobileHints($refusal, $line->unit_code, $line->description);
     }
 
     /**
@@ -132,7 +132,7 @@ class BankStatementManualMatchService
         $units = DB::table('sys_pm_units as u')
             ->join('sys_pm_properties as p', 'p.id', '=', 'u.property_id')
             ->join('sys_pm_clients as c', 'c.id', '=', 'p.client_id')
-            ->where('u.unit_code', $unitCode)
+            ->whereRaw('UPPER(REPLACE(' . $this->column('u.unit_code') . ", ' ', '')) = ?", [BankStatementMatchService::codeKey($unitCode)])
             ->limit(2)
             ->get(['u.id as unit_id', 'u.unit_code', 'u.unit_name', 'u.unit_number', 'p.id as property_id', 'p.property_name', 'p.reference_number as property_reference', 'c.id as client_id', 'c.names as client_names', 'c.reference_number as client_reference']);
 
@@ -147,6 +147,130 @@ class BankStatementManualMatchService
             'property' => ['id' => (int) $row->property_id, 'name' => $row->property_name, 'reference' => $row->property_reference],
             'unit' => ['id' => (int) $row->unit_id, 'code' => $row->unit_code, 'name' => $row->unit_name, 'number' => $row->unit_number],
         ];
+    }
+
+    /**
+     * The tenants who probably paid, found from the mobile number in the line's description, for a line the unit code could
+     * not place. Nothing is looked for when this user may not match the line or the unit code already points to one unit.
+     * Returns the number found (shown as 0712 345 678) and the candidates, each a lease with its client, property, unit and
+     * tenant, so the page can fill the three steps in one click.
+     *
+     * @param string|null $refusal why this user may not match, or null
+     * @param string|null $unitCode what the parser read as the unit code
+     * @param string|null $description the line's details
+     * @return array{mobile: string|null, candidates: array<int, array<string, mixed>>}
+     */
+    private function mobileHints(?string $refusal, ?string $unitCode, ?string $description): array {
+        $none = ['mobile' => null, 'candidates' => []];
+
+        if ($refusal || $this->suggestion($unitCode)) {
+            return $none;
+        }
+
+        $mobile = $this->mobileIn($description);
+
+        return $mobile ? ['mobile' => '0' . substr($mobile, 0, 3) . ' ' . substr($mobile, 3, 3) . ' ' . substr($mobile, 6), 'candidates' => $this->candidatesByMobile($mobile)] : $none;
+    }
+
+    /**
+     * The one Kenyan mobile number in a text, as its last nine digits (712345678), whether it is written 0712345678,
+     * +254712345678 or 254712345678. Null when there is none or when the text holds two different numbers, because the
+     * payer cannot be told. Longer digit runs (account numbers) are not read as a mobile.
+     *
+     * @param string|null $text
+     */
+    public function mobileIn(?string $text): ?string {
+        if (!$text || !preg_match_all('/(?<!\d)(?:\+?254|0)([17]\d{8})(?!\d)/', $text, $found)) {
+            return null;
+        }
+
+        $numbers = array_unique($found[1]);
+
+        return count($numbers) === 1 ? $numbers[0] : null;
+    }
+
+    /**
+     * The tenants whose mobile number (on their client record or their tenant record) ends in these nine digits, each with
+     * the Active leases they hold, or their latest lease when none is Active. A number shared by more than three tenants
+     * is not a recommendation and gives nothing. At most five leases come back, Active ones first.
+     *
+     * @param string $mobile the last nine digits
+     * @return array<int, array<string, mixed>>
+     */
+    public function candidatesByMobile(string $mobile): array {
+        $like = '%' . $mobile;
+
+        $tenants = DB::table('sys_pm_clients as t')
+            ->leftJoin('cb_tenant_records as r', 'r.id', '=', 't.id')
+            ->where('t.type_id', 2)
+            ->where(fn ($q) => $q
+                ->whereRaw($this->plainNumber('t.mobile_number') . ' LIKE ?', [$like])
+                ->orWhereRaw($this->plainNumber('r.phone') . ' LIKE ?', [$like]))
+            ->limit(50)
+            ->get(['t.id', 't.mobile_number', 'r.phone'])
+            ->filter(fn ($row) => $this->endsWithMobile($row->mobile_number, $mobile) || $this->endsWithMobile($row->phone, $mobile))
+            ->pluck('id');
+
+        if ($tenants->isEmpty() || $tenants->count() > 3) {
+            return [];
+        }
+
+        $leases = DB::table('sys_pm_lease_agreements as l')
+            ->join('sys_pm_units as u', 'u.id', '=', 'l.unit_id')
+            ->join('sys_pm_properties as p', 'p.id', '=', 'u.property_id')
+            ->join('sys_pm_clients as c', 'c.id', '=', 'p.client_id')
+            ->join('sys_pm_clients as t', 't.id', '=', 'l.tenant_id')
+            ->whereIn('l.tenant_id', $tenants->all())
+            ->orderByRaw('CASE WHEN ' . $this->column('l.lease_status') . " = 'Active' THEN 0 ELSE 1 END")
+            ->orderByDesc('l.date_start')
+            ->orderByDesc('l.id')
+            ->limit(50)
+            ->get(['l.id as lease_id', 'l.tenant_id', 'l.lease_status', 'u.id as unit_id', 'u.unit_code', 'u.unit_name', 'u.unit_number', 'p.id as property_id', 'p.property_name', 'p.reference_number as property_reference', 'c.id as client_id', 'c.names as client_names', 'c.reference_number as client_reference', 't.names as tenant', 't.reference_number as tenant_reference']);
+
+        // A tenant with an Active lease is shown by those; one with none by the latest lease they had
+        $hasActive = $leases->where('lease_status', 'Active')->pluck('tenant_id')->unique()->flip();
+        $latestOnly = [];
+        $picked = $leases->filter(function ($row) use ($hasActive, &$latestOnly) {
+            if (isset($hasActive[$row->tenant_id])) {
+                return $row->lease_status === 'Active';
+            }
+            if (isset($latestOnly[$row->tenant_id])) {
+                return false;
+            }
+
+            return $latestOnly[$row->tenant_id] = true;
+        });
+
+        return $picked->take(5)->map(fn ($row) => [
+            'lease_id' => (int) $row->lease_id,
+            'status' => $row->lease_status,
+            'tenant' => $row->tenant,
+            'tenant_reference' => $row->tenant_reference,
+            'client' => ['id' => (int) $row->client_id, 'names' => $row->client_names, 'reference' => $row->client_reference],
+            'property' => ['id' => (int) $row->property_id, 'name' => $row->property_name, 'reference' => $row->property_reference],
+            'unit' => ['id' => (int) $row->unit_id, 'code' => $row->unit_code, 'name' => $row->unit_name, 'number' => $row->unit_number],
+        ])->values()->all();
+    }
+
+    /**
+     * SQL that reads a phone column without spaces and dashes, so 0712 345 678 and 0712-345-678 are found by their digits.
+     *
+     * @param string $name for example t.mobile_number
+     */
+    private function plainNumber(string $name): string {
+        return "REPLACE(REPLACE(" . $this->column($name) . ", ' ', ''), '-', '')";
+    }
+
+    /**
+     * Whether a stored phone number, however it was typed, ends in these nine digits.
+     *
+     * @param string|null $stored
+     * @param string $mobile the last nine digits
+     */
+    private function endsWithMobile(?string $stored, string $mobile): bool {
+        $digits = preg_replace('/\D+/', '', (string) $stored);
+
+        return strlen($digits) >= 9 && substr($digits, -9) === $mobile;
     }
 
     /**
