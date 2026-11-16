@@ -1760,35 +1760,7 @@ class AccountsReportsController extends Controller
     public function getReturnsStatus(Request $request): JsonResponse
     {
         try {
-            $dateFrom = $request->input('date_from');
-            $dateTo   = $request->input('date_to');
-            $status   = $request->input('status');
-
-            $query = DB::table('cb_returns_summary as rs')
-                ->select(
-                    'rs.id',
-                    'rs.reference_number',
-                    'rs.landlord_code',
-                    'rs.property_code',
-                    'rs.year',
-                    'rs.month',
-                    'rs.total_credit as gross_rent',
-                    'rs.commission_amount as commission',
-                    'rs.vat_amount as vat',
-                    'rs.net_amount',
-                    'rs.status',
-                    'rs.batch_reference',
-                    'rs.submitted_date',
-                    'rs.approved_date',
-                    'c.names as landlord_name'
-                )
-                ->leftJoin('sys_pm_clients as c', 'c.reference_number', '=', 'rs.landlord_code')
-                ->when($dateFrom, fn($q) => $q->whereDate('rs.submitted_date', '>=', $dateFrom))
-                ->when($dateTo,   fn($q) => $q->whereDate('rs.submitted_date', '<=', $dateTo))
-                ->when($status,   fn($q) => $q->where('rs.status', $status))
-                ->orderBy('rs.submitted_date', 'desc');
-
-            $rows = $query->get();
+            $rows = $this->returnsStatusRows($request);
 
             $monthNames = [
                 1=>'Jan',2=>'Feb',3=>'Mar',4=>'Apr',5=>'May',6=>'Jun',
@@ -1807,7 +1779,7 @@ class AccountsReportsController extends Controller
                     'commission'     => number_format((float) $r->commission, 2),
                     'vat'            => number_format((float) $r->vat, 2),
                     'net_amount'     => number_format((float) $r->net_amount, 2),
-                    'status'         => $r->status ?? 'Pending',
+                    'status'         => ucfirst($r->status ?? 'pending'),
                     'batch_ref'      => $r->batch_reference ?? '-',
                     'submitted_date' => $r->submitted_date ? \Carbon\Carbon::parse($r->submitted_date)->format('d/m/Y') : '-',
                     'approved_date'  => $r->approved_date ? \Carbon\Carbon::parse($r->approved_date)->format('d/m/Y') : '-',
@@ -1824,7 +1796,7 @@ class AccountsReportsController extends Controller
                 $byMonth = $items->groupBy(fn($r) => $r->submitted_date
                     ? \Carbon\Carbon::parse($r->submitted_date)->format('M Y') : 'Unknown');
                 return [
-                    'label' => $statusLabel ?? 'Unknown',
+                    'label' => ucfirst($statusLabel ?: 'unknown'),
                     'data'  => $allMonths->map(fn($m) => $byMonth->get($m, collect())->count())->values()->toArray(),
                 ];
             })->values()->toArray();
@@ -1850,23 +1822,7 @@ class AccountsReportsController extends Controller
         try {
             $dateFrom = $request->input('date_from');
             $dateTo   = $request->input('date_to');
-            $status   = $request->input('status');
-
-            $rows = DB::table('cb_returns_summary as rs')
-                ->select(
-                    'rs.reference_number', 'rs.landlord_code', 'rs.property_code',
-                    'rs.year', 'rs.month', 'rs.total_credit as gross_rent',
-                    'rs.commission_amount as commission', 'rs.vat_amount as vat',
-                    'rs.net_amount', 'rs.status', 'rs.batch_reference',
-                    'rs.submitted_date', 'rs.approved_date',
-                    'c.names as landlord_name'
-                )
-                ->leftJoin('sys_pm_clients as c', 'c.reference_number', '=', 'rs.landlord_code')
-                ->when($dateFrom, fn($q) => $q->whereDate('rs.submitted_date', '>=', $dateFrom))
-                ->when($dateTo,   fn($q) => $q->whereDate('rs.submitted_date', '<=', $dateTo))
-                ->when($status,   fn($q) => $q->where('rs.status', $status))
-                ->orderBy('rs.submitted_date', 'desc')
-                ->get();
+            $rows = $this->returnsStatusRows($request);
 
             $monthNames = [
                 1=>'Jan',2=>'Feb',3=>'Mar',4=>'Apr',5=>'May',6=>'Jun',
@@ -1886,7 +1842,7 @@ class AccountsReportsController extends Controller
                     number_format((float) $r->commission, 2),
                     number_format((float) $r->vat, 2),
                     number_format((float) $r->net_amount, 2),
-                    $r->status ?? 'Pending',
+                    ucfirst($r->status ?? 'pending'),
                     $r->batch_reference ?? '-',
                     $r->submitted_date ? \Carbon\Carbon::parse($r->submitted_date)->format('d/m/Y') : '-',
                     $r->approved_date ? \Carbon\Carbon::parse($r->approved_date)->format('d/m/Y') : '-',
@@ -1907,6 +1863,37 @@ class AccountsReportsController extends Controller
             Log::error('AccountsReportsController::exportReturnsStatus — ' . $e->getMessage());
             return back()->with('error', 'Export failed: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * The returns of the Returns Processing Status report and its Excel file, filtered by the date the return was
+     * prepared and by status. Master returns are left out: they repeat the returns merged into them. A return is
+     * processed once it is paid, approved once approved, and pending until then; the gross rent is its rent and arrears
+     * lines; the VAT is the VAT on the commission (the 'VAT' line of an old return, or the VAT carried on the commissioned
+     * rent lines of a return generated here); the batch is the master return a merged return belongs to.
+     *
+     * @param Request $request date_from, date_to and status (pending, approved or processed)
+     * @return \Illuminate\Support\Collection
+     */
+    private function returnsStatusRows(Request $request): \Illuminate\Support\Collection {
+        $status = "(CASE WHEN rs.paid_status = 1 THEN 'processed' WHEN rs.approved_status = 1 THEN 'approved' ELSE 'pending' END)";
+        $grossRent = "(SELECT COALESCE(SUM(c.net_amount), 0) FROM cb_returns_clients c WHERE c.return_code = rs.return_code AND c.entry_type IN ('RENT CURRENT', 'RENT ARREARS'))";
+        $vat = "(SELECT COALESCE(SUM(CASE WHEN UPPER(c.entry_type) = 'VAT' THEN c.net_amount WHEN COALESCE(c.commission_amount, 0) > 0 THEN COALESCE(c.vat_amount, 0) ELSE 0 END), 0) FROM cb_returns_clients c WHERE c.return_code = rs.return_code)";
+
+        return DB::table('cb_returns_summary as rs')
+            ->select('rs.id', 'rs.return_code as reference_number', 'rs.landlord_code', 'rs.property_code', 'rs.year', 'rs.month',
+                'rs.commission_amount as commission', 'rs.net_amount',
+                'rs.parent_return_code as batch_reference', 'rs.prepared_date as submitted_date', 'rs.approved_date', 'c.names as landlord_name')
+            ->selectRaw("{$grossRent} as gross_rent")
+            ->selectRaw("{$vat} as vat")
+            ->selectRaw("{$status} as status")
+            ->leftJoin('sys_pm_clients as c', 'c.reference_number', '=', 'rs.landlord_code')
+            ->where('rs.return_type', '!=', 'MASTERRETURN')
+            ->when($request->input('date_from'), fn($q, $from) => $q->whereDate('rs.prepared_date', '>=', $from))
+            ->when($request->input('date_to'), fn($q, $to) => $q->whereDate('rs.prepared_date', '<=', $to))
+            ->when($request->input('status'), fn($q, $wanted) => $q->whereRaw("{$status} = ?", [strtolower($wanted)]))
+            ->orderBy('rs.prepared_date', 'desc')
+            ->get();
     }
 
     // ═══════════════════════════════════════════════════════════

@@ -1,4 +1,4 @@
-{{-- Sign-off block pinned to the foot of every page. Expects $signoff and $signoffColumns (title => key in $signoff, or null for a blank column). --}}
+{{-- Sign-off block appears once at the end and stays together across page breaks. Expects $signoff and $signoffColumns (title => key in $signoff, or null for a blank column). --}}
 @php
     $clean = fn($v) => (!empty($v) && $v !== '-') ? e($v) : '&nbsp;';
 @endphp

@@ -37,7 +37,6 @@
                             <option value="pending">Pending</option>
                             <option value="approved">Approved</option>
                             <option value="processed">Processed</option>
-                            <option value="rejected">Rejected</option>
                         </select>
                     </div>
                     <div class="col-12 col-md-auto d-flex gap-2">

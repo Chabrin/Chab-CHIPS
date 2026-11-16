@@ -125,6 +125,15 @@ trait ReturnsRentLinesTrait
         ";
 
         $returnCode = "'R{$sequence}' || ? || COALESCE(c.reference_number, 'UNKNOWN') || p.reference_number";
+
+        // Frozen on the line, so a statement printed later does not change when the unit's VAT flag does: whether the
+        // rent of the line has VAT inside it, and the unit's place on the statement (its last position in an earlier return).
+        $vatable = "CASE WHEN {$isRent} AND u.vat_able = 'Yes' THEN 'Yes' ELSE 'No' END";
+        // One pass over the earlier lines (limited to the property when generating for one) takes the last position of each
+        // unit; a look-up per invoice line was several times slower on a busy month.
+        $positionScope = $propertyId ? 'AND property_id = ' . (int) $propertyId : '';
+        $roomPositions = "LEFT JOIN (SELECT DISTINCT ON (unit_id) unit_id, unit_seq_id FROM cb_returns_clients WHERE unit_seq_id IS NOT NULL {$positionScope} ORDER BY unit_id, return_period DESC, id DESC) seq ON seq.unit_id = i.unit_id";
+        $roomPosition = "seq.unit_seq_id";
         $notApproved = "
             AND NOT EXISTS (
                 SELECT 1 FROM cb_returns_summary rs
@@ -154,7 +163,8 @@ trait ReturnsRentLinesTrait
                 property_id, client_id, zone_id, field_officer_id,
                 zone_supervisor_id, zone_manager_id, unit_id, tenant_id,
                 return_id, invoice_id, narration, transaction_ref,
-                is_commissionable, payable_status, transaction_source, server_time, user_id
+                is_commissionable, payable_status, transaction_source, server_time, user_id,
+                is_vatable, unit_seq_id
             )
             SELECT
                 {$returnCode},
@@ -191,8 +201,11 @@ trait ReturnsRentLinesTrait
                 CASE WHEN {$rentCurrent} THEN NULL WHEN {$payable} > 0 THEN 1 ELSE 0 END,
                 CASE WHEN {$rentArrears} THEN 'TENANT ACCOUNT' END,
                 NOW(),
-                ?
+                ?,
+                {$vatable},
+                {$roomPosition}
             {$invoiceJoins}
+            {$roomPositions}
             WHERE {$invoiceWhere}
             {$notApproved}
         ", $bindings);

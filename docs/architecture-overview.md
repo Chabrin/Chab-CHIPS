@@ -193,7 +193,7 @@ Financial chain: `DebtorInvoice` (tenant/client invoices) ←allocated-by→
 `sys_pm_bills`/`sys_pm_debtors_arrears` (mirrors), `sys_pm_tenants_accounts_trans` (ledger),
 GL entries (`GlPostingTrait`) → feeds → `ClientReturnsController`'s Returns pipeline
 (`cb_returns_clients` → `cb_returns_summary`, MAINRETURN/MASTERRETURN) → `cb_landlord_account`
-ledger postings (`ReturnsLandlordAccountTrait`) → 4-level approval
+ledger postings → 4-level approval
 (`cb_approval_items`/`cb_item_approvers`/`cb_approval_actions`, `ReturnsApprovalController`).
 
 HR chain: `Staff` (`sys_staff`) ←optionally linked via→ `UserStaffLink` →→ `User` (`josya_users`,

@@ -1,5 +1,9 @@
 @extends('layouts.main')
 
+@section('styles')
+<link rel="stylesheet" href="{{ asset('assets/css/return-statement.css') }}?v={{ filemtime(public_path('assets/css/return-statement.css')) }}">
+@endsection
+
 @section('content')
 <div class="page-body" style="padding-top:10px;">
     <div class="container-fluid">
@@ -90,10 +94,55 @@
                         </div>
                         @endif
 
+                        <!-- Detail Lines -->
+                        <div class="d-flex justify-content-between align-items-center border-bottom pb-1 mb-1">
+                            <h6 class="mb-0" style="font-size:0.8rem;">Return statement</h6>
+                            <div class="d-flex gap-2">
+                                <a href="{{ route('processed.returns.excel', encrypt($return->id)) }}" id="excel-link" class="btn btn-sm py-0 px-2 d-flex align-items-center" style="background-color:#00674F;border-color:#00674F;color:#fff;">
+                                    <span class="material-symbols-outlined" style="font-size:14px;">download</span>
+                                    <span class="ms-1" id="excel-btn-text" style="font-size:0.72rem;">Excel</span>
+                                    <span id="excel-spinner" class="spinner-border spinner-border-sm ms-1 d-none" style="width:.7rem;height:.7rem;"></span>
+                                </a>
+                                <a href="{{ route('processed.returns.pdf', encrypt($return->id)) }}" id="pdf-link" class="btn btn-primary btn-sm py-0 px-2 d-flex align-items-center">
+                                    <span class="material-symbols-outlined" style="font-size:14px;">picture_as_pdf</span>
+                                    <span class="ms-1" id="pdf-btn-text" style="font-size:0.72rem;">PDF</span>
+                                    <span id="pdf-spinner" class="spinner-border spinner-border-sm ms-1 d-none" style="width:.7rem;height:.7rem;"></span>
+                                </a>
+                            </div>
+                        </div>
+                        <details id="return-transaction-details" class="mb-3 border rounded p-2">
+                            <summary class="fw-semibold">Transaction details and processing totals</summary>
+                        <style>
+                            #details-table td,
+                            #details-table th {
+                                padding: 2px 4px !important;
+                                font-size: 0.78rem !important;
+                                line-height: 1.2;
+                            }
+                        </style>
+                        <div class="table-responsive custom-scrollbar">
+                            <table class="display" id="details-table" style="width:100%;font-size:0.66rem;">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Narration</th>
+                                        <th>Tenant</th>
+                                        <th>Unit</th>
+                                        <th>Description</th>
+                                        <th>Dr/Cr</th>
+                                        <th class="text-end">Landlord Amt</th>
+                                        <th class="text-end">Net</th>
+                                        <th class="text-end">VAT</th>
+                                        <th>Ref</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
                         <!-- Financial Summary -->
                         <style>
                             .summary-table tbody tr:nth-child(odd) {
-                                background-color: #f8f9fa;
+                                background-color: #fff;
                             }
 
                             .summary-table tbody tr:nth-child(even) {
@@ -179,49 +228,8 @@
                             </div>
                         </div>
 
-                        <!-- Detail Lines -->
-                        <div class="d-flex justify-content-between align-items-center border-bottom pb-1 mb-1">
-                            <h6 class="mb-0" style="font-size:0.8rem;">Detail Lines</h6>
-                            <div class="d-flex gap-2">
-                                <a href="{{ route('processed.returns.excel', encrypt($return->id)) }}" id="excel-link" class="btn btn-sm py-0 px-2 d-flex align-items-center" style="background-color:#00674F;border-color:#00674F;color:#fff;">
-                                    <span class="material-symbols-outlined" style="font-size:14px;">download</span>
-                                    <span class="ms-1" id="excel-btn-text" style="font-size:0.72rem;">Excel</span>
-                                    <span id="excel-spinner" class="spinner-border spinner-border-sm ms-1 d-none" style="width:.7rem;height:.7rem;"></span>
-                                </a>
-                                <a href="{{ route('processed.returns.pdf', encrypt($return->id)) }}" id="pdf-link" class="btn btn-primary btn-sm py-0 px-2 d-flex align-items-center">
-                                    <span class="material-symbols-outlined" style="font-size:14px;">picture_as_pdf</span>
-                                    <span class="ms-1" id="pdf-btn-text" style="font-size:0.72rem;">PDF</span>
-                                    <span id="pdf-spinner" class="spinner-border spinner-border-sm ms-1 d-none" style="width:.7rem;height:.7rem;"></span>
-                                </a>
-                            </div>
-                        </div>
-                        <style>
-                            #details-table td,
-                            #details-table th {
-                                padding: 2px 4px !important;
-                                font-size: 0.78rem !important;
-                                line-height: 1.2;
-                            }
-                        </style>
-                        <div class="table-responsive custom-scrollbar">
-                            <table class="display" id="details-table" style="width:100%;font-size:0.66rem;">
-                                <thead>
-                                    <tr>
-                                        <th>#</th>
-                                        <th>Narration</th>
-                                        <th>Tenant</th>
-                                        <th>Unit</th>
-                                        <th>Description</th>
-                                        <th>Dr/Cr</th>
-                                        <th class="text-end">Landlord Amt</th>
-                                        <th class="text-end">Net</th>
-                                        <th class="text-end">VAT</th>
-                                        <th>Ref</th>
-                                    </tr>
-                                </thead>
-                                <tbody></tbody>
-                            </table>
-                        </div>
+                        </details>
+                        <div id="return-statement" aria-live="polite"><p class="text-muted py-3">Loading return statement...</p></div>
                     </div>
                 </div>
             </div>
@@ -231,6 +239,8 @@
 @endsection
 
 @section('scripts')
+<script src="{{ asset('assets/js/return-statement.js') }}?v={{ filemtime(public_path('assets/js/return-statement.js')) }}"></script>
+
 <script>
     $(document).ready(function() {
         var summaryBaseUrl = '{{ url("/ajax/processed/returns") }}';
@@ -311,12 +321,17 @@
             pageLength: 50
         });
 
+        $('#return-transaction-details').on('toggle', function() {
+            if (this.open) table.columns.adjust();
+        });
+
         function loadDetailLines(url) {
             $.ajax({
                 url: url,
                 type: 'GET',
                 success: function(response) {
                     if (response.success) {
+                        renderReturnStatement(response);
                         table.clear();
                         table.rows.add(response.data);
                         table.draw();
@@ -403,6 +418,7 @@
         // Excel spinner
         $('#excel-link').on('click', function(e) {
             e.preventDefault();
+            if (returnStatementHasUnsavedRemarks()) { alert('Save your remarks before downloading the statement.'); return; }
             var allowed = ['MINIRETURN', 'MAINRETURN', 'MASTERRETURN'];
             if (allowed.indexOf(currentReturnType) === -1) {
                 Swal.fire({
@@ -418,6 +434,7 @@
         // PDF spinner
         $('#pdf-link').on('click', function(e) {
             e.preventDefault();
+            if (returnStatementHasUnsavedRemarks()) { alert('Save your remarks before downloading the statement.'); return; }
             var allowed = ['MINIRETURN', 'MAINRETURN', 'MASTERRETURN'];
             if (allowed.indexOf(currentReturnType) === -1) {
                 Swal.fire({
@@ -438,6 +455,7 @@
             e.preventDefault();
             var $tab = $(this);
             if ($tab.hasClass('active')) return;
+            if (returnStatementHasUnsavedRemarks()) { alert('Save your remarks before switching returns.'); return; }
 
             var encId = $tab.data('enc-id');
             var $spinner = $tab.find('.spinner-border');

@@ -110,7 +110,8 @@ trait ReturnsDeductionsTrait
                   AND b.client_id = la.client_id
                   AND b.property_id = ch.base_property
                 RETURNING la.id AS la_id, la.transaction_number, la.debit_amount, la.entry_type_code,
-                          la.entry_description, la.entry_particulars, la.client_id, ch.base_property
+                          la.entry_description, la.entry_particulars, la.client_id, ch.base_property,
+                          la.entry_date, la.payment_ref, la.payment_ref_type
             )
             INSERT INTO cb_returns_clients (
                 return_code, return_period, transaction_number, transaction_date,
@@ -119,7 +120,7 @@ trait ReturnsDeductionsTrait
                 property_id, client_id, zone_id, field_officer_id,
                 zone_supervisor_id, zone_manager_id,
                 return_id, deduction_point_2, is_commissionable, transaction_source,
-                server_time, user_id
+                server_time, user_id, source_date, transaction_ref
             )
             SELECT DISTINCT ON (r.la_id)
                 b.return_code,
@@ -143,7 +144,9 @@ trait ReturnsDeductionsTrait
                 'No',
                 'LANDLORD ACCOUNT',
                 NOW(),
-                ?
+                ?,
+                r.entry_date,
+                TRIM(COALESCE(r.payment_ref, '') || ' ' || COALESCE(r.payment_ref_type, ''))
             FROM reserved r
             JOIN base b ON b.client_id = r.client_id AND b.property_id = r.base_property
             LEFT JOIN sys_set_invoiceable_items ii ON ii.billing_code = r.entry_type_code

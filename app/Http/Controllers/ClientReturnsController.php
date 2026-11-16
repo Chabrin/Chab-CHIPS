@@ -8,6 +8,8 @@ use Illuminate\Http\Request;
 use App\Services\ErrorDispatcher;
 use App\Services\ReturnApprovalWorkflowService;
 use App\Services\MiniReturnService;
+use App\Services\ReturnStatementService;
+use App\Exports\ReturnStatementExport;
 use App\Exceptions\ReturnApprovalException;
 use App\Exceptions\MiniReturnException;
 use Illuminate\Support\Facades\DB;
@@ -25,7 +27,6 @@ use App\Traits\ReturnsPayThresholdTrait;
 use App\Traits\ReturnsDeductionsTrait;
 use App\Traits\ReturnsSummaryTrait;
 use App\Traits\ReturnsMasterReturnTrait;
-use App\Traits\ReturnsLandlordAccountTrait;
 use App\Traits\PdfPageNumbers;
 
 class ClientReturnsController extends Controller
@@ -36,18 +37,22 @@ class ClientReturnsController extends Controller
     use ReturnsDeductionsTrait;
     use ReturnsSummaryTrait;
     use ReturnsMasterReturnTrait;
-    use ReturnsLandlordAccountTrait;
     use Reusables;
 
     protected ReturnApprovalWorkflowService $returnApprovals;
     protected MiniReturnService $miniReturns;
+    protected ReturnStatementService $statements;
+    protected ReturnStatementExport $statementExport;
 
     /**
-     * Inject the service that decides who approves a return and the one that generates mini returns.
+     * Inject the service that decides who approves a return, the one that generates mini returns, and the statement
+     * figures and Excel export.
      */
-    public function __construct(ReturnApprovalWorkflowService $returnApprovals, MiniReturnService $miniReturns) {
+    public function __construct(ReturnApprovalWorkflowService $returnApprovals, MiniReturnService $miniReturns, ReturnStatementService $statements, ReturnStatementExport $statementExport) {
         $this->returnApprovals = $returnApprovals;
         $this->miniReturns = $miniReturns;
+        $this->statements = $statements;
+        $this->statementExport = $statementExport;
     }
 
     /**
@@ -473,21 +478,7 @@ class ClientReturnsController extends Controller
                 ->orderBy('return_type')
                 ->get(['id', 'return_code', 'return_type']);
 
-            // The DR 'COMMISSION' line repeats the commission and VAT already on the rent lines, so it stays out of the debits.
-            $lineTotals = ReturnClient::where('return_code', $return->return_code)
-                ->selectRaw("
-                    SUM(CASE WHEN dr_cr = 'CR' THEN net_amount ELSE 0 END) as total_cr,
-                    SUM(CASE WHEN dr_cr = 'DR' AND COALESCE(entry_type, '') <> 'COMMISSION' THEN net_amount ELSE 0 END)
-                      + SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN COALESCE(commission_amount, 0) + COALESCE(vat_amount, 0) ELSE 0 END) as total_dr,
-                    SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN net_amount ELSE 0 END) as rent_total,
-                    SUM(CASE WHEN entry_type = 'Commission' THEN net_amount ELSE 0 END)
-                      + SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN COALESCE(commission_amount, 0) ELSE 0 END) as commission,
-                    SUM(CASE WHEN entry_type = 'VAT' THEN net_amount ELSE 0 END)
-                      + SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN COALESCE(vat_amount, 0) ELSE 0 END) as vat,
-                    SUM(CASE WHEN entry_type = 'Deductions Before Commission' THEN net_amount ELSE 0 END) as deductions,
-                    SUM(CASE WHEN entry_type = 'Add Back Deductions' THEN net_amount ELSE 0 END) as add_back
-                ")
-                ->first();
+            $lineTotals = $this->statements->lineTotals($return->return_code);
 
             $headerInfo = $this->buildReturnHeaderInfo($return);
 
@@ -508,20 +499,7 @@ class ClientReturnsController extends Controller
             $id = decrypt($id);
             $return = ReturnSummary::findOrFail($id);
 
-            $lineTotals = ReturnClient::where('return_code', $return->return_code)
-                ->selectRaw("
-                    SUM(CASE WHEN dr_cr = 'CR' THEN net_amount ELSE 0 END) as total_cr,
-                    SUM(CASE WHEN dr_cr = 'DR' AND COALESCE(entry_type, '') <> 'COMMISSION' THEN net_amount ELSE 0 END)
-                      + SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN COALESCE(commission_amount, 0) + COALESCE(vat_amount, 0) ELSE 0 END) as total_dr,
-                    SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN net_amount ELSE 0 END) as rent_total,
-                    SUM(CASE WHEN entry_type = 'Commission' THEN net_amount ELSE 0 END)
-                      + SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN COALESCE(commission_amount, 0) ELSE 0 END) as commission,
-                    SUM(CASE WHEN entry_type = 'VAT' THEN net_amount ELSE 0 END)
-                      + SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN COALESCE(vat_amount, 0) ELSE 0 END) as vat,
-                    SUM(CASE WHEN entry_type = 'Deductions Before Commission' THEN net_amount ELSE 0 END) as deductions,
-                    SUM(CASE WHEN entry_type = 'Add Back Deductions' THEN net_amount ELSE 0 END) as add_back
-                ")
-                ->first();
+            $lineTotals = $this->statements->lineTotals($return->return_code);
 
             $headerInfo = $this->buildReturnHeaderInfo($return);
 
@@ -582,6 +560,9 @@ class ClientReturnsController extends Controller
 
             return response()->json([
                 'success' => true,
+                'statement_html' => $return->return_type === 'MASTERRETURN' ? '' : view('property.processed-returns.partials.statement', array_merge(
+                    $this->buildTenantStatementData($return, $details), ['return' => $return]
+                ))->render(),
                 'data' => $details->map(function ($d) {
                     return [
                         'encrypted_id' => encrypt($d->id),
@@ -688,253 +669,12 @@ class ClientReturnsController extends Controller
      */
     public function downloadUnprocessedPdf($id)
     {
-        try {
-            $id = decrypt($id);
-            $return = ReturnSummary::findOrFail($id);
-
-            $lines = ReturnClient::forReturn($return->return_code);
-
-            // Recompute line totals (same formula as details page)
-            $lineTotals = ReturnClient::where('return_code', $return->return_code)
-                ->selectRaw("
-                    SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN net_amount ELSE 0 END) as rent_total,
-                    SUM(CASE WHEN entry_type = 'Commission' THEN net_amount ELSE 0 END)
-                      + SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN COALESCE(commission_amount, 0) ELSE 0 END) as commission,
-                    SUM(CASE WHEN entry_type = 'VAT' THEN net_amount ELSE 0 END)
-                      + SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN COALESCE(vat_amount, 0) ELSE 0 END) as vat
-                ")
-                ->first();
-
-            // Pivot lines by tenant + unit
-            $tenantRows = [];
-            $totals = [
-                'monthly_rent'   => 0.0,
-                'rent_arrears'   => 0.0,
-                'vat'            => 0.0,
-                'house_deposit'  => 0.0,
-                'elec_deposit'   => 0.0,
-                'water_deposit'  => 0.0,
-                'elec_bill'      => 0.0,
-                'water_bill'     => 0.0,
-                'service_charge' => 0.0,
-            ];
-
-            foreach ($lines as $l) {
-                $key = ($l->tenant_name ?? '') . '||' . ($l->unit_code ?? '');
-                if (!isset($tenantRows[$key])) {
-                    $tenantRows[$key] = [
-                        'tenant_name'       => $l->tenant_name ?? '-',
-                        'unit_code'         => $l->unit_code ?? '-',
-                        'monthly_rent'      => 0.0,
-                        'rent_arrears'      => 0.0,
-                        'vat'               => 0.0,
-                        'house_deposit_amt' => 0.0,
-                        'house_deposit_ref' => '',
-                        'elec_deposit_amt'  => 0.0,
-                        'elec_deposit_ref'  => '',
-                        'water_deposit_amt' => 0.0,
-                        'water_deposit_ref' => '',
-                        'elec_bill'         => 0.0,
-                        'water_bill'        => 0.0,
-                        'service_charge'    => 0.0,
-                        'remarks'           => '',
-                    ];
-                }
-
-                $et  = strtoupper(trim($l->entry_type ?? ''));
-                $ed  = strtoupper(trim($l->entry_description ?? ''));
-                $amt = (float) ($l->net_amount ?? 0);
-                $ref = $l->transaction_ref ?? '';
-
-                if (str_contains($et, 'HOUSE') && str_contains($et, 'DEPOSIT')) {
-                    $tenantRows[$key]['house_deposit_amt'] += $amt;
-                    if ($ref) $tenantRows[$key]['house_deposit_ref'] = $ref;
-                    $totals['house_deposit'] += $amt;
-                } elseif ((str_contains($et, 'ELEC') || str_contains($et, 'ELECTRIC')) && str_contains($et, 'DEPOSIT')) {
-                    $tenantRows[$key]['elec_deposit_amt'] += $amt;
-                    if ($ref) $tenantRows[$key]['elec_deposit_ref'] = $ref;
-                    $totals['elec_deposit'] += $amt;
-                } elseif (str_contains($et, 'WATER') && str_contains($et, 'DEPOSIT')) {
-                    $tenantRows[$key]['water_deposit_amt'] += $amt;
-                    if ($ref) $tenantRows[$key]['water_deposit_ref'] = $ref;
-                    $totals['water_deposit'] += $amt;
-                } elseif (str_contains($et, 'RENT ARREARS') || str_contains($ed, 'RENT ARREARS')) {
-                    $tenantRows[$key]['rent_arrears'] += $amt;
-                    $totals['rent_arrears'] += $amt;
-                } elseif (str_contains($et, 'RENT') || str_contains($ed, 'RENT')) {
-                    $tenantRows[$key]['monthly_rent'] += $amt;
-                    $totals['monthly_rent'] += $amt;
-                } elseif (str_contains($et, 'ELEC') || str_contains($et, 'ELECTRIC') || str_contains($ed, 'ELEC') || str_contains($ed, 'ELECTRIC')) {
-                    $tenantRows[$key]['elec_bill'] += $amt;
-                    $totals['elec_bill'] += $amt;
-                } elseif (str_contains($et, 'WATER') || str_contains($ed, 'WATER')) {
-                    $tenantRows[$key]['water_bill'] += $amt;
-                    $totals['water_bill'] += $amt;
-                } elseif (str_contains($et, 'SERVICE') || str_contains($ed, 'SERVICE')) {
-                    $tenantRows[$key]['service_charge'] += $amt;
-                    $totals['service_charge'] += $amt;
-                }
-
-                // The COMMISSION line repeats the VAT its rent lines already carry, so it is not added again
-                if ((float) ($l->vat_amount ?? 0) > 0 && $et !== 'COMMISSION') {
-                    $tenantRows[$key]['vat'] += (float) $l->vat_amount;
-                    $totals['vat'] += (float) $l->vat_amount;
-                }
-
-                if (!empty($l->remarks)) {
-                    $tenantRows[$key]['remarks'] = trim($tenantRows[$key]['remarks'] . ' ' . $l->remarks);
-                }
-            }
-
-            // Rows in unit order (B2 before B10), whichever entry type introduced the unit
-            $tenantRows = $this->sortTenantRowsByUnit($tenantRows);
-
-            // Financial summary
-            $commTotal      = (float) ($return->commission_total ?? 0);
-            $commission     = (float) ($lineTotals->commission ?? 0);
-            $vat            = (float) ($lineTotals->vat ?? 0);
-            $balAfterComm   = $commTotal - $commission;
-            $balLessVat     = $balAfterComm - $vat;
-            $houseDeposits  = $totals['house_deposit'];
-            $waterElecBills = $totals['elec_bill'] + $totals['water_bill'];
-
-            $summary = [
-                'total_rent'       => (float) ($lineTotals->rent_total ?? 0),
-                'comm_total'       => $commTotal,
-                'commission'       => $commission,
-                'bal_after_comm'   => $balAfterComm,
-                'vat'              => $vat,
-                'bal_less_vat'     => $balLessVat,
-                'house_deposits'   => $houseDeposits,
-                'water_elec_bills' => $waterElecBills,
-                'net_income'       => $balLessVat + $houseDeposits + $waterElecBills,
-            ];
-
-            $landlordName = $return->landlord_name
-                ?: DB::table('sys_pm_clients')->where('reference_number', $return->landlord_code)->value('names');
-            $propertyName = $return->property_name
-                ?: DB::table('sys_pm_properties')->where('reference_number', $return->property_code)->value('property_name');
-
-            $propertyDisplay = $propertyName
-                ? trim($propertyName . ' - ' . ($return->property_code ?? ''))
-                : ($return->property_code ?? '-');
-            $landlordDisplay = $landlordName
-                ? trim($landlordName . ' (' . ($return->landlord_code ?? '') . ')')
-                : ($return->landlord_code ?? '-');
-
-            $signoff = [
-                'prepared' => [
-                    'name' => $return->prepared_by ?? '-',
-                    'date' => $return->prepared_date ? \Carbon\Carbon::parse($return->prepared_date)->format('d/m/Y') : '-'
-                ],
-                'checked' => [
-                    'name' => $return->checked_by ?? '-',
-                    'date' => $return->checked_date ? \Carbon\Carbon::parse($return->checked_date)->format('d/m/Y') : '-'
-                ],
-                'approved' => [
-                    'name' => $return->approved_by ?? '-',
-                    'date' => $return->approved_date ? \Carbon\Carbon::parse($return->approved_date)->format('d/m/Y') : '-'
-                ]
-            ];
-
-            $data = compact('return', 'tenantRows', 'totals', 'summary', 'signoff', 'propertyDisplay', 'landlordDisplay');
-
-            $pdf = Pdf::loadView('property.processed-returns.pdf', $data)
-                ->setPaper('A4', 'landscape')
-                ->setOption(['enable_font_subsetting' => true]);
-
-            $dompdf = $pdf->getDomPDF();
-            $dompdf->render();
-            $this->addPdfPageNumbers($dompdf);
-
-            $fileName = 'Unprocessed_Return_' . $return->return_code . '_' . date('Y-m-d') . '.pdf';
-            $token = request()->query('download_token');
-            $pdfContent = $dompdf->output();
-
-            header('Content-Type: application/pdf');
-            header('Content-Disposition: attachment; filename="' . $fileName . '"');
-            header('Cache-Control: max-age=0');
-            if ($token) {
-                header('Set-Cookie: download_complete_' . $token . '=1; Path=/; Max-Age=60; SameSite=Lax');
-            }
-            echo $pdfContent;
-            exit;
-        } catch (Exception $e) {
-            Log::error('Error downloading unprocessed return pdf: ' . $e->getMessage());
-            return redirect()->back()->with('error', 'Failed to download PDF');
-        }
+        return $this->downloadPdf($id);
     }
 
     public function downloadUnprocessedExcel($id)
     {
-        try {
-            $id = decrypt($id);
-            $return = ReturnSummary::findOrFail($id);
-
-            $lines = ReturnClient::forReturn($return->return_code);
-
-            $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
-            $sheet = $spreadsheet->getActiveSheet();
-            $sheet->setTitle('Return Details');
-
-            // Header info
-            $sheet->setCellValue('A1', 'Return Code');
-            $sheet->setCellValue('B1', $return->return_code);
-            $sheet->setCellValue('A2', 'Property');
-            $sheet->setCellValue('B2', $return->property_code);
-            $sheet->setCellValue('A3', 'Landlord');
-            $sheet->setCellValue('B3', $return->landlord_code);
-            $sheet->setCellValue('A4', 'Period');
-            $sheet->setCellValue('B4', str_pad($return->month, 2, '0', STR_PAD_LEFT) . '/' . $return->year);
-            $sheet->setCellValue('A5', 'Type');
-            $sheet->setCellValue('B5', $return->return_type);
-            $sheet->setCellValue('A6', 'Status');
-            $sheet->setCellValue('B6', 'UNPAID');
-
-            // Column headers
-            $row = 8;
-            $headers = ['#', 'Entry Type', 'Tenant', 'Unit', 'Description', 'Dr/Cr', 'Landlord Amt', 'Net', 'Commission', 'VAT', 'Pay %', 'Payable', 'Ref'];
-            foreach ($headers as $col => $header) {
-                $sheet->setCellValueByColumnAndRow($col + 1, $row, $header);
-            }
-            $sheet->getStyle('A8:M8')->getFont()->setBold(true);
-
-            // Data rows
-            $row = 9;
-            $num = 1;
-            foreach ($lines as $line) {
-                $sheet->setCellValueByColumnAndRow(1, $row, $num++);
-                $sheet->setCellValueByColumnAndRow(2, $row, $line->entry_type);
-                $sheet->setCellValueByColumnAndRow(3, $row, $line->tenant_name);
-                $sheet->setCellValueByColumnAndRow(4, $row, $line->unit_code);
-                $sheet->setCellValueByColumnAndRow(5, $row, $line->entry_description);
-                $sheet->setCellValueByColumnAndRow(6, $row, $line->dr_cr);
-                $sheet->setCellValueByColumnAndRow(7, $row, $line->amount_payable_landlord);
-                $sheet->setCellValueByColumnAndRow(8, $row, $line->net_amount);
-                $sheet->setCellValueByColumnAndRow(9, $row, $line->commission_amount);
-                $sheet->setCellValueByColumnAndRow(10, $row, $line->vat_amount);
-                $sheet->setCellValueByColumnAndRow(11, $row, $line->pay_percentage ? $line->pay_percentage . '%' : '');
-                $sheet->setCellValueByColumnAndRow(12, $row, $line->payable_status ? 'Yes' : 'No');
-                $sheet->setCellValueByColumnAndRow(13, $row, $line->transaction_ref);
-                $row++;
-            }
-
-            foreach (range('A', 'M') as $col) {
-                $sheet->getColumnDimension($col)->setAutoSize(true);
-            }
-
-            $filename = 'Unprocessed_Return_' . $return->return_code . '.xlsx';
-            $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
-
-            return response()->streamDownload(function () use ($writer) {
-                $writer->save('php://output');
-            }, $filename, [
-                'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            ]);
-        } catch (Exception $e) {
-            Log::error('Error downloading unprocessed return excel: ' . $e->getMessage());
-            return redirect()->back()->with('error', 'Failed to download excel');
-        }
+        return $this->downloadExcel($id);
     }
 
     /**
@@ -1154,7 +894,7 @@ class ClientReturnsController extends Controller
      * 3) Insert deductions: advances, recoveries, collections (ReturnsDeductionsTrait)
      * 4) Insert MAINRETURN summaries (ReturnsSummaryTrait)
      * 5) Generate MASTERRETURNs for batched properties (ReturnsMasterReturnTrait)
-     * 6) Mark landlord account entries as recovered (ReturnsLandlordAccountTrait)
+     * 6) Mark landlord account entries as recovered (ReturnsDeductionsTrait)
      * 7) Create approval workflow items
      * 
      * Supports optional property_id for single-property generation.
@@ -1786,21 +1526,7 @@ class ClientReturnsController extends Controller
                 ->orderBy('return_type')
                 ->get(['id', 'return_code', 'return_type']);
 
-            // Compute totals from detail lines so summary matches the detail table
-            $lineTotals = ReturnClient::where('return_code', $return->return_code)
-                ->selectRaw("
-                    SUM(CASE WHEN dr_cr = 'CR' THEN net_amount ELSE 0 END) as total_cr,
-                    SUM(CASE WHEN dr_cr = 'DR' AND COALESCE(entry_type, '') <> 'COMMISSION' THEN net_amount ELSE 0 END)
-                      + SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN COALESCE(commission_amount, 0) + COALESCE(vat_amount, 0) ELSE 0 END) as total_dr,
-                    SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN net_amount ELSE 0 END) as rent_total,
-                    SUM(CASE WHEN entry_type = 'Commission' THEN net_amount ELSE 0 END)
-                      + SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN COALESCE(commission_amount, 0) ELSE 0 END) as commission,
-                    SUM(CASE WHEN entry_type = 'VAT' THEN net_amount ELSE 0 END)
-                      + SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN COALESCE(vat_amount, 0) ELSE 0 END) as vat,
-                    SUM(CASE WHEN entry_type = 'Deductions Before Commission' THEN net_amount ELSE 0 END) as deductions,
-                    SUM(CASE WHEN entry_type = 'Add Back Deductions' THEN net_amount ELSE 0 END) as add_back
-                ")
-                ->first();
+            $lineTotals = $this->statements->lineTotals($return->return_code);
 
             $headerInfo = $this->buildReturnHeaderInfo($return);
 
@@ -1821,20 +1547,7 @@ class ClientReturnsController extends Controller
             $id = decrypt($id);
             $return = ReturnSummary::findOrFail($id);
 
-            $lineTotals = ReturnClient::where('return_code', $return->return_code)
-                ->selectRaw("
-                    SUM(CASE WHEN dr_cr = 'CR' THEN net_amount ELSE 0 END) as total_cr,
-                    SUM(CASE WHEN dr_cr = 'DR' AND COALESCE(entry_type, '') <> 'COMMISSION' THEN net_amount ELSE 0 END)
-                      + SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN COALESCE(commission_amount, 0) + COALESCE(vat_amount, 0) ELSE 0 END) as total_dr,
-                    SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN net_amount ELSE 0 END) as rent_total,
-                    SUM(CASE WHEN entry_type = 'Commission' THEN net_amount ELSE 0 END)
-                      + SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN COALESCE(commission_amount, 0) ELSE 0 END) as commission,
-                    SUM(CASE WHEN entry_type = 'VAT' THEN net_amount ELSE 0 END)
-                      + SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN COALESCE(vat_amount, 0) ELSE 0 END) as vat,
-                    SUM(CASE WHEN entry_type = 'Deductions Before Commission' THEN net_amount ELSE 0 END) as deductions,
-                    SUM(CASE WHEN entry_type = 'Add Back Deductions' THEN net_amount ELSE 0 END) as add_back
-                ")
-                ->first();
+            $lineTotals = $this->statements->lineTotals($return->return_code);
 
             $headerInfo = $this->buildReturnHeaderInfo($return);
 
@@ -1893,6 +1606,9 @@ class ClientReturnsController extends Controller
 
             return response()->json([
                 'success' => true,
+                'statement_html' => $return->return_type === 'MASTERRETURN' ? '' : view('property.processed-returns.partials.statement', array_merge(
+                    $this->buildTenantStatementData($return, $lines), ['return' => $return]
+                ))->render(),
                 'count' => $lines->count(),
                 'data' => $lines->map(function ($l) {
                     return [
@@ -1963,121 +1679,14 @@ class ClientReturnsController extends Controller
 
             $lines = ReturnClient::forReturn($return->return_code);
 
-            // Recompute line totals (same formula as details page)
-            $lineTotals = ReturnClient::where('return_code', $return->return_code)
-                ->selectRaw("
-                    SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN net_amount ELSE 0 END) as rent_total,
-                    SUM(CASE WHEN entry_type = 'Commission' THEN net_amount ELSE 0 END)
-                      + SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN COALESCE(commission_amount, 0) ELSE 0 END) as commission,
-                    SUM(CASE WHEN entry_type = 'VAT' THEN net_amount ELSE 0 END)
-                      + SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN COALESCE(vat_amount, 0) ELSE 0 END) as vat
-                ")
-                ->first();
-
-            // Pivot lines by tenant + unit
-            $tenantRows = [];
-            $totals = [
-                'monthly_rent'   => 0.0,
-                'rent_arrears'   => 0.0,
-                'vat'            => 0.0,
-                'house_deposit'  => 0.0,
-                'elec_deposit'   => 0.0,
-                'water_deposit'  => 0.0,
-                'elec_bill'      => 0.0,
-                'water_bill'     => 0.0,
-                'service_charge' => 0.0,
-            ];
-
-            foreach ($lines as $l) {
-                $key = ($l->tenant_name ?? '') . '||' . ($l->unit_code ?? '');
-                if (!isset($tenantRows[$key])) {
-                    $tenantRows[$key] = [
-                        'tenant_name'       => $l->tenant_name ?? '-',
-                        'unit_code'         => $l->unit_code ?? '-',
-                        'monthly_rent'      => 0.0,
-                        'rent_arrears'      => 0.0,
-                        'vat'               => 0.0,
-                        'house_deposit_amt' => 0.0,
-                        'house_deposit_ref' => '',
-                        'elec_deposit_amt'  => 0.0,
-                        'elec_deposit_ref'  => '',
-                        'water_deposit_amt' => 0.0,
-                        'water_deposit_ref' => '',
-                        'elec_bill'         => 0.0,
-                        'water_bill'        => 0.0,
-                        'service_charge'    => 0.0,
-                        'remarks'           => '',
-                    ];
-                }
-
-                $et  = strtoupper(trim($l->entry_type ?? ''));
-                $ed  = strtoupper(trim($l->entry_description ?? '')); // fallback for entries stored under generic types
-                $amt = (float) ($l->net_amount ?? 0);
-                $ref = $l->transaction_ref ?? '';
-
-                if (str_contains($et, 'HOUSE') && str_contains($et, 'DEPOSIT')) {
-                    $tenantRows[$key]['house_deposit_amt'] += $amt;
-                    if ($ref) $tenantRows[$key]['house_deposit_ref'] = $ref;
-                    $totals['house_deposit'] += $amt;
-                } elseif ((str_contains($et, 'ELEC') || str_contains($et, 'ELECTRIC')) && str_contains($et, 'DEPOSIT')) {
-                    $tenantRows[$key]['elec_deposit_amt'] += $amt;
-                    if ($ref) $tenantRows[$key]['elec_deposit_ref'] = $ref;
-                    $totals['elec_deposit'] += $amt;
-                } elseif (str_contains($et, 'WATER') && str_contains($et, 'DEPOSIT')) {
-                    $tenantRows[$key]['water_deposit_amt'] += $amt;
-                    if ($ref) $tenantRows[$key]['water_deposit_ref'] = $ref;
-                    $totals['water_deposit'] += $amt;
-                } elseif (str_contains($et, 'RENT ARREARS') || str_contains($ed, 'RENT ARREARS')) {
-                    $tenantRows[$key]['rent_arrears'] += $amt;
-                    $totals['rent_arrears'] += $amt;
-                } elseif (str_contains($et, 'RENT') || str_contains($ed, 'RENT')) {
-                    $tenantRows[$key]['monthly_rent'] += $amt;
-                    $totals['monthly_rent'] += $amt;
-                } elseif (str_contains($et, 'ELEC') || str_contains($et, 'ELECTRIC') || str_contains($ed, 'ELEC') || str_contains($ed, 'ELECTRIC')) {
-                    $tenantRows[$key]['elec_bill'] += $amt;
-                    $totals['elec_bill'] += $amt;
-                } elseif (str_contains($et, 'WATER') || str_contains($ed, 'WATER')) {
-                    $tenantRows[$key]['water_bill'] += $amt;
-                    $totals['water_bill'] += $amt;
-                } elseif (str_contains($et, 'SERVICE') || str_contains($ed, 'SERVICE')) {
-                    $tenantRows[$key]['service_charge'] += $amt;
-                    $totals['service_charge'] += $amt;
-                }
-
-                // The COMMISSION line repeats the VAT its rent lines already carry, so it is not added again
-                if ((float) ($l->vat_amount ?? 0) > 0 && $et !== 'COMMISSION') {
-                    $tenantRows[$key]['vat'] += (float) $l->vat_amount;
-                    $totals['vat'] += (float) $l->vat_amount;
-                }
-
-                if (!empty($l->remarks)) {
-                    $tenantRows[$key]['remarks'] = trim($tenantRows[$key]['remarks'] . ' ' . $l->remarks);
-                }
-            }
-
-            // Rows in unit order (B2 before B10), whichever entry type introduced the unit
-            $tenantRows = $this->sortTenantRowsByUnit($tenantRows);
-
-            // Financial summary
-            $commTotal      = (float) ($return->commission_total ?? 0);
-            $commission     = (float) ($lineTotals->commission ?? 0);
-            $vat            = (float) ($lineTotals->vat ?? 0);
-            $balAfterComm   = $commTotal - $commission;
-            $balLessVat     = $balAfterComm - $vat;
-            $houseDeposits  = $totals['house_deposit'];
-            $waterElecBills = $totals['elec_bill'] + $totals['water_bill'];
-
-            $summary = [
-                'total_rent'       => (float) ($lineTotals->rent_total ?? 0),
-                'comm_total'       => $commTotal,
-                'commission'       => $commission,
-                'bal_after_comm'   => $balAfterComm,
-                'vat'              => $vat,
-                'bal_less_vat'     => $balLessVat,
-                'house_deposits'   => $houseDeposits,
-                'water_elec_bills' => $waterElecBills,
-                'net_income'       => $balLessVat + $houseDeposits + $waterElecBills,
-            ];
+            // The same figures as the details page and the Excel file
+            $statement = $this->buildTenantStatementData($return, $lines);
+            $tenantRows = $statement['tenantRows'];
+            $totals = $statement['totals'];
+            $summary = $statement['summary'];
+            $summaryRows = $statement['summaryRows'];
+            $settlementRows = $statement['settlementRows'];
+            $arrears = $statement['arrears'];
 
             $landlordName = $return->landlord_name
                 ?: DB::table('sys_pm_clients')->where('reference_number', $return->landlord_code)->value('names');
@@ -2091,7 +1700,7 @@ class ClientReturnsController extends Controller
                 ? trim($landlordName . ' (' . ($return->landlord_code ?? '') . ')')
                 : ($return->landlord_code ?? '-');
 
-            $data = compact('return', 'tenantRows', 'totals', 'summary', 'signoff', 'propertyDisplay', 'landlordDisplay');
+            $data = compact('return', 'tenantRows', 'totals', 'summary', 'summaryRows', 'settlementRows', 'arrears', 'signoff', 'propertyDisplay', 'landlordDisplay');
 
             $pdf = Pdf::loadView('property.processed-returns.pdf', $data)
                 ->setPaper('A4', 'landscape')
@@ -2282,65 +1891,12 @@ class ClientReturnsController extends Controller
             }
 
             $lines = ReturnClient::forReturn($return->return_code);
-
-            $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
-            $sheet = $spreadsheet->getActiveSheet();
-            $sheet->setTitle('Return Details');
-
-            // Header
-            $sheet->setCellValue('A1', 'RETURN DETAILS — ' . $return->return_code);
-            $sheet->mergeCells('A1:J1');
-            $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(12);
-
-            // Return Info
-            $row = 3;
-            $sheet->setCellValue('A' . $row, 'Property:')->setCellValue('B' . $row, $return->property_code ?? '-');
-            $sheet->setCellValue('D' . $row, 'Landlord:')->setCellValue('E' . $row, $return->landlord_code);
-            $row++;
-            $sheet->setCellValue('A' . $row, 'Period:')->setCellValue('B' . $row, str_pad($return->month, 2, '0', STR_PAD_LEFT) . '/' . $return->year);
-            $sheet->setCellValue('D' . $row, 'Type:')->setCellValue('E' . $row, $return->return_type ?? '-');
-            $row++;
-            $sheet->setCellValue('A' . $row, 'Net Amount:')->setCellValue('B' . $row, $return->net_amount ?? 0);
-            $sheet->getStyle('B' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
-            $sheet->setCellValue('D' . $row, 'Amount Paid:')->setCellValue('E' . $row, $return->amount_paid ?? 0);
-            $sheet->getStyle('E' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
-            $row += 2;
-
-            // Detail lines header
-            $headers = ['#', 'Entry Type', 'Tenant', 'Unit', 'Description', 'Dr/Cr', 'Landlord Amt', 'Net', 'Commission', 'VAT', 'Pay %', 'Payable', 'Ref'];
-            $col = 'A';
-            foreach ($headers as $header) {
-                $sheet->setCellValue($col . $row, $header);
-                $sheet->getStyle($col . $row)->getFont()->setBold(true);
-                $col++;
-            }
-            $row++;
-
-            $i = 1;
-            foreach ($lines as $l) {
-                $sheet->setCellValue('A' . $row, $i++)
-                    ->setCellValue('B' . $row, $l->narration ?? '-')
-                    ->setCellValue('C' . $row, $l->tenant_name ?? '-')
-                    ->setCellValue('D' . $row, $l->unit_code ?? '-')
-                    ->setCellValue('E' . $row, $l->entry_description ?? '-')
-                    ->setCellValue('F' . $row, $l->dr_cr ?? '-')
-                    ->setCellValue('G' . $row, $l->amount_payable_landlord ?? 0)
-                    ->setCellValue('H' . $row, $l->net_amount ?? 0)
-                    ->setCellValue('I' . $row, $l->commission_amount ?? 0)
-                    ->setCellValue('J' . $row, $l->vat_amount ?? 0)
-                    ->setCellValue('K' . $row, $l->pay_percentage ? $l->pay_percentage . '%' : '')
-                    ->setCellValue('L' . $row, $l->payable_status ? 'Yes' : 'No')
-                    ->setCellValue('M' . $row, $l->transaction_ref ?? '-');
-
-                foreach (['G', 'H', 'I', 'J'] as $c) {
-                    $sheet->getStyle($c . $row)->getNumberFormat()->setFormatCode('#,##0.00');
-                }
-                $row++;
-            }
-
-            foreach (range('A', 'M') as $col) {
-                $sheet->getColumnDimension($col)->setAutoSize(true);
-            }
+            $spreadsheet = $this->statementExport->build(
+                $return,
+                $this->buildTenantStatementData($return, $lines),
+                $this->buildReturnHeaderInfo($return),
+                $this->buildReturnSignoffData($return)
+            );
 
             $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
             $filename = 'return_' . $return->return_code . '_' . date('Y-m-d') . '.xlsx';
@@ -2363,6 +1919,49 @@ class ClientReturnsController extends Controller
                 'message' => 'Failed to generate Excel'
             ], 500);
         }
+    }
+
+    /**
+     * Everything the statement shows for a return (rows, totals, summary, blocks I to O, arrears), from its lines.
+     */
+    private function buildTenantStatementData(ReturnSummary $return, $lines): array
+    {
+        return $this->statements->statement($return, $lines);
+    }
+
+    /** Edit a tenant's statement note without changing the return's financial or approval state. */
+    public function saveStatementRemarks(Request $request, $id, $lineId)
+    {
+        try {
+            $returnId = decrypt($id);
+            $returnLineId = decrypt($lineId);
+        } catch (\Illuminate\Contracts\Encryption\DecryptException $e) {
+            abort(404);
+        }
+        $return = ReturnSummary::findOrFail($returnId);
+        $userId = (int) auth()->id();
+        abort_unless($userId > 0, 403);
+        if (!$this->checkGlobalRole($userId)) {
+            $assigned = DB::table('sys_pm_properties as p')
+                ->join('sys_pm_zones_assignments as a', 'a.property_id', '=', 'p.id')
+                ->join('sys_user_staff_links as u', 'u.staff_id', '=', 'a.staff_id')
+                ->where('u.user_id', $userId)->where('a.current_status_id', 1)
+                ->where('p.reference_number', $return->property_code)->exists();
+            abort_unless($assigned, 403, 'You may only edit remarks for your assigned properties.');
+        }
+        $values = $request->validate([
+            'remarks' => 'nullable|string|max:' . ReturnStatementService::REMARKS_LIMIT,
+            'expected_remarks' => 'present|nullable|string',
+        ]);
+        return DB::transaction(function () use ($return, $returnLineId, $values) {
+            $line = ReturnClient::where('return_code', $return->return_code)->whereKey($returnLineId)->lockForUpdate()->firstOrFail();
+            if (trim((string) ($line->remarks ?? '')) !== trim((string) ($values['expected_remarks'] ?? ''))) {
+                return response()->json(['message' => 'These remarks changed since you opened the statement. Reload the return before saving.'], 409);
+            }
+            $line->remarks = $values['remarks'] ?? '';
+            $line->save();
+            return response()->json(['success' => true, 'remarks' => $line->remarks]);
+        });
     }
 
     private function buildMasterReturnExportData(ReturnSummary $return): array
@@ -2398,7 +1997,7 @@ class ClientReturnsController extends Controller
 
             $narrationText = strtoupper(trim((string) ($line->narration ?: $line->entry_type ?: $line->entry_description ?: '')));
 
-            if (str_contains($narrationText, 'OPENING AT START OF MONTH')) {
+            if (str_starts_with(strtoupper(trim((string) $line->entry_type)), 'OTHER RECEIPTS') || str_contains($narrationText, 'OPENING AT START OF MONTH')) {
                 $otherReceipts[] = $item;
                 $totalOtherReceipts += $amount;
                 continue;
@@ -2471,15 +2070,6 @@ class ClientReturnsController extends Controller
             'propertyName' => $propertyDisplay,
             'monthLabel' => date('F Y', strtotime(sprintf('%04d-%02d-01', (int) $return->year, (int) $return->month))),
         ];
-    }
-
-    /**
-     * Put the pivoted tenant rows of a return PDF in unit order (B2 before B10); a row with no unit stays first.
-     */
-    private function sortTenantRowsByUnit(array $tenantRows): array {
-        uasort($tenantRows, fn($a, $b) => strnatcasecmp((string) $a['unit_code'], (string) $b['unit_code']) ?: strnatcasecmp((string) $a['tenant_name'], (string) $b['tenant_name']));
-
-        return $tenantRows;
     }
 
     private function buildReturnSignoffData(ReturnSummary $return): array

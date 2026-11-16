@@ -1,5 +1,9 @@
 @extends('layouts.main')
 
+@section('styles')
+<link rel="stylesheet" href="{{ asset('assets/css/return-statement.css') }}?v={{ filemtime(public_path('assets/css/return-statement.css')) }}">
+@endsection
+
 @section('content')
 <div class="page-body" style="padding-top:10px;">
     <div class="container-fluid">
@@ -91,10 +95,92 @@
                         @endif
 
 
+                        <!-- Content Tabs: Detail Lines / Approvals -->
+                        <style>
+                            #contentTabs .nav-link {
+                                color: #555;
+                                font-weight: 600;
+                                font-size: 0.88rem;
+                                border: none;
+                                border-bottom: 3px solid transparent;
+                                border-radius: 0;
+                                padding: 8px 18px;
+                                transition: color .2s, border-color .2s;
+                            }
+
+                            #contentTabs .nav-link:hover {
+                                color: #3598db;
+                                border-bottom-color: #b8dcf0;
+                            }
+
+                            #contentTabs .nav-link.active {
+                                color: #3598db;
+                                font-weight: 700;
+                                background: none;
+                                border-bottom: 3px solid #3598db;
+                            }
+                        </style>
+                        <ul class="nav nav-tabs border-bottom mb-0" id="contentTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="details-content-tab" data-bs-toggle="tab" data-bs-target="#details-lines-content" type="button" role="tab">
+                                    <i class="fa fa-list me-1"></i> Statement
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="approvals-content-tab" data-bs-toggle="tab" data-bs-target="#approvals-content" type="button" role="tab">
+                                    <i class="fa fa-check-circle me-1"></i> Approvals
+                                </button>
+                            </li>
+                            <li class="ms-auto d-flex align-items-center gap-2">
+                                <a href="{{ route('returns.pdf', encrypt($return->id)) }}" id="pdf-link" class="btn btn-primary btn-sm py-0 px-2 d-flex align-items-center">
+                                    <span class="material-symbols-outlined" style="font-size:14px;">picture_as_pdf</span>
+                                    <span class="ms-1" id="pdf-btn-text" style="font-size:0.72rem;">PDF</span>
+                                    <span id="pdf-spinner" class="spinner-border spinner-border-sm ms-1 d-none" style="width:.7rem;height:.7rem;"></span>
+                                </a>
+                                <a href="{{ route('returns.excel', encrypt($return->id)) }}" id="excel-link" class="btn btn-sm py-0 px-2 d-flex align-items-center" style="background-color:#00674F;border-color:#00674F;color:#fff;">
+                                    <span class="material-symbols-outlined" style="font-size:14px;">download</span>
+                                    <span class="ms-1" style="font-size:0.72rem;">Excel</span>
+                                </a>
+                            </li>
+                        </ul>
+
+                        <div class="tab-content" id="contentTabsContent">
+                            <!-- Detail Lines Tab -->
+                            <div class="tab-pane fade show active pt-2" id="details-lines-content" role="tabpanel">
+                        <details id="return-transaction-details" class="mb-3 border rounded p-2">
+                            <summary class="fw-semibold">Transaction details and processing totals</summary>
+                                <style>
+                                    #details-table td,
+                                    #details-table th {
+                                        padding: 2px 4px !important;
+                                        font-size: 0.78rem !important;
+                                        line-height: 1.2;
+                                    }
+                                </style>
+                                <div class="table-responsive custom-scrollbar">
+                                    <table class="display" id="details-table" style="width:100%;font-size:0.66rem;">
+                                        <thead>
+                                            <tr>
+                                                <th>#</th>
+                                                <th>Narration</th>
+                                                <th>Tenant</th>
+                                                <th>Unit</th>
+                                                <th>Description</th>
+                                                <th>Dr/Cr</th>
+                                                <th class="text-end">Amt</th>
+                                                <th class="text-end">Net</th>
+                                                <th class="text-end">Pay %</th>
+                                                <th class="text-center">Payable?</th>
+                                                <th></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody></tbody>
+                                    </table>
+                                </div>
                         <!-- Financial Summary -->
                         <style>
                             .summary-table tbody tr:nth-child(odd) {
-                                background-color: #f8f9fa;
+                                background-color: #fff;
                             }
 
                             .summary-table tbody tr:nth-child(even) {
@@ -199,86 +285,8 @@
                             </div>
                         </div>
 
-                        <!-- Content Tabs: Detail Lines / Approvals -->
-                        <style>
-                            #contentTabs .nav-link {
-                                color: #555;
-                                font-weight: 600;
-                                font-size: 0.88rem;
-                                border: none;
-                                border-bottom: 3px solid transparent;
-                                border-radius: 0;
-                                padding: 8px 18px;
-                                transition: color .2s, border-color .2s;
-                            }
-
-                            #contentTabs .nav-link:hover {
-                                color: #3598db;
-                                border-bottom-color: #b8dcf0;
-                            }
-
-                            #contentTabs .nav-link.active {
-                                color: #3598db;
-                                font-weight: 700;
-                                background: none;
-                                border-bottom: 3px solid #3598db;
-                            }
-                        </style>
-                        <ul class="nav nav-tabs border-bottom mb-0" id="contentTabs" role="tablist">
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link active" id="details-content-tab" data-bs-toggle="tab" data-bs-target="#details-lines-content" type="button" role="tab">
-                                    <i class="fa fa-list me-1"></i> Detail Lines
-                                </button>
-                            </li>
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="approvals-content-tab" data-bs-toggle="tab" data-bs-target="#approvals-content" type="button" role="tab">
-                                    <i class="fa fa-check-circle me-1"></i> Approvals
-                                </button>
-                            </li>
-                            <li class="ms-auto d-flex align-items-center gap-2">
-                                <a href="{{ route('returns.pdf', encrypt($return->id)) }}" id="pdf-link" class="btn btn-primary btn-sm py-0 px-2 d-flex align-items-center">
-                                    <span class="material-symbols-outlined" style="font-size:14px;">picture_as_pdf</span>
-                                    <span class="ms-1" id="pdf-btn-text" style="font-size:0.72rem;">PDF</span>
-                                    <span id="pdf-spinner" class="spinner-border spinner-border-sm ms-1 d-none" style="width:.7rem;height:.7rem;"></span>
-                                </a>
-                                <a href="{{ route('returns.excel', encrypt($return->id)) }}" id="excel-link" class="btn btn-sm py-0 px-2 d-flex align-items-center" style="background-color:#00674F;border-color:#00674F;color:#fff;">
-                                    <span class="material-symbols-outlined" style="font-size:14px;">download</span>
-                                    <span class="ms-1" style="font-size:0.72rem;">Excel</span>
-                                </a>
-                            </li>
-                        </ul>
-
-                        <div class="tab-content" id="contentTabsContent">
-                            <!-- Detail Lines Tab -->
-                            <div class="tab-pane fade show active pt-2" id="details-lines-content" role="tabpanel">
-                                <style>
-                                    #details-table td,
-                                    #details-table th {
-                                        padding: 2px 4px !important;
-                                        font-size: 0.78rem !important;
-                                        line-height: 1.2;
-                                    }
-                                </style>
-                                <div class="table-responsive custom-scrollbar">
-                                    <table class="display" id="details-table" style="width:100%;font-size:0.66rem;">
-                                        <thead>
-                                            <tr>
-                                                <th>#</th>
-                                                <th>Narration</th>
-                                                <th>Tenant</th>
-                                                <th>Unit</th>
-                                                <th>Description</th>
-                                                <th>Dr/Cr</th>
-                                                <th class="text-end">Amt</th>
-                                                <th class="text-end">Net</th>
-                                                <th class="text-end">Pay %</th>
-                                                <th class="text-center">Payable?</th>
-                                                <th></th>
-                                            </tr>
-                                        </thead>
-                                        <tbody></tbody>
-                                    </table>
-                                </div>
+                        </details>
+                        <div id="return-statement" aria-live="polite"><p class="text-muted py-3">Loading return statement...</p></div>
                             </div><!-- /details-lines-content -->
 
                             <!-- Approvals Tab -->
@@ -437,6 +445,8 @@
 @endsection
 
 @section('scripts')
+<script src="{{ asset('assets/js/return-statement.js') }}?v={{ filemtime(public_path('assets/js/return-statement.js')) }}"></script>
+
 <script>
     $(document).ready(function() {
         var $meta = $('#financial-summary');
@@ -545,6 +555,10 @@
             pageLength: 50
         });
 
+        $('#return-transaction-details').on('toggle', function() {
+            if (this.open) table.columns.adjust();
+        });
+
         function loadDetailLines(url) {
             currentUnitsUrl = url;
             $.ajax({
@@ -552,6 +566,7 @@
                 type: 'GET',
                 success: function(response) {
                     if (response.success) {
+                        renderReturnStatement(response);
                         table.clear();
                         table.rows.add(response.data);
                         table.draw();
@@ -621,9 +636,14 @@
             $('#excel-link').attr('href', r.excel_url);
         }
 
+        $('#excel-link').on('click', function(e) {
+            if (returnStatementHasUnsavedRemarks()) { e.preventDefault(); alert('Save your remarks before downloading the statement.'); }
+        });
+
         // PDF download handler
         $('#pdf-link').on('click', function(e) {
             e.preventDefault();
+            if (returnStatementHasUnsavedRemarks()) { alert('Save your remarks before downloading the statement.'); return; }
             var url = $(this).attr('href');
             if (!url) {
                 toastr.warning('PDF generation not available');
@@ -666,6 +686,7 @@
             e.preventDefault();
             var $tab = $(this);
             if ($tab.hasClass('active')) return;
+            if (returnStatementHasUnsavedRemarks()) { alert('Save your remarks before switching returns.'); return; }
 
             var encId = $tab.data('enc-id');
             var $spinner = $tab.find('.spinner-border');

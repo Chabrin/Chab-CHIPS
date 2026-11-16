@@ -42,7 +42,6 @@ always returns an empty collection.
 | `RentInvoicingController.php` | 321 | New (split): bulk monthly rent generation |
 | `UtilityInvoicingController.php` | 195 | New (split): utility/non-rent billing |
 | `ClientInvoicesController.php` | 121 | New (split): client-side invoice views |
-| `Traits/ReturnsLandlordAccountTrait.php` | 737 | Landlord ledger (`cb_landlord_account`) posting |
 | `Services/PaymentAllocationService.php` | 534 | Orchestrates allocation; owns "Phase 2" only |
 | `Traits/ReturnsDeductionsTrait.php` | 532 | Advance/recovery/commission deduction lines |
 | `Traits/ReturnsMasterReturnTrait.php` | 528 | MASTERRETURN roll-up across merged properties |
@@ -58,9 +57,9 @@ always returns an empty collection.
 
 (All paths relative to `app/Http/Controllers/`, `app/Traits/`, `app/Services/`.)
 
-`ClientReturnsController` composes 6 of the 8 Returns traits directly
+`ClientReturnsController` composes 5 of the 7 Returns traits directly
 (`ReturnsRentLinesTrait`, `ReturnsPayThresholdTrait`, `ReturnsDeductionsTrait`,
-`ReturnsSummaryTrait`, `ReturnsMasterReturnTrait`, `ReturnsLandlordAccountTrait`);
+`ReturnsSummaryTrait`, `ReturnsMasterReturnTrait`);
 the other two (`ReturnThresholdTrait`, `HandlesReturnApprovalWorkflow`) run
 inside `PaymentAllocationService` and `ProcessReturnsFinalApprovalJob`
 respectively.

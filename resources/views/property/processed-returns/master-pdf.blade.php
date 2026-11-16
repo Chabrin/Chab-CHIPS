@@ -26,33 +26,25 @@
 
     <table class="cards">
         <tr>
-            <td class="col-landlord">
+            <td class="col-landlord" style="width:100%;padding-right:0;">
                 <div class="card">
+                    <table style="width:100%;"><tr><td style="width:42%;vertical-align:top;">
                     <div class="card-label">LANDLORD</div>
                     <div class="landlord-name">{{ $landlordTitle }}</div>
+                        <span class="ref">Account: {{ $return->landlord_code ?? '-' }}</span>
+                    </td><td style="width:58%;vertical-align:top;">
                     <table class="kv">
-                        <tr><td class="k">Account no.</td><td><strong>{{ $return->landlord_code ?? '-' }}</strong></td></tr>
+
                         <tr><td class="k">Property</td><td>{{ $propertyName }}</td></tr>
                         <tr><td class="k">Return ID</td><td><strong>{{ $return->return_code }}</strong></td></tr>
                         @if($return->voucher_number)
                         <tr><td class="k">Voucher</td><td>{{ $return->voucher_number }}</td></tr>
                         @endif
                     </table>
+                    </td></tr></table>
                 </div>
             </td>
-            <td class="col-summary">
-                <div class="card">
-                    <div class="card-label">RETURN SUMMARY</div>
-                    <table class="summary">
-                        <tr><td class="k">Return net sum</td><td class="v cr">{{ $money($totals['credits']) }}</td></tr>
-                        <tr><td class="k">Less deductions</td><td class="v dr">( {{ $money($totals['debits']) }} )</td></tr>
-                        <tr><td class="k">Other receipts from landlord acc</td><td class="v">{{ $money($totals['other_receipts']) }}</td></tr>
-                        <tr class="strong"><td class="k">Amount payable</td><td class="v">{{ $money($totals['amount_payable']) }}</td></tr>
-                        <tr><td class="k">Amount paid</td><td class="v">{{ $money($totals['amount_paid']) }}</td></tr>
-                        <tr class="closing"><td class="k">Balance</td><td class="v">{{ $money($balance) }}</td></tr>
-                    </table>
-                </div>
-            </td>
+
         </tr>
     </table>
 
@@ -142,24 +134,25 @@
         </tbody>
     </table>
 
-    <table class="txn" style="margin-top: 14px;">
-        <tbody>
-            <tr class="totals">
-                <td style="width: 76%;">Amount payable</td>
-                <td class="r" style="width: 24%;">{{ $money($totals['amount_payable']) }}</td>
-            </tr>
-            <tr class="totals">
-                <td style="border-top: none;">Amount paid</td>
-                <td class="r" style="border-top: none;">{{ $money($totals['amount_paid']) }}</td>
-            </tr>
-            <tr class="final">
-                <td>Balance</td>
-                <td class="r">{{ $money($balance) }}</td>
-            </tr>
-        </tbody>
-    </table>
+    <div class="statement-closing">
+    <table class="cards statement-summary"><tr><td style="width:48%;"></td>
+            <td class="col-summary">
+                <div class="card">
+                    <div class="card-label">RETURN SUMMARY</div>
+                    <table class="summary">
+                        <tr><td class="k">Return net sum</td><td class="v cr">{{ $money($totals['credits']) }}</td></tr>
+                        <tr><td class="k">Less deductions</td><td class="v dr">( {{ $money($totals['debits']) }} )</td></tr>
+                        <tr><td class="k">Other receipts from landlord acc</td><td class="v">{{ $money($totals['other_receipts']) }}</td></tr>
+                        <tr class="strong"><td class="k">Amount payable</td><td class="v">{{ $money($totals['amount_payable']) }}</td></tr>
+                        <tr><td class="k">Amount paid</td><td class="v">{{ $money($totals['amount_paid']) }}</td></tr>
+                        <tr class="closing"><td class="k">Balance</td><td class="v">{{ $money($balance) }}</td></tr>
+                    </table>
+                </div>
+            </td>
+    </tr></table>
 
     @include('property.processed-returns.partials.pdf-signoff')
+    </div>
 </body>
 
 </html>

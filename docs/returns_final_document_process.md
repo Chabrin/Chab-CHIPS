@@ -273,7 +273,6 @@ else:
 | `ReturnsDeductionsTrait`      | Advances, recoveries, collections                  |
 | `ReturnsSummaryTrait`         | MAINRETURN summaries, existence checks             |
 | `ReturnsMasterReturnTrait`    | MASTERRETURN aggregation                           |
-| `ReturnsLandlordAccountTrait` | Landlord account entries, Opening/Closing balances |
 
 ---
 
@@ -288,56 +287,11 @@ The system maintains running balances for each landlord per property in `cb_land
 | Opening Balance B/F | Balance brought forward from previous period |
 | Closing Balance C/F | Balance to be carried forward to next period |
 
-### Balance Computation Methods
+### Balance Computation
 
-**Trait:** `ReturnsLandlordAccountTrait`
-
-#### `computeLandlordAccountBalances()`
-
-Called **before** pulling balances for returns:
-
-1. Deletes existing Opening Balance entries for the period
-2. Calculates previous period's closing balance per property
-3. Inserts new Opening Balance B/F entries (entry_type_code = '0008')
-
-```
-Opening Balance = SUM(credit_amount - debit_amount) for all prior periods
-```
-
-#### `computeClosingBalances()`
-
-Called **after** all return lines have been processed:
-
-1. Deletes existing Closing Balance entries for the period
-2. Calculates current period's running balance per property
-3. Inserts new Closing Balance C/F entries (entry_type_code = '0008')
-
-```
-Closing Balance = Opening Balance + Current Period (Credits - Debits)
-```
-
-#### Helper Methods
-
-| Method                          | Purpose                                                    |
-| ------------------------------- | ---------------------------------------------------------- |
-| `getOpeningBalance()`           | Get computed Opening Balance for a property                |
-| `getClosingBalance()`           | Get computed Closing Balance for a property                |
-| `recalculatePropertyBalances()` | Recalculate all periods for a property (fix discrepancies) |
-
-### Balance Formula
-
-```
-Balance = SUM(credit_amount) - SUM(debit_amount)
-
-If Balance >= 0: Landlord is OWED money (shown as CR)
-If Balance < 0:  Landlord OWES money (shown as DR)
-```
-
-### When to Compute Balances
-
-1. **Before Returns Generation** - Call `computeLandlordAccountBalances()` to set Opening Balance B/F
-2. **After Returns Generation** - Call `computeClosingBalances()` to set Closing Balance C/F
-3. **On Demand** - Call `recalculatePropertyBalances()` to fix historical discrepancies
+The trait that used to compute and insert these balance entries (`ReturnsLandlordAccountTrait`) had no callers and was
+removed on 2026-11-16. Returns generation does not create Opening Balance B/F or Closing Balance C/F rows. It only reads
+the ledger's debits, and the return statement leaves the 0008 and 00014 balance rows out of its landlord-account deductions.
 
 ---
 
