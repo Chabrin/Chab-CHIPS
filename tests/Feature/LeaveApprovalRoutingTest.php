@@ -47,6 +47,8 @@ class LeaveApprovalRoutingTest extends TestCase
         Model::unsetEventDispatcher(); // skip the audit-log observers; they need their own tables
 
         $this->createTables();
+        (require database_path('migrations/2026_10_10_000003_create_password_securities_table.php'))->up();
+        (require database_path('migrations/2026_11_03_000001_add_staff_password_history_and_reminders.php'))->up();
         (require database_path('migrations/2026_10_28_140000_add_handover_to_leave_requests.php'))->up();
         (require database_path('migrations/2026_10_29_160000_add_leave_handover_acknowledgement_and_files.php'))->up();
         $this->seedOrg();

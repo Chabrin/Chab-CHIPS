@@ -18,6 +18,7 @@ use App\Models\PasswordExpiry;
 use Torann\GeoIP\Facades\GeoIP;
 use App\Models\PasswordSecurity;
 use App\Services\ErrorDispatcher;
+use App\Services\StaffPasswordPolicy;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use App\Http\Controllers\Controller;
@@ -34,6 +35,12 @@ use App\Jobs\UserAccessLogJob;
 
 class LoginController extends Controller
 {
+    protected StaffPasswordPolicy $policy;
+
+    public function __construct(StaffPasswordPolicy $policy) {
+        $this->policy = $policy;
+    }
+
     use UserAccessRestrictions;
 
 
@@ -222,10 +229,6 @@ class LoginController extends Controller
             $allowedFailedAttempts = DB::table('cb_system_configs')
                 ->where('setting', 'lockout_attempts')
                 ->value('value') ?? 3;
-
-            $passwordExpiryDays = (int)(DB::table('cb_system_configs')
-                ->where('setting', 'password_validity_period')
-                ->value('value') ?? 30);
 
             $two_factor_enabled = (int)(DB::table('cb_system_configs')
                 ->where('setting', 'two_factor_enabled')
@@ -418,7 +421,7 @@ class LoginController extends Controller
         }
     }
 
-    public function profile()
+    public function profile(Request $request)
     {
         try {
             $user = Auth::user();
@@ -434,7 +437,13 @@ class LoginController extends Controller
                     ->toArray();
             }
 
-            return view('auth.profile', compact('user', 'assignedCompanies'));
+            $staffPasswordPolicyApplies = $this->policy->isActiveFor($user);
+            $passwordChangeRequired = $user->requireReset || $this->policy->requiresChange($user);
+            $showSecurity = $passwordChangeRequired || $request->query('tab') === 'security';
+
+            $passwordExpiryDays = $this->policy->validityDays();
+
+            return view('auth.profile', compact('user', 'assignedCompanies', 'staffPasswordPolicyApplies', 'passwordChangeRequired', 'showSecurity', 'passwordExpiryDays'));
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading user profile: ' . $e->getMessage());
@@ -453,7 +462,7 @@ class LoginController extends Controller
 
             $validated = $request->validate([
                 'current_password' => 'required|string',
-                'new_password' => 'required|string|min:8|confirmed',
+                'new_password' => array_merge(['required', 'string'], $this->policy->passwordRules(8), ['confirmed']),
             ]);
 
             if (!Hash::check($validated['current_password'], $user->password)) {
@@ -468,29 +477,15 @@ class LoginController extends Controller
                 ]);
             }
 
+            $this->policy->assertNotSimilar($user, $validated['current_password'], $validated['new_password'], 'new_password');
+
             $user->password = $validated['new_password'];
             $user->requireReset = false;
             $user->save();
 
-            try {
-                DB::table('password_securities')->updateOrInsert(
-                    ['user_id' => $user->id],
-                    [
-                        'password_changed_at' => Carbon::now(),
-                        'password_updated_at' => Carbon::now(),
-                        'updated_at' => Carbon::now(),
-                    ]
-                );
-            } catch (\Exception $securityException) {
-                Log::warning('Could not update password_securities table', [
-                    'user_id' => $user->id,
-                    'error' => $securityException->getMessage(),
-                ]);
-            }
-
             return response()->json(['success' => true, 'message' => 'Password updated successfully']);
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json(['success' => false, 'errors' => $e->errors()], 422);
+            return response()->json(['success' => false, 'errors' => collect($e->errors())->mapWithKeys(fn ($messages, $field) => [$field === 'password' ? 'new_password' : $field => $messages])->all()], 422);
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error updating password: ' . $e->getMessage());

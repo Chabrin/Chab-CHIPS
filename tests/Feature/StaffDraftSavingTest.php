@@ -56,6 +56,8 @@ class StaffDraftSavingTest extends TestCase
             }
         });
         Schema::create('sys_user_staff_links', function (Blueprint $t) { $t->id(); $t->integer('user_id'); $t->integer('staff_id'); });
+        (require database_path('migrations/2026_10_10_000003_create_password_securities_table.php'))->up();
+        (require database_path('migrations/2026_11_03_000001_add_staff_password_history_and_reminders.php'))->up();
         Schema::create('cb_roles', function (Blueprint $t) { $t->id(); $t->string('name')->nullable(); $t->string('display_name')->nullable(); });
         Schema::create('sys_set_zones', function (Blueprint $t) { $t->id(); $t->string('zone_name')->nullable(); $t->integer('zone_manager_id')->nullable(); $t->integer('zone_supervisor_id')->nullable(); });
         Schema::create('document_types', function (Blueprint $t) { $t->id(); $t->string('name'); });

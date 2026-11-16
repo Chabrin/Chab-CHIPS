@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use App\Jobs\PasswordResetJob;
 use App\Jobs\AccountActivationJob;
 use App\Services\ErrorDispatcher;
+use App\Services\StaffPasswordPolicy;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use App\Http\Controllers\Controller;
@@ -18,6 +19,12 @@ use Illuminate\Support\Facades\Validator;
 
 class AuthController extends Controller
 {
+    protected StaffPasswordPolicy $policy;
+
+    public function __construct(StaffPasswordPolicy $policy) {
+        $this->policy = $policy;
+    }
+
     /**
      * Show the forgot password form
      */
@@ -242,7 +249,7 @@ class AuthController extends Controller
             $validator = Validator::make($request->all(), [
                 'token' => 'required',
                 'email' => 'required|email',
-                'password' => 'required|min:8|confirmed',
+                'password' => array_merge(['required'], $this->policy->passwordRules(8), ['confirmed']),
                 'password_confirmation' => 'required'
             ]);
 
@@ -290,28 +297,10 @@ class AuthController extends Controller
 
             //Update password and clear reset token
             $user->password = $password;
+            $user->requireReset = false;
             $user->reset_token = null;
             $user->reset_token_expires_at = null;
             $user->save();
-
-            // Update password security record (if table exists)
-            try {
-                DB::table('password_securities')
-                    ->updateOrInsert(
-                        ['user_id' => $user->id],
-                        [
-                            'password_changed_at' => Carbon::now(),
-                            'password_updated_at' => Carbon::now(),
-                            'updated_at' => Carbon::now()
-                        ]
-                    );
-            } catch (\Exception $securityException) {
-                // Table may not exist or have different schema, log but continue
-                Log::warning('Could not update password_securities table', [
-                    'user_id' => $user->id,
-                    'error' => $securityException->getMessage()
-                ]);
-            }
 
             Log::info('Password reset successful', [
                 'user_id' => $user->id,
@@ -323,6 +312,8 @@ class AuthController extends Controller
                 'status' => 'success',
                 'message' => 'Password reset successful. You can now login with your new password'
             ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['status' => 'error', 'message' => collect($e->errors())->flatten()->first()]);
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error in reset password: ' . $e->getMessage());
@@ -439,7 +430,7 @@ class AuthController extends Controller
         try {
             // Validate password with strong policy
             $validator = Validator::make($request->all(), [
-                'password' => ['required', 'string', 'min:10', 'confirmed']
+                'password' => array_merge(['required', 'string'], $this->policy->passwordRules(10), ['confirmed'])
             ]);
 
             if ($validator->fails()) {
@@ -502,6 +493,7 @@ class AuthController extends Controller
 
             // Update password and activation flags
             $user->password = $password;
+            $user->requireReset = false;
             $user->user_activated = 1;
             $user->activated_at = Carbon::now();
             $user->is_active = 1; // ensure user can login
@@ -518,6 +510,8 @@ class AuthController extends Controller
                 'status' => 'success',
                 'message' => 'Account activated successfully. You can now login.'
             ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['status' => 'error', 'message' => collect($e->errors())->flatten()->first()], 422);
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error in activate account: ' . $e->getMessage());

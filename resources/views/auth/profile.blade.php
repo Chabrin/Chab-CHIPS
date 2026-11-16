@@ -268,6 +268,12 @@
     <div class="container-fluid">
         <div class="pf-page">
 
+            @if ($passwordChangeRequired)
+                <div class="alert alert-warning" role="alert">
+                    Your password has expired or a password change is required. Please change it below before continuing.
+                </div>
+            @endif
+
             {{-- Top Action Bar --}}
             <div class="pf-topbar">
                 <a href="{{ route('dashboard') }}" class="pf-back">
@@ -345,18 +351,18 @@
                 {{-- Right: Tabbed Details --}}
                 <main>
                     <nav class="pf-nav-tabs">
-                        <button type="button" class="pf-tab-btn active" onclick="switchPfTab(event, 'tab-overview')">
+                        <button type="button" class="pf-tab-btn {{ $showSecurity ? '' : 'active' }}" onclick="switchPfTab(event, 'tab-overview')">
                             <span class="material-symbols-outlined">badge</span>
                             Overview
                         </button>
-                        <button type="button" class="pf-tab-btn" onclick="switchPfTab(event, 'tab-security')">
+                        <button type="button" class="pf-tab-btn {{ $showSecurity ? 'active' : '' }}" onclick="switchPfTab(event, 'tab-security')">
                             <span class="material-symbols-outlined">lock_reset</span>
                             Security &amp; Password
                         </button>
                     </nav>
 
                     {{-- Tab 1: Overview --}}
-                    <div id="tab-overview" class="pf-tab-content">
+                    <div id="tab-overview" class="pf-tab-content" @if($showSecurity) style="display: none;" @endif>
                         
                         {{-- Contact & Identity --}}
                         <section class="pf-card">
@@ -507,16 +513,19 @@
                     </div>
 
                     {{-- Tab 2: Security --}}
-                    <div id="tab-security" class="pf-tab-content" style="display: none;">
+                    <div id="tab-security" class="pf-tab-content" @if(!$showSecurity) style="display: none;" @endif>
                         <section class="pf-card">
                             <div class="pf-card-header">
                                 <h3 class="pf-card-title">
                                     <span class="material-symbols-outlined">password</span>
-                                    Update Password
+                                    Change Password
                                 </h3>
                             </div>
                             <div class="pf-card-content">
-                                @include('partials.password-change-form', ['context' => 'profile'])
+                                @if ($staffPasswordPolicyApplies)
+                                    <p class="text-muted">Staff passwords expire every {{ $passwordExpiryDays }} {{ $passwordExpiryDays === 1 ? 'day' : 'days' }}. Choose a password you have never used before.</p>
+                                @endif
+                                @include('partials.password-change-form', ['context' => 'profile', 'reloadAfterPasswordChange' => $passwordChangeRequired])
                             </div>
                         </section>
                     </div>

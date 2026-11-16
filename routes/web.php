@@ -1594,6 +1594,10 @@ Route::post('/authenticator/verify', [LoginController::class, 'verify2fa'])->nam
 
 // Password Reset Routes
 Route::get('/forgot-password', [AuthController::class, 'showForgotPasswordForm'])->name('password.request');
+Route::middleware('auth')->group(function () {
+    Route::get('/staff/password', [\App\Http\Controllers\Auth\StaffPasswordController::class, 'edit'])->name('staff.password.edit');
+    Route::post('/staff/password', [\App\Http\Controllers\Auth\StaffPasswordController::class, 'update'])->name('staff.password.update');
+});
 Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->name('password.email');
 Route::get('/reset-password/{token}', [AuthController::class, 'showResetPasswordForm'])->name('password.reset');
 Route::post('/reset-password', [AuthController::class, 'resetPassword'])->name('password.update');

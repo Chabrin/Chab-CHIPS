@@ -454,7 +454,7 @@
 
     @yield('scripts')
 
-    @if ($forcePasswordChange ?? false)
+    @if (($forcePasswordChange ?? false) && !request()->routeIs('user.profile'))
         @include('partials.forced-password-modal')
     @endif
 

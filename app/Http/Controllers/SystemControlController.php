@@ -6,6 +6,7 @@ use App\Models\ControlCategory;
 use App\Models\SystemControl;
 use Illuminate\Http\Request;
 use App\Services\ErrorDispatcher;
+use App\Services\PasswordSecuritySettings;
 use Illuminate\Support\Facades\Log;
 
 class SystemControlController extends Controller
@@ -103,6 +104,8 @@ class SystemControlController extends Controller
             if ($r->filled('bulk')) {
                 $bulk = json_decode($r->input('bulk'), true);
                 if (!is_array($bulk)) return response()->json(['success' => false, 'error' => 'Invalid payload'], 422);
+                $problems = $this->passwordSettingProblems($bulk);
+                if ($problems) return response()->json(['success' => false, 'error' => implode(' ', $problems)], 422);
                 foreach ($bulk as $item) {
                     if (empty($item['id'])) continue;
                     $c = SystemControl::find($item['id']);
@@ -135,6 +138,9 @@ class SystemControlController extends Controller
             $data['toggle_boolean'] = $r->has('toggle_boolean') && intval($r->input('toggle_boolean')) === 1 ? 1 : 0;
             // ensure value is string
             if (!isset($data['value'])) $data['value'] = '';
+            if ($problem = PasswordSecuritySettings::validate($data['setting'], $data['value'])) {
+                return response()->json(['success' => false, 'error' => $problem], 422);
+            }
 
             $id = $r->input('id');
             if ($id) {
@@ -151,6 +157,22 @@ class SystemControlController extends Controller
             ErrorDispatcher::dispatch($e);
             return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
         }
+    }
+
+    /**
+     * Problems with any Password Security value in a bulk save, so nothing is saved when one value is wrong.
+     */
+    private function passwordSettingProblems(array $bulk): array {
+        $problems = [];
+        foreach ($bulk as $item) {
+            $control = empty($item['id']) ? null : SystemControl::find($item['id']);
+            if (!$control) continue;
+            $value = null;
+            if (array_key_exists('value', $item) && $item['value'] !== null) $value = (string) $item['value'];
+            elseif (array_key_exists('toggle', $item) && $item['toggle'] !== null) $value = $item['toggle'] ? '1' : '0';
+            if ($value !== null && ($problem = PasswordSecuritySettings::validate($control->setting, $value))) $problems[] = $problem;
+        }
+        return $problems;
     }
 
     public function ajaxDeleteControl($id)
