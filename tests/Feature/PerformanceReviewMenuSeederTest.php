@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
 /**
- * The menu seeder for HR > Performance Review: one module just below HR Reports, six pages, and the proposed roles for each.
+ * The menu seeder for HR > Performance Review: one module just below HR Reports, nine pages, and the proposed roles for each.
  * It must be safe to run twice, must only add, and must skip a role that does not exist.
  */
 class PerformanceReviewMenuSeederTest extends TestCase
@@ -90,7 +90,7 @@ class PerformanceReviewMenuSeederTest extends TestCase
         $this->assertSame(['Human Resource', 'HR Settings', 'Payroll Mgt', 'HR Reports', 'Performance Review', 'Self Service'], $hrOrder);
     }
 
-    public function test_the_six_pages_are_added_in_order_under_the_module(): void
+    public function test_the_nine_pages_are_added_in_order_under_the_module(): void
     {
         $this->runSeeder();
         $moduleId = DB::table('cb_modules')->where('module_name', 'Performance Review')->value('id');
@@ -104,6 +104,9 @@ class PerformanceReviewMenuSeederTest extends TestCase
             ['Review Cycles', '/hr/performance/cycles'],
             ['KPIs', '/hr/performance/kpis'],
             ['Supervisors', '/hr/performance/supervisors'],
+            ['Meetings', '/hr/performance/meetings'],
+            ['Appeals', '/hr/performance/appeals'],
+            ['Committee', '/hr/performance/committee'],
         ], $pages);
     }
 
@@ -121,9 +124,10 @@ class PerformanceReviewMenuSeederTest extends TestCase
     {
         $this->runSeeder();
 
-        foreach (['/hr/performance/all-reviews', '/hr/performance/cycles', '/hr/performance/kpis', '/hr/performance/supervisors'] as $url) {
+        foreach (['/hr/performance/all-reviews', '/hr/performance/cycles', '/hr/performance/kpis', '/hr/performance/supervisors', '/hr/performance/appeals', '/hr/performance/committee'] as $url) {
             $this->assertSame(['directors', 'hr_manager'], $this->rolesOf($url), $url);
         }
+        $this->assertCount(13, $this->rolesOf('/hr/performance/meetings'), 'a committee member of any role opens the meetings they sit on');
         $team = $this->rolesOf('/hr/performance/team-reviews');
         foreach (['directors', 'hr_manager', 'property_manager', 'zone_manager', 'senior_field_officer', 'accountant'] as $supervisor) {
             $this->assertContains($supervisor, $team);

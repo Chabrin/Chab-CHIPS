@@ -2,13 +2,18 @@
 
 namespace App\Services\Performance;
 
+use App\Models\PerformanceAppeal;
+use App\Models\PerformanceMeeting;
+use App\Models\PerformanceMeetingAttendee;
 use App\Models\PerformanceReview;
+use App\Models\PerformanceSetting;
 use App\Models\Position;
 use App\Models\Staff;
 use App\Models\User;
 use App\Models\UserStaffLink;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Who is who in a review, who it goes to, and what each person may do. It follows the leave approval logic (the position
@@ -30,6 +35,9 @@ class PerformanceAccess
     public const ROLE_HR = 'hr';
 
     public const ROLE_SUPERVISOR = 'supervisor';
+
+    /** A committee member HR picked for a meeting or hearing about this review. They may read it; they cannot rate it. */
+    public const ROLE_COMMITTEE = 'committee';
 
     /** @var array<int, true>|null staff ids that have a usable (unblocked) login */
     private ?array $loginStaffIds = null;
@@ -151,7 +159,7 @@ class PerformanceAccess
 
     /**
      * Every part this person plays in the review. The subject of a review plays only that part, even when they are also HR,
-     * so they never see what was written about them. Anyone else can be HR, the named supervisor, or both (HR who is also
+     * so they only ever see what is shared with the staff member. Anyone else can be HR, the named supervisor, or both (HR who is also
      * the supervisor), or nothing.
      *
      * @return string[]
@@ -174,15 +182,20 @@ class PerformanceAccess
         if ($staff && (int) $staff->current_status_id === 1 && $review->supervisor_staff_id && (int) $staff->id === (int) $review->supervisor_staff_id) {
             $roles[] = self::ROLE_SUPERVISOR;
         }
+        if ($staff && (int) $staff->current_status_id === 1 && PerformanceMeetingAttendee::where('role', PerformanceMeetingAttendee::ROLE_COMMITTEE)
+            ->where('staff_id', $staff->id)
+            ->whereIn('meeting_id', PerformanceMeeting::where('review_id', $review->id)->select('id'))->exists()) {
+            $roles[] = self::ROLE_COMMITTEE;
+        }
 
         return $roles;
     }
 
-    /** The part that decides what this person is shown: subject, then HR, then supervisor. Null when they have no part. */
+    /** The part that decides what this person is shown: subject, then HR, then supervisor, then committee. Null when they have no part. */
     public function role(?User $user, PerformanceReview $review): ?string
     {
         $roles = $this->roles($user, $review);
-        foreach ([self::ROLE_SUBJECT, self::ROLE_HR, self::ROLE_SUPERVISOR] as $role) {
+        foreach ([self::ROLE_SUBJECT, self::ROLE_HR, self::ROLE_SUPERVISOR, self::ROLE_COMMITTEE] as $role) {
             if (in_array($role, $roles, true)) {
                 return $role;
             }
@@ -210,9 +223,46 @@ class PerformanceAccess
         return $query->where(function (Builder $scope) use ($staff) {
             $scope->where('staff_id', $staff->id);
             if ((int) $staff->current_status_id === 1) {
-                $scope->orWhere('supervisor_staff_id', $staff->id);
+                $scope->orWhere('supervisor_staff_id', $staff->id)
+                    ->orWhereIn('id', PerformanceMeeting::whereIn('id', PerformanceMeetingAttendee::where('role', PerformanceMeetingAttendee::ROLE_COMMITTEE)
+                        ->where('staff_id', $staff->id)->select('meeting_id'))->select('review_id'));
             }
         });
+    }
+
+    // ── the joint review meeting and the appeal ───────────────────────────
+
+    public function meetingOf(PerformanceReview $review, string $kind): ?PerformanceMeeting
+    {
+        return PerformanceMeeting::where('review_id', $review->id)->where('kind', $kind)->first();
+    }
+
+    public function appealOf(PerformanceReview $review): ?PerformanceAppeal
+    {
+        return PerformanceAppeal::where('review_id', $review->id)->first();
+    }
+
+    /** The last day the staff member can appeal on their own: the appeal period after the review was finalised. */
+    public function appealDeadline(PerformanceReview $review): ?\Carbon\Carbon
+    {
+        return $review->finalised_at ? $review->finalised_at->copy()->addDays(PerformanceSetting::number(PerformanceSetting::APPEAL_DAYS)) : null;
+    }
+
+    public function appealWindowOpen(PerformanceReview $review): bool
+    {
+        $deadline = $this->appealDeadline($review);
+
+        return $deadline !== null && now()->lessThanOrEqualTo($deadline);
+    }
+
+    /** Everyone with an HR role who can be told or invited: not blocked, activated. */
+    public function hrUsers(): Collection
+    {
+        $ids = DB::table('cb_role_user as ru')->join('cb_roles as r', 'r.id', '=', 'ru.role_id')
+            ->whereIn('r.name', self::HR_ROLES)->pluck('ru.user_id')->unique()->all();
+
+        return User::whereIn('id', $ids)->where(fn ($q) => $q->whereNull('block')->orWhere('block', 0))->orderBy('name')->get()
+            ->filter(fn (User $user) => $user->activation != 0)->values();
     }
 
     /**
@@ -326,6 +376,72 @@ class PerformanceAccess
                 }
 
                 return $status === PerformanceReview::STATUS_FINALISED ? null : $no('Only a finalised review is corrected.', 422);
+
+            case 'schedule_meeting':
+                if (! $is(self::ROLE_HR)) {
+                    return $no('Only HR can schedule the joint review meeting.');
+                }
+                if (! $open) {
+                    return $no($closed, 422);
+                }
+
+                return $status === PerformanceReview::STATUS_AWAITING_MEETING ? null : $no('This review is not waiting for the joint review meeting.', 422);
+
+            case 'record_meeting':
+                // The supervisor records it; when the review goes straight to HR, HR does
+                $recorder = $review->route === PerformanceReview::ROUTE_SUPERVISOR ? $is(self::ROLE_SUPERVISOR) : $is(self::ROLE_HR);
+                if (! $recorder) {
+                    return $no($review->route === PerformanceReview::ROUTE_SUPERVISOR ? 'Only the supervisor records the joint review meeting.' : 'Only HR records the joint review meeting.');
+                }
+                if (! $open) {
+                    return $no($closed, 422);
+                }
+                if ($status !== PerformanceReview::STATUS_AWAITING_MEETING) {
+                    return $no('This review is not waiting for the joint review meeting.', 422);
+                }
+
+                return $this->meetingOf($review, PerformanceMeeting::KIND_REVIEW)?->status === PerformanceMeeting::STATUS_SCHEDULED ? null : $no('Schedule the meeting first.', 422);
+
+            case 'file_appeal':
+                if (! $is(self::ROLE_SUBJECT)) {
+                    return $no('Only the staff member can appeal their own review.');
+                }
+                if ($status !== PerformanceReview::STATUS_FINALISED) {
+                    return $no('A review can be appealed once it is finalised.', 422);
+                }
+                if ($this->appealOf($review)) {
+                    return $no('This review has already been appealed.', 422);
+                }
+
+                return $this->appealWindowOpen($review) ? null : $no('The appeal period for this review has ended. Ask HR if you still want to appeal.', 422);
+
+            case 'file_appeal_on_behalf':
+            case 'schedule_hearing':
+            case 'record_hearing':
+                if (! $is(self::ROLE_HR)) {
+                    return $no('Only HR can do this for an appeal.');
+                }
+                if ($ratedAsSupervisor) {
+                    return $no('You are this review\'s supervisor, so a different HR person handles the appeal.');
+                }
+                if ($status !== PerformanceReview::STATUS_FINALISED) {
+                    return $no('A review can be appealed once it is finalised.', 422);
+                }
+                $appeal = $this->appealOf($review);
+                if ($action === 'file_appeal_on_behalf') {
+                    return $appeal ? $no('This review has already been appealed.', 422) : null;
+                }
+                if (! $appeal) {
+                    return $no('No appeal has been filed for this review.', 422);
+                }
+                if ($appeal->isDecided()) {
+                    return $no('This appeal has already been decided.', 422);
+                }
+                if ($action === 'record_hearing') {
+                    return $this->meetingOf($review, PerformanceMeeting::KIND_APPEAL)?->status === PerformanceMeeting::STATUS_SCHEDULED ? null : $no('Schedule the hearing first.', 422);
+                }
+
+                return null;
         }
 
         return $no('That is not something you can do to a review.');

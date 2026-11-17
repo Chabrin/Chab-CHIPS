@@ -422,7 +422,9 @@ class PerformanceMetricsTest extends TestCase
         $review = PerformanceReview::where('staff_id', 10)->first();
         $ratings = fn ($r, $v) => $r->items()->get()->mapWithKeys(fn ($item, $i) => [$item->id => ['rating' => $v, 'comment' => null]])->all();
 
-        return app(PerformanceReviewService::class)->saveSelf($review, $this->userFor(10), $ratings($review, 7), null, true);
+        $review = app(PerformanceReviewService::class)->saveSelf($review, $this->userFor(10), $ratings($review, 7), null, true);
+
+        return $this->holdMeeting($review);
     }
 
     public function test_the_supervisor_and_hr_see_the_records_but_the_staff_member_does_not(): void

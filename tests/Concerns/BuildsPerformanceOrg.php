@@ -4,10 +4,12 @@ namespace Tests\Concerns;
 
 use App\Models\PerformanceCycle;
 use App\Models\PerformanceKpi;
+use App\Models\PerformanceReview;
 use App\Models\PerformanceSupervisorAssignment;
 use App\Models\Staff;
 use App\Models\User;
 use App\Services\Performance\PerformanceCycleService;
+use App\Services\Performance\PerformanceMeetingService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -152,6 +154,7 @@ trait BuildsPerformanceOrg
         }
 
         (require database_path('migrations/2026_11_12_100000_create_performance_review_tables.php'))->up();
+        (require database_path('migrations/2026_11_16_100000_create_performance_meeting_and_appeal_tables.php'))->up();
     }
 
     protected function seedPerformanceOrg(): void
@@ -195,6 +198,38 @@ trait BuildsPerformanceOrg
             DB::table('sys_user_staff_links')->insert(['user_id' => 1000 + $staffId, 'staff_id' => $staffId]);
         }
         DB::table('cb_role_user')->insert([['user_id' => 1060, 'role_id' => 1], ['user_id' => 2000, 'role_id' => 2]]);
+
+        // The review committee HR can pick from
+        foreach ([2, 3, 20, 21] as $staffId) {
+            DB::table('performance_committee_members')->insert(['staff_id' => $staffId]);
+        }
+    }
+
+    /**
+     * Gets a review past the joint review meeting the way HR does it: schedules it with an HR person and one committee member,
+     * then the supervisor (or HR, when there is no supervisor) records it with everyone there. The review is then waiting for the
+     * supervisor, or for HR when it has no supervisor.
+     */
+    protected function holdMeeting(PerformanceReview $review): PerformanceReview
+    {
+        $review->refresh();
+        $meetings = app(PerformanceMeetingService::class);
+        // HR who is the staff member of the review cannot run their own meeting
+        $hr = (int) $review->staff_id === 60 ? $this->userFor(null, ['hr_manager']) : $this->hrUser();
+        $options = $meetings->options($review);
+
+        $meeting = $meetings->schedule($review, $hr, 'review', [
+            'scheduled_at' => '2027-02-01 10:00',
+            'venue' => 'Boardroom',
+            'hr_user_id' => $options['hr'][0]['user_id'],
+            'committee_staff_ids' => [$options['committee'][0]['staff_id']],
+        ]);
+        $everyone = $meeting->attendees()->pluck('id')->mapWithKeys(fn ($id) => [$id => 1])->all();
+        $recorder = $review->route === PerformanceReview::ROUTE_SUPERVISOR ? $this->userFor((int) $review->supervisor_staff_id) : $hr;
+
+        $meetings->record($review->refresh(), $recorder, $everyone, ['performance_feedback' => ['notes' => 'Good progress this period']], []);
+
+        return $review->refresh();
     }
 
     /** A signed-in person: linked to the staff member (if any) and holding the given roles. */

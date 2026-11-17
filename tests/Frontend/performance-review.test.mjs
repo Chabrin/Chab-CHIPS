@@ -64,10 +64,12 @@ test('the rating box cannot be broken by odd values in its attributes', () => {
 });
 
 test('each status has its own badge colour and unknown ones still show', () => {
-    assert.match(PR.statusBadge('finalised', 'Finalised'), /bg-success-subtle/);
-    assert.match(PR.statusBadge('awaiting_hr', 'Waiting for HR'), /bg-primary-subtle/);
-    assert.match(PR.statusBadge('awaiting_self', 'Waiting for self-rating'), /bg-warning-subtle/);
-    assert.match(PR.statusBadge('mystery', 'Odd'), /bg-secondary-subtle.*Odd/);
+    assert.match(PR.statusBadge('finalised', 'Finalised'), /pr-chip is-green/);
+    assert.match(PR.statusBadge('awaiting_hr', 'Waiting for HR'), /pr-chip is-teal/);
+    assert.match(PR.statusBadge('awaiting_self', 'Waiting for self-rating'), /pr-chip is-amber/);
+    assert.match(PR.statusBadge('awaiting_meeting', 'Waiting for the joint review meeting'), /pr-chip is-violet/);
+    assert.match(PR.statusBadge('awaiting_supervisor', 'Waiting for supervisor'), /pr-chip is-blue/);
+    assert.match(PR.statusBadge('mystery', 'Odd'), /pr-chip is-grey.*Odd/);
     assert.match(PR.statusBadge('finalised', '<b>x</b>'), /&lt;b&gt;x&lt;\/b&gt;/);
 });
 

@@ -1,39 +1,37 @@
 @extends('layouts.main')
 
 @section('styles')
-<style>
-    /* Performance Review lists. Scoped to .pr-* so nothing else on the site changes. */
-    #prTable thead th { background: #f6f8fb; color: #5b6b7c; font-size: .72rem; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; white-space: nowrap; }
-    #prTable tbody td { vertical-align: middle; }
-    .pr-hint { font-size: .8125rem; color: #6b7a8c; }
-</style>
+<link rel="stylesheet" href="{{ asset('assets/css/performance-review.css') }}?v={{ filemtime(public_path('assets/css/performance-review.css')) }}">
 @endsection
 
 @section('content')
 <div class="page-body" style="padding-top:10px;">
-    <div class="container-fluid">
-        <div class="card">
-            <div class="card-header card-no-border d-flex align-items-start flex-wrap gap-2 py-3">
-                <div class="me-auto">
-                    <h5 class="mb-0">{{ $title }}</h5>
-                    <div class="pr-hint mt-1">{{ $hint }}</div>
-                </div>
+    <div class="container-fluid pr-page">
+        <div class="pr-head">
+            <div class="pr-head-main">
+                <div class="pr-eyebrow">Performance review</div>
+                <h1 class="pr-title">{{ $title }}</h1>
+                <div class="pr-hint">{{ $hint }}</div>
+            </div>
+            <div class="pr-head-side pr-toolbar">
+                <input type="search" class="form-control form-control-sm pr-search" id="prSearch" placeholder="Search by name, position or cycle" aria-label="Search the reviews">
                 @if ($mode === 'all')
-                <div class="d-flex gap-2 flex-wrap">
-                    <select class="form-select form-select-sm" id="prCycle" aria-label="Cycle" style="min-width:12rem;"><option value="">All cycles</option></select>
-                    <select class="form-select form-select-sm" id="prStatus" aria-label="Status" style="min-width:12rem;">
-                        <option value="">Any status</option>
-                        <option value="awaiting_self">Waiting for self-rating</option>
-                        <option value="awaiting_supervisor">Waiting for supervisor</option>
-                        <option value="awaiting_hr">Waiting for HR</option>
-                        <option value="finalised">Finalised</option>
-                    </select>
-                </div>
+                <select class="form-select form-select-sm" id="prCycle" aria-label="Cycle" style="min-width:11rem;"><option value="">All cycles</option></select>
+                <select class="form-select form-select-sm" id="prStatus" aria-label="Status" style="min-width:12rem;">
+                    <option value="">Any status</option>
+                    <option value="awaiting_self">Waiting for self-rating</option>
+                    <option value="awaiting_meeting">Waiting for the joint review meeting</option>
+                    <option value="awaiting_supervisor">Waiting for supervisor</option>
+                    <option value="awaiting_hr">Waiting for HR</option>
+                    <option value="finalised">Finalised</option>
+                </select>
                 @endif
             </div>
-            <div class="card-body pt-0">
+        </div>
+        <div class="card">
+            <div class="card-body">
                 <div class="table-responsive">
-                    <table class="table align-middle" id="prTable">
+                    <table class="table pr-table align-middle mb-0" id="prTable">
                         <thead>
                             <tr>
                                 @if ($mode !== 'my')<th>Staff member</th>@endif
@@ -45,7 +43,7 @@
                                 <th></th>
                             </tr>
                         </thead>
-                        <tbody><tr><td colspan="7" class="text-center text-muted py-4">Loading...</td></tr></tbody>
+                        <tbody></tbody>
                     </table>
                 </div>
             </div>
@@ -56,9 +54,11 @@
 
 @section('scripts')
 <script src="{{ asset('assets/js/performance-review.js') }}?v={{ filemtime(public_path('assets/js/performance-review.js')) }}"></script>
+<script src="{{ asset('assets/js/performance-meeting.js') }}?v={{ filemtime(public_path('assets/js/performance-meeting.js')) }}"></script>
 <script>
     $(function() {
         const PR = window.PerformanceReview;
+        const PM = window.PerformanceMeeting;
         const mode = @json($mode);
         const urls = {
             list: "{{ route('ajax.performance.reviews.list', ['mode' => $mode]) }}",
@@ -70,6 +70,16 @@
             team: 'You are not the supervisor on any review. Reviews appear here when HR names you as someone\'s supervisor in a cycle.',
             all: 'No reviews match.'
         }[mode];
+        const columns = mode === 'my' ? 5 : (mode === 'all' ? 7 : 6);
+        let rows = [];
+        let emptyText = empty;
+
+        function draw() {
+            const query = $('#prSearch').val();
+            const shown = rows.filter(function(row) { return PM.matches(row, query); });
+            const text = rows.length && !shown.length ? 'Nothing matches "' + query + '". Try a different name.' : emptyText;
+            $('#prTable tbody').html(PR.listBodyHtml(shown, mode, function(row) { return urls.open + '/' + row.id; }, text));
+        }
 
         function load() {
             const query = {};
@@ -77,14 +87,16 @@
                 if ($('#prCycle').val()) query.cycle_id = $('#prCycle').val();
                 if ($('#prStatus').val()) query.status = $('#prStatus').val();
             }
+            $('#prTable tbody').html(PM.skeletonRows(columns, 4));
             $.getJSON(urls.list, query).done(function(res) {
-                const text = (mode === 'my' && res.linked === false)
+                emptyText = (mode === 'my' && res.linked === false)
                     ? 'Your login is not linked to a staff record, so there is no review for you here. Ask HR to link it.'
                     : empty;
-                $('#prTable tbody').html(PR.listBodyHtml(res.reviews, mode, function(row) { return urls.open + '/' + row.id; }, text));
+                rows = res.reviews || [];
+                draw();
             }).fail(function(xhr) {
-                const json = xhr.responseJSON || {};
-                toastr.error(json.error || json.message || 'The reviews could not be loaded.');
+                $('#prTable tbody').html('<tr><td colspan="' + columns + '">' + PM.emptyHtml('error', 'The reviews could not be loaded', 'Check your connection and reload the page.') + '</td></tr>');
+                toastr.error(PM.message(xhr, 'The reviews could not be loaded.'));
             });
         }
 
@@ -96,6 +108,7 @@
             });
             $('#prCycle, #prStatus').on('change', load);
         }
+        $('#prSearch').on('input', draw);
         load();
     });
 </script>
