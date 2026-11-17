@@ -1685,6 +1685,7 @@ class ClientsController extends Controller
      */
     public function store(Request $request)
     {
+        $commitAttempted = false;
         DB::beginTransaction();
         try {
             $validated = $this->validateClientRequest($request);
@@ -1712,19 +1713,47 @@ class ClientsController extends Controller
             $this->commitDraftRepeaters($request->input('draft_token'), $client->id);
             Log::info('Draft banks/contacts/next-of-kin/partners committed for client ID: ' . $client->id);
 
+            $commitAttempted = true;
             DB::commit();
-
-            return redirect()->route('property.clients.show', Crypt::encrypt($client->id))
-                ->with('success', 'Client created successfully with reference number: ' . $referenceNumber);
         } catch (\Illuminate\Validation\ValidationException $e) {
             DB::rollBack();
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'save_state' => 'not_saved',
+                    'message' => 'Client not saved. Please correct the highlighted details.',
+                    'errors' => $e->errors(),
+                ], 422);
+            }
             return redirect()->back()->withErrors($e->errors())->withInput();
         } catch (\Throwable $e) {
             DB::rollBack();
             ErrorDispatcher::dispatch($e);
             Log::error('Error creating client: ' . $e->getMessage());
-            return redirect()->back()->with('error', 'Failed to create client: ' . $e->getMessage())->withInput();
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'save_state' => $commitAttempted ? 'unconfirmed' : 'not_saved',
+                    'message' => 'We could not complete the client save. Your entered details are still available.',
+                ], 500);
+            }
+            return redirect()->back()->with('client_create_error', 'We could not complete the client save. Please check your details and try again.')->withInput();
         }
+
+        // A response or session error after commit must never report a rolled-back save.
+        $confirmation = [
+            'name' => $client->getRawOriginal('names'),
+            'reference' => $referenceNumber,
+            'status' => 'Pending approval',
+        ];
+        $destination = route('property.clients.show', Crypt::encrypt($client->id));
+        $request->session()->flash('client_created', $confirmation);
+
+        if ($request->expectsJson()) {
+            return response()->json(['success' => true, 'redirect' => $destination, 'client' => $confirmation]);
+        }
+
+        return redirect()->to($destination);
     }
 
     /**

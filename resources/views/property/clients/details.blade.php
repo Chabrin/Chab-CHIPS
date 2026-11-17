@@ -47,6 +47,12 @@ COPY PERMISSIONS (paste when re-enabling checks):
                         </div>
                     </div>
                     <div class="card-body">
+                        @if(session('client_created.reference') === $client->reference_number && session('client_created'))
+                        <div class="alert alert-success" role="status">
+                            <strong>Client saved successfully</strong>
+                            <div>{{ session('client_created.name') }} · Reference {{ session('client_created.reference') }} · {{ session('client_created.status') }}</div>
+                        </div>
+                        @endif
                         <!-- Summary Header -->
                         <div class="mb-3 d-flex flex-row justify-content-between align-items-center">
                             <p class="text-muted mb-0" style="font-size: 0.875rem;">
