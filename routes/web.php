@@ -76,6 +76,20 @@ use App\Http\Controllers\PayrollMonthlyController;
 
 Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
 
+    // Staff messaging
+    Route::get('/staff-messaging', [\App\Http\Controllers\StaffMessagingController::class, 'index'])->name('staff-messaging.index');
+    Route::get('/staff-messaging/directory', [\App\Http\Controllers\StaffMessagingController::class, 'directory'])->name('staff-messaging.directory');
+    Route::get('/staff-messaging/conversations', [\App\Http\Controllers\StaffMessagingController::class, 'conversations'])->name('staff-messaging.conversations');
+    Route::get('/staff-messaging/unread-count', [\App\Http\Controllers\StaffMessagingController::class, 'unreadCount'])->name('staff-messaging.unread-count');
+    Route::get('/staff-messaging/conversations/{conversation}/messages', [\App\Http\Controllers\StaffMessagingController::class, 'messages'])->whereNumber('conversation')->name('staff-messaging.messages');
+    Route::get('/staff-messaging/conversations/{conversation}/messages/{message}/attachments/{attachment}', [\App\Http\Controllers\StaffMessagingController::class, 'downloadAttachment'])->whereNumber(['conversation', 'message', 'attachment'])->name('staff-messaging.attachments.download');
+    Route::post('/staff-messaging/conversations/{conversation}/messages', [\App\Http\Controllers\StaffMessagingController::class, 'sendMessage'])->whereNumber('conversation')->middleware('throttle:60,1')->name('staff-messaging.send');
+    Route::post('/staff-messaging/conversations/{conversation}/read', [\App\Http\Controllers\StaffMessagingController::class, 'markRead'])->whereNumber('conversation')->name('staff-messaging.read');
+    Route::post(
+        '/staff-messaging/conversations',
+        [\App\Http\Controllers\StaffMessagingController::class, 'startConversation']
+    )->middleware('throttle:30,1')
+        ->name('staff-messaging.conversations.store');
     // Notifications
     Route::get('/notifications/feed', [App\Http\Controllers\NotificationController::class, 'feed'])->name('notifications.feed');
     Route::get('/notifications', [App\Http\Controllers\NotificationController::class, 'index'])->name('notifications.index');

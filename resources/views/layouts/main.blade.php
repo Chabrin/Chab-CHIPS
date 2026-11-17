@@ -46,9 +46,16 @@
 
     @yield('styles')
 
+    @php
+        $staffMessagingAssetsReady = is_file(public_path('hot')) || is_file(public_path('build/manifest.json'));
+    @endphp
+    @if ($staffMessagingAssetsReady)
+        <link rel="stylesheet" href="{{ asset('assets/css/staff-messaging.css') }}?v={{ filemtime(public_path('assets/css/staff-messaging.css')) }}">
+        @vite('resources/js/app.js')
+    @endif
 </head>
 
-<body>
+<body class="@yield('body-class')">
     <!-- loader starts-->
     <div class="loader-wrapper">
         <div class="theme-loader">
@@ -114,6 +121,9 @@
                         </li>
 
 
+                        @if ($staffMessagingAssetsReady)
+                            @include('layouts.staff-messaging-link')
+                        @endif
                         @include('layouts.contract-notifications')
                         <li class="profile-nav dropdown pe-0 py-0">
                         <button type="button" class="d-flex align-items-center profile-trigger-btn" id="account-menu-trigger" data-bs-toggle="dropdown" aria-expanded="false" aria-controls="account-menu" aria-label="Open account menu">
