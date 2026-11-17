@@ -109,6 +109,7 @@ class ClientsController extends Controller
                         $q->where('names', 'ILIKE', "%{$token}%")
                             ->orWhere('reference_number', 'ILIKE', "%{$token}%")
                             ->orWhere('mobile_number', 'ILIKE', "%{$token}%")
+                            ->orWhere('national_id', 'ILIKE', "%{$token}%")
                             ->orWhere('email_address', 'ILIKE', "%{$token}%");
 
                         // "id" is an integer column — comparing it against a non-numeric
