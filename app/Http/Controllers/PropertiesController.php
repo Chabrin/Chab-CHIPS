@@ -309,17 +309,19 @@ class PropertiesController extends Controller
     public function searchClients(Request $request)
     {
         try {
-            $search = $request->get('search', '');
+            $search = trim($request->string('search')->toString());
             
             if (strlen($search) < 2) {
                 return response()->json(['clients' => []]);
             }
     
-            $searchLower = strtolower($search);
+            $searchLower = mb_strtolower($search);
+            // Names may have extra spaces or a middle name between the typed words.
+            $namePattern = '%'.implode('%', preg_split('/\s+/u', $searchLower)).'%';
     
             $clients = Client::with(['bankAccounts.bank'])
-                ->where(function($query) use ($searchLower) {
-                    $query->whereRaw('LOWER(names) LIKE ?', ["%{$searchLower}%"])
+                ->where(function($query) use ($searchLower, $namePattern) {
+                    $query->whereRaw('LOWER(names) LIKE ?', [$namePattern])
                           ->orWhereRaw('LOWER(email_address) LIKE ?', ["%{$searchLower}%"])
                           ->orWhere('mobile_number', 'LIKE', "%{$searchLower}%")
                           ->orWhere('national_id', 'LIKE', "%{$searchLower}%");
