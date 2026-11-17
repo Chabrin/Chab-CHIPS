@@ -14,8 +14,8 @@ use Illuminate\Support\Facades\Auth;
 /**
  * HR > Performance Review > My Review, Team Reviews and All Reviews, and the review form they open. The menu pages are
  * given to roles; what a person can open and do is decided here, on the server, by PerformanceAccess for every request:
- * the staff member sees their own reviews, a supervisor the reviews they were named on, HR all of them. Staff never get a
- * supervisor's rating: the presenter picks the fields each person may see.
+ * the staff member sees their own reviews, a supervisor the reviews they were named on, HR all of them. The presenter picks
+ * the fields each person may see: a staff member gets the supervisor's rating only once the review is finalised.
  */
 class PerformanceReviewController extends Controller
 {
@@ -31,7 +31,7 @@ class PerformanceReviewController extends Controller
 
     public function my()
     {
-        return view('hr.performance.reviews', ['mode' => 'my', 'title' => 'My Review', 'hint' => 'Your reviews. Rate yourself when one is waiting for you; once HR finalises it you see the final rating here.']);
+        return view('hr.performance.reviews', ['mode' => 'my', 'title' => 'My Review', 'hint' => 'Your reviews. Rate yourself when one is waiting for you; once HR finalises it you see your supervisor\'s rating and the final rating here.']);
     }
 
     public function team()
@@ -64,7 +64,7 @@ class PerformanceReviewController extends Controller
             abort(404);
         }
 
-        $query->with(['cycle', 'staff', 'supervisor'])->orderByDesc('cycle_id')->orderBy('id');
+        $query->with(['cycle', 'staff', 'supervisor', 'appeal'])->orderByDesc('cycle_id')->orderBy('id');
         if ($mode === 'all') {
             $query->when($request->query('cycle_id'), fn ($q, $id) => $q->where('cycle_id', (int) $id))
                 ->when($request->query('status'), fn ($q, $status) => $q->where('status', $status));

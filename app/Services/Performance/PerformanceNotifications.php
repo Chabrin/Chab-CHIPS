@@ -3,7 +3,9 @@
 namespace App\Services\Performance;
 
 use App\Models\Notification;
+use App\Models\PerformanceAppeal;
 use App\Models\PerformanceCycle;
+use App\Models\PerformanceMeeting;
 use App\Models\PerformanceReview;
 use App\Models\Staff;
 use App\Models\User;
@@ -33,6 +35,16 @@ class PerformanceNotifications
 
     public const CORRECTED = 'PerformanceReviewCorrected';
 
+    public const WAITING_FOR_MEETING = 'PerformanceReviewWaitingForMeeting';
+
+    public const MEETING_SCHEDULED = 'PerformanceMeetingScheduled';
+
+    public const MEETING_HELD = 'PerformanceMeetingHeld';
+
+    public const APPEAL_FILED = 'PerformanceAppealFiled';
+
+    public const APPEAL_DECIDED = 'PerformanceAppealDecided';
+
     /** Staff whose reviews have just been made: each one with a login is told theirs is open. */
     public function opened(PerformanceCycle $cycle, iterable $reviews): void
     {
@@ -47,11 +59,127 @@ class PerformanceNotifications
         });
     }
 
-    /** The self-rating is in (or was skipped): the supervisor is asked next, or HR when it goes straight to HR. */
+    /** The self-rating is in (or was skipped): HR is asked to schedule the joint review meeting. */
     public function selfDone(PerformanceReview $review): void
     {
         $this->safely(function () use ($review) {
-            $review->status === PerformanceReview::STATUS_AWAITING_SUPERVISOR ? $this->askSupervisor($review) : $this->askHr($review);
+            foreach ($this->hrUsersWhoCanGiveTheFinalRating($review) as $user) {
+                $this->send($user, $review, self::WAITING_FOR_MEETING, 'A joint review meeting needs to be scheduled',
+                    "{$this->nameOf($review)}'s self-rating for {$this->cycleOf($review)} is in. Schedule the joint review meeting.",
+                    route('performance.meeting', $review->id, false));
+            }
+        });
+    }
+
+    /**
+     * A joint review meeting or an appeal hearing was scheduled or moved: everyone invited is told, that is the staff member,
+     * the supervisor, the HR person and each committee member that has a login. Nobody is told anything about ratings.
+     */
+    public function meetingScheduled(PerformanceMeeting $meeting, bool $rescheduled): void
+    {
+        $this->safely(function () use ($meeting, $rescheduled) {
+            $review = $meeting->review()->with(['cycle', 'staff'])->first();
+            if (! $review) {
+                return;
+            }
+            $hearing = $meeting->kind === PerformanceMeeting::KIND_APPEAL;
+            $what = $hearing ? 'appeal hearing' : 'joint review meeting';
+            $title = ucfirst($what).($rescheduled ? ' rescheduled' : ' scheduled');
+            $when = $meeting->scheduled_at->format('d M Y \a\t H:i');
+            $where = $meeting->venue ? ", {$meeting->venue}" : '';
+            $url = $this->meetingUrl($meeting, $review);
+
+            foreach ($this->attendeeUsers($meeting) as [$user, $staffId]) {
+                $whose = $staffId === (int) $review->staff_id ? 'Your' : $this->nameOf($review)."'s";
+                $this->send($user, $review, self::MEETING_SCHEDULED, $title,
+                    "{$whose} {$what} for {$this->cycleOf($review)} is ".($rescheduled ? 'now ' : '')."on {$when}{$where}.", $url);
+            }
+        });
+    }
+
+    /** The meeting was held and recorded: the staff member can read the feedback, and HR is asked when it has no supervisor. */
+    public function meetingHeld(PerformanceMeeting $meeting): void
+    {
+        $this->safely(function () use ($meeting) {
+            $review = $meeting->review()->with(['cycle', 'staff'])->first();
+            if (! $review) {
+                return;
+            }
+            foreach ($this->usersForStaff((int) $review->staff_id) as $user) {
+                $this->send($user, $review, self::MEETING_HELD, 'Feedback from your joint review meeting is ready',
+                    "The feedback from your joint review meeting for {$this->cycleOf($review)} has been recorded. Open it to read it.",
+                    route('performance.meeting', $review->id, false));
+            }
+            if ($review->route === PerformanceReview::ROUTE_HR) {
+                $this->askHr($review);
+            }
+        });
+    }
+
+    /** A staff member appealed: they are told it was received; HR and their supervisor are told there is an appeal to deal with. */
+    public function appealFiled(PerformanceAppeal $appeal): void
+    {
+        $this->safely(function () use ($appeal) {
+            $review = $appeal->review()->with(['cycle', 'staff'])->first();
+            if (! $review) {
+                return;
+            }
+            $url = route('performance.appeal', $review->id, false);
+            $name = $this->nameOf($review);
+            $cycle = $this->cycleOf($review);
+
+            foreach ($this->usersForStaff((int) $review->staff_id) as $user) {
+                $this->send($user, $review, self::APPEAL_FILED, 'Your appeal was received',
+                    "Your appeal on your {$cycle} review was received. HR will schedule the hearing with the review committee and tell you when.", $url);
+            }
+            foreach ($this->hrUsersWhoCanGiveTheFinalRating($review) as $user) {
+                $this->send($user, $review, self::APPEAL_FILED, 'A review has been appealed',
+                    "{$name} appealed their review for {$cycle}. Schedule the appeal hearing with the committee.", $url);
+            }
+            if ($review->route === PerformanceReview::ROUTE_SUPERVISOR && $review->supervisor_staff_id) {
+                foreach ($this->usersForStaff((int) $review->supervisor_staff_id) as $user) {
+                    $this->send($user, $review, self::APPEAL_FILED, 'A review you supervised was appealed',
+                        "{$name} appealed their review for {$cycle}. Open it to read what they dispute. You will be invited to the hearing.", $url);
+                }
+            }
+        });
+    }
+
+    /** The committee decided the appeal: everyone involved is told. The decision itself is read on the appeal page. */
+    public function appealDecided(PerformanceAppeal $appeal): void
+    {
+        $this->safely(function () use ($appeal) {
+            $review = $appeal->review()->with(['cycle', 'staff'])->first();
+            if (! $review) {
+                return;
+            }
+            $url = route('performance.appeal', $review->id, false);
+            $cycle = $this->cycleOf($review);
+
+            $told = [];
+            $tell = function (User $user, string $message) use ($review, $url, &$told) {
+                if (isset($told[$user->id])) {
+                    return;
+                }
+                $told[$user->id] = true;
+                $this->send($user, $review, self::APPEAL_DECIDED, 'An appeal was decided', $message, $url);
+            };
+
+            foreach ($this->usersForStaff((int) $review->staff_id) as $user) {
+                $tell($user, "The review committee has decided your appeal on your {$cycle} review. Open it to read the decision.");
+            }
+            $hearing = $this->hearingOf($review);
+            $others = collect();
+            if ($hearing) {
+                $others = $others->merge(collect($this->attendeeUsers($hearing))->map(fn ($pair) => $pair[0]));
+            }
+            if ($review->route === PerformanceReview::ROUTE_SUPERVISOR && $review->supervisor_staff_id) {
+                $others = $others->merge($this->usersForStaff((int) $review->supervisor_staff_id));
+            }
+            $others = $others->merge($this->hrUsersWhoCanGiveTheFinalRating($review));
+            foreach ($others as $user) {
+                $tell($user, "The review committee has decided the appeal on {$this->nameOf($review)}'s {$cycle} review. Open it to read the decision.");
+            }
         });
     }
 
@@ -61,12 +189,25 @@ class PerformanceNotifications
         $this->safely(fn () => $this->askHr($review));
     }
 
-    /** HR changed the supervisor: the new one is asked, as long as the review is waiting for them. */
+    /**
+     * HR changed the supervisor: the new one is asked, as long as the review is waiting for them, or told about the joint
+     * review meeting when one is already scheduled.
+     */
     public function supervisorChanged(PerformanceReview $review): void
     {
         $this->safely(function () use ($review) {
             if ($review->status === PerformanceReview::STATUS_AWAITING_SUPERVISOR) {
                 $this->askSupervisor($review);
+            }
+            $meeting = $review->status === PerformanceReview::STATUS_AWAITING_MEETING && $review->supervisor_staff_id
+                ? PerformanceMeeting::where('review_id', $review->id)->where('kind', PerformanceMeeting::KIND_REVIEW)->where('status', PerformanceMeeting::STATUS_SCHEDULED)->first()
+                : null;
+            if ($meeting) {
+                foreach ($this->usersForStaff((int) $review->supervisor_staff_id) as $user) {
+                    $this->send($user, $review, self::MEETING_SCHEDULED, 'Joint review meeting scheduled',
+                        "{$this->nameOf($review)}'s joint review meeting for {$this->cycleOf($review)} is on {$meeting->scheduled_at->format('d M Y \a\t H:i')}".($meeting->venue ? ", {$meeting->venue}" : '').'. You are the supervisor.',
+                        route('performance.meeting', $review->id, false));
+                }
             }
         });
     }
@@ -164,7 +305,7 @@ class PerformanceNotifications
 
     // ── the alert ─────────────────────────────────────────────────────────
 
-    private function send(User $user, PerformanceReview $review, string $type, string $title, string $message): void
+    private function send(User $user, PerformanceReview $review, string $type, string $title, string $message, ?string $url = null): void
     {
         Notification::create([
             'type' => $type,
@@ -173,8 +314,44 @@ class PerformanceNotifications
             'data' => ['review_id' => $review->id, 'cycle_id' => $review->cycle_id, 'event' => $type],
             'title' => $title,
             'message' => $message,
-            'action_url' => route('performance.review', $review->id, false),
+            'action_url' => $url ?? route('performance.review', $review->id, false),
         ]);
+    }
+
+    /**
+     * The logins of everyone invited to a meeting, once each, with the staff id they were invited as (0 for an HR person with no
+     * staff record). Someone with no usable login is simply not here: HR sees who was not reached on the meeting page.
+     *
+     * @return array<int, array{0: User, 1: int}>
+     */
+    private function attendeeUsers(PerformanceMeeting $meeting): array
+    {
+        $found = [];
+        foreach ($meeting->attendees()->get() as $attendee) {
+            $users = collect();
+            if ($attendee->user_id) {
+                $users = $this->usable(User::whereKey($attendee->user_id));
+            } elseif ($attendee->staff_id) {
+                $users = $this->usersForStaff((int) $attendee->staff_id);
+            }
+            foreach ($users as $user) {
+                $found[$user->id] ??= [$user, (int) $attendee->staff_id];
+            }
+        }
+
+        return array_values($found);
+    }
+
+    private function hearingOf(PerformanceReview $review): ?PerformanceMeeting
+    {
+        return PerformanceMeeting::where('review_id', $review->id)->where('kind', PerformanceMeeting::KIND_APPEAL)->first();
+    }
+
+    private function meetingUrl(PerformanceMeeting $meeting, PerformanceReview $review): string
+    {
+        return $meeting->kind === PerformanceMeeting::KIND_APPEAL
+            ? route('performance.appeal', $review->id, false)
+            : route('performance.meeting', $review->id, false);
     }
 
     private function nameOf(PerformanceReview $review): string

@@ -14,6 +14,9 @@ class PerformanceReview extends Model
 {
     public const STATUS_AWAITING_SELF = 'awaiting_self';
 
+    /** The self-rating is in: the joint review meeting (staff member, supervisor, HR and the committee) has to be held next. */
+    public const STATUS_AWAITING_MEETING = 'awaiting_meeting';
+
     public const STATUS_AWAITING_SUPERVISOR = 'awaiting_supervisor';
 
     public const STATUS_AWAITING_HR = 'awaiting_hr';
@@ -22,6 +25,7 @@ class PerformanceReview extends Model
 
     public const STATUS_LABELS = [
         self::STATUS_AWAITING_SELF => 'Waiting for self-rating',
+        self::STATUS_AWAITING_MEETING => 'Waiting for the joint review meeting',
         self::STATUS_AWAITING_SUPERVISOR => 'Waiting for supervisor',
         self::STATUS_AWAITING_HR => 'Waiting for HR',
         self::STATUS_FINALISED => 'Finalised',
@@ -78,6 +82,28 @@ class PerformanceReview extends Model
     public function events()
     {
         return $this->hasMany(PerformanceReviewEvent::class, 'review_id')->orderBy('id');
+    }
+
+    public function meetings()
+    {
+        return $this->hasMany(PerformanceMeeting::class, 'review_id');
+    }
+
+    /** The joint review meeting, when there is one. */
+    public function reviewMeeting()
+    {
+        return $this->hasOne(PerformanceMeeting::class, 'review_id')->where('kind', PerformanceMeeting::KIND_REVIEW);
+    }
+
+    /** The hearing of the appeal, when there is one. */
+    public function hearing()
+    {
+        return $this->hasOne(PerformanceMeeting::class, 'review_id')->where('kind', PerformanceMeeting::KIND_APPEAL);
+    }
+
+    public function appeal()
+    {
+        return $this->hasOne(PerformanceAppeal::class, 'review_id');
     }
 
     public function statusLabel(): string

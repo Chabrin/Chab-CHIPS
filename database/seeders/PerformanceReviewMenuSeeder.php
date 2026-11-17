@@ -40,6 +40,10 @@ class PerformanceReviewMenuSeeder extends Seeder
         ['Review Cycles', '/hr/performance/cycles', self::HR],
         ['KPIs', '/hr/performance/kpis', self::HR],
         ['Supervisors', '/hr/performance/supervisors', self::HR],
+        // Added with the joint review meeting and the appeal. Meetings is for everyone: a committee member opens the meetings they sit on here.
+        ['Meetings', '/hr/performance/meetings', self::ALL_STAFF],
+        ['Appeals', '/hr/performance/appeals', self::HR],
+        ['Committee', '/hr/performance/committee', self::HR],
     ];
 
     public function run(): void

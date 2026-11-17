@@ -275,6 +275,7 @@ class PerformanceReviewFlowTest extends TestCase
         $this->assertSame(2, (int) $review->supervisor_staff_id);
 
         $review = $this->service()->saveSelf($review, $this->userFor(10), $this->ratings($review, [8, 6], 'I tried'), 'My year', true);
+        $review = $this->holdMeeting($review);
         $this->assertSame(PerformanceReview::STATUS_AWAITING_SUPERVISOR, $review->status);
         $this->assertNotNull($review->self_submitted_at);
 
@@ -288,7 +289,7 @@ class PerformanceReviewFlowTest extends TestCase
         $this->assertNotNull($review->finalised_at);
         $this->assertSame(1060, (int) $review->finalised_by);
 
-        $this->assertSame(['created', 'self_submitted', 'supervisor_submitted', 'finalised'], PerformanceReviewEvent::where('review_id', $review->id)->pluck('action')->all());
+        $this->assertSame(['created', 'self_submitted', 'meeting_scheduled', 'meeting_held', 'supervisor_submitted', 'finalised'], PerformanceReviewEvent::where('review_id', $review->id)->pluck('action')->all());
     }
 
     public function test_the_final_score_counts_each_criterion_by_its_weight(): void
@@ -298,6 +299,7 @@ class PerformanceReviewFlowTest extends TestCase
         app(PerformanceCycleService::class)->publish($this->draftCycle(), $this->hrUser());
         $review = $this->reviewOf(10);
         $review = $this->service()->saveSelf($review, $this->userFor(10), $this->ratings($review, [5, 5]), null, true);
+        $review = $this->holdMeeting($review);
         $review = $this->service()->saveSupervisor($review, $this->userFor(2), $this->ratings($review, [5, 5]), null, true);
 
         $review = $this->service()->saveHr($review, $this->hrUser(), $this->ratings($review, [8, 4]), null, true);
@@ -312,6 +314,7 @@ class PerformanceReviewFlowTest extends TestCase
         $this->assertSame('hr', $review->route);
 
         $review = $this->service()->saveSelf($review, $this->userFor(11), $this->ratings($review, [7, 7]), null, true);
+        $review = $this->holdMeeting($review);
         $this->assertSame(PerformanceReview::STATUS_AWAITING_HR, $review->status);
 
         $review = $this->service()->saveHr($review, $this->hrUser(), $this->ratings($review, [6, 8]), null, true);
@@ -364,6 +367,7 @@ class PerformanceReviewFlowTest extends TestCase
         $review = $this->reviewOf(12); // Fred has no login
 
         $review = $this->service()->saveSelf($review, $this->hrUser(), $this->ratings($review, [6, 6]), null, true, true);
+        $review = $this->holdMeeting($review);
 
         $this->assertSame(PerformanceReview::STATUS_AWAITING_HR, $review->status);
         $event = PerformanceReviewEvent::where('review_id', $review->id)->where('action', 'self_submitted')->first();
@@ -391,7 +395,7 @@ class PerformanceReviewFlowTest extends TestCase
         $this->assertStringContainsString('Say why', $this->refusal(fn () => $this->service()->skipSelf($review, $this->hrUser(), '  '))->getMessage());
 
         $review = $this->service()->skipSelf($review, $this->hrUser(), 'On long leave');
-        $this->assertSame(PerformanceReview::STATUS_AWAITING_SUPERVISOR, $review->status);
+        $this->assertSame(PerformanceReview::STATUS_AWAITING_MEETING, $review->status);
         $this->assertTrue($review->self_skipped);
         $this->assertSame('On long leave', PerformanceReviewEvent::where('action', 'self_skipped')->value('note'));
     }
@@ -406,6 +410,7 @@ class PerformanceReviewFlowTest extends TestCase
         $this->assertSame(422, $this->refusal(fn () => $this->service()->saveSupervisor($review, $this->userFor(2), $this->ratings($review, [5, 5]), null, true))->status());
 
         $review = $this->service()->saveSelf($review, $this->userFor(10), $this->ratings($review, [5, 5]), null, true);
+        $review = $this->holdMeeting($review);
 
         // Zola holds the same position but was not named; HR cannot rate as the supervisor; the staff member cannot rate themselves again
         foreach ([$this->userFor(3), $this->hrUser(), $this->userFor(10), $this->userFor(21)] as $someone) {
@@ -425,6 +430,7 @@ class PerformanceReviewFlowTest extends TestCase
         $this->assertSame(422, $this->refusal(fn () => $this->service()->saveHr($review, $this->hrUser(), $this->ratings($review, [9, 9]), null, true))->status(), 'not waiting for HR yet');
 
         $review = $this->service()->saveSelf($review, $this->userFor(10), $this->ratings($review, [5, 5]), null, true);
+        $review = $this->holdMeeting($review);
         $review = $this->service()->saveSupervisor($review, $this->userFor(2), $this->ratings($review, [5, 5]), null, true);
 
         foreach ([$this->userFor(2), $this->userFor(10), $this->userFor(21), $this->userFor(20)] as $someone) {
@@ -438,6 +444,7 @@ class PerformanceReviewFlowTest extends TestCase
         $this->publishedCycle();
         $review = $this->reviewOf(11);
         $review = $this->service()->saveSelf($review, $this->userFor(11), $this->ratings($review, [5, 5]), null, true);
+        $review = $this->holdMeeting($review);
 
         $review = $this->service()->saveHr($review, $this->hrUser(), $this->ratings($review, [8]), 'thinking', false);
 
@@ -453,6 +460,7 @@ class PerformanceReviewFlowTest extends TestCase
         app(PerformanceCycleService::class)->publish($this->draftCycle(), $this->hrUser());
         $review = $this->reviewOf(60);
         $review = $this->service()->saveSelf($review, $this->userFor(60, ['hr_manager']), $this->ratings($review, [10, 10]), null, true);
+        $review = $this->holdMeeting($review);
         $this->assertSame(PerformanceReview::STATUS_AWAITING_HR, $review->status, 'no supervisor login above them, so it waits for HR');
 
         $exception = $this->refusal(fn () => $this->service()->saveHr($review, $this->userFor(60, ['hr_manager']), $this->ratings($review, [10, 10]), null, true));
@@ -473,6 +481,7 @@ class PerformanceReviewFlowTest extends TestCase
 
         $hrManager = $this->userFor(60, ['hr_manager']);
         $review = $this->service()->saveSelf($review, $this->userFor(21), $this->ratings($review, [6, 6]), null, true);
+        $review = $this->holdMeeting($review);
         $review = $this->service()->saveSupervisor($review, $hrManager, $this->ratings($review, [7, 7]), null, true);
 
         $this->assertSame(403, $this->refusal(fn () => $this->service()->saveHr($review, $hrManager, $this->ratings($review, [7, 7]), null, true))->status());
@@ -485,6 +494,7 @@ class PerformanceReviewFlowTest extends TestCase
         $this->publishedCycle();
         $review = $this->reviewOf(10);
         $review = $this->service()->saveSelf($review, $this->userFor(10), $this->ratings($review, [5, 5]), null, true);
+        $review = $this->holdMeeting($review);
         $review = $this->service()->saveSupervisor($review, $this->userFor(2), $this->ratings($review, [9, 9]), null, true);
 
         $this->assertStringContainsString('Say why', $this->refusal(fn () => $this->service()->returnToSupervisor($review, $this->hrUser(), ''))->getMessage());
@@ -501,6 +511,7 @@ class PerformanceReviewFlowTest extends TestCase
     {
         $this->publishedCycle();
         $review = $this->service()->saveSelf($this->reviewOf(11), $this->userFor(11), $this->ratings($this->reviewOf(11), [5, 5]), null, true);
+        $review = $this->holdMeeting($review);
 
         $this->assertSame(422, $this->refusal(fn () => $this->service()->returnToSupervisor($review, $this->hrUser(), 'why'))->status());
     }
@@ -513,6 +524,7 @@ class PerformanceReviewFlowTest extends TestCase
         $this->publishedCycle();
         $review = $this->reviewOf(10);
         $review = $this->service()->saveSelf($review, $this->userFor(10), $this->ratings($review, [5, 5]), null, true);
+        $review = $this->holdMeeting($review);
 
         $this->assertStringContainsString('Say why', $this->refusal(fn () => $this->service()->reassign($review, $this->hrUser(), 3, ''))->getMessage());
         $review = $this->service()->reassign($review, $this->hrUser(), 3, 'Zane is on leave');
@@ -557,6 +569,7 @@ class PerformanceReviewFlowTest extends TestCase
         $this->nameSupervisor(10, 2);
         $this->publishedCycle();
         $review = $this->service()->saveSelf($this->reviewOf(10), $this->userFor(10), $this->ratings($this->reviewOf(10), [5, 5]), null, true);
+        $review = $this->holdMeeting($review);
         $this->assertSame(PerformanceReview::STATUS_AWAITING_SUPERVISOR, $review->status);
 
         $review = $this->service()->reassign($review, $this->hrUser(), null, 'Supervisor has left');
@@ -569,6 +582,7 @@ class PerformanceReviewFlowTest extends TestCase
         $this->nameSupervisor(10, 2);
         $this->publishedCycle();
         $review = $this->service()->saveSelf($this->reviewOf(10), $this->userFor(10), $this->ratings($this->reviewOf(10), [5, 5]), null, true);
+        $review = $this->holdMeeting($review);
         $review = $this->service()->saveSupervisor($review, $this->userFor(2), $this->ratings($review, [6, 6]), null, true);
 
         $this->assertStringContainsString('Send it back to them instead', $this->refusal(fn () => $this->service()->reassign($review, $this->hrUser(), 3, 'x'))->getMessage());
@@ -578,6 +592,7 @@ class PerformanceReviewFlowTest extends TestCase
     {
         $this->publishedCycle();
         $review = $this->service()->saveSelf($this->reviewOf(11), $this->userFor(11), $this->ratings($this->reviewOf(11), [5, 5]), null, true);
+        $review = $this->holdMeeting($review);
         $review = $this->service()->saveHr($review, $this->hrUser(), $this->ratings($review, [5, 5]), null, true);
 
         $this->assertSame(422, $this->refusal(fn () => $this->service()->reassign($review, $this->hrUser(), 2, 'x'))->status());
@@ -589,6 +604,7 @@ class PerformanceReviewFlowTest extends TestCase
     {
         $this->publishedCycle();
         $review = $this->service()->saveSelf($this->reviewOf(11), $this->userFor(11), $this->ratings($this->reviewOf(11), [5, 5]), null, true);
+        $review = $this->holdMeeting($review);
 
         return $this->service()->saveHr($review, $this->hrUser(), $this->ratings($review, [6, 8], 'ok'), 'Good', true);
     }
@@ -692,6 +708,7 @@ class PerformanceReviewFlowTest extends TestCase
         $this->publishedCycle();
         $review = $this->reviewOf(10);
         $review = $this->service()->saveSelf($review, $this->userFor(10), $this->ratings($review, [8, 8], 'my own words'), 'my summary', true);
+        $review = $this->holdMeeting($review);
         $review = $this->service()->saveSupervisor($review, $this->userFor(2), $this->ratings($review, [3, 3], 'SECRET supervisor comment'), 'SECRET supervisor summary', true);
 
         return $this->service()->saveHr($review, $this->hrUser(), $this->ratings($review, [6, 6], 'hr words'), 'final words', true);
@@ -702,18 +719,41 @@ class PerformanceReviewFlowTest extends TestCase
         return app(PerformanceReviewPresenter::class)->show($viewer, $review);
     }
 
-    public function test_the_staff_member_never_sees_what_the_supervisor_wrote_or_who_wrote_it(): void
+    public function test_once_finalised_the_staff_member_sees_what_the_supervisor_wrote_but_not_who_wrote_it(): void
     {
         $review = $this->finalisedReviewWithSecrets();
         $review->update(['metrics' => ['absenteeism' => ['value' => 12]]]);
 
-        $json = json_encode($this->present($this->userFor(10), $review->refresh()));
+        $payload = $this->present($this->userFor(10), $review->refresh());
+        $json = json_encode($payload);
 
-        foreach (['SECRET', 'supervisor_rating', 'supervisor_comment', 'supervisor_summary', 'Zane', 'metrics', 'history', 'route'] as $secret) {
+        foreach (['Zane', 'metrics', 'history', 'route'] as $secret) {
             $this->assertStringNotContainsString($secret, $json, $secret);
         }
+        $this->assertSame([3, 3], array_column($payload['items'], 'supervisor_rating'));
+        $this->assertSame(3.0, $payload['scores']['supervisor']);
+        $this->assertSame('SECRET supervisor summary', $payload['supervisor_summary']);
+        $this->assertStringContainsString('SECRET supervisor comment', $json);
         $this->assertStringContainsString('my own words', $json);
         $this->assertStringContainsString('final words', $json, 'once finalised they see the final comment');
+    }
+
+    public function test_before_it_is_finalised_the_staff_member_never_sees_what_the_supervisor_wrote(): void
+    {
+        $this->nameSupervisor(10, 2);
+        $this->publishedCycle();
+        $review = $this->reviewOf(10);
+        $review = $this->service()->saveSelf($review, $this->userFor(10), $this->ratings($review, [8, 8]), null, true);
+        $review = $this->holdMeeting($review);
+        $review = $this->service()->saveSupervisor($review, $this->userFor(2), $this->ratings($review, [3, 3], 'SECRET supervisor comment'), 'SECRET supervisor summary', true);
+
+        $payload = $this->present($this->userFor(10), $review->refresh());
+        $json = json_encode($payload);
+
+        foreach (['SECRET', 'supervisor_rating', 'supervisor_comment', 'supervisor_summary', 'Zane'] as $secret) {
+            $this->assertStringNotContainsString($secret, $json, $secret);
+        }
+        $this->assertArrayNotHasKey('supervisor', $payload['scores']);
     }
 
     public function test_before_it_is_finalised_the_staff_member_sees_their_own_ratings_and_no_final_one(): void
@@ -722,6 +762,7 @@ class PerformanceReviewFlowTest extends TestCase
         $this->publishedCycle();
         $review = $this->reviewOf(10);
         $review = $this->service()->saveSelf($review, $this->userFor(10), $this->ratings($review, [8, 8]), null, true);
+        $review = $this->holdMeeting($review);
         $review = $this->service()->saveSupervisor($review, $this->userFor(2), $this->ratings($review, [3, 3], 'SECRET'), null, true);
         $review = $this->service()->saveHr($review, $this->hrUser(), $this->ratings($review, [6]), 'draft hr comment', false);
 
@@ -736,7 +777,7 @@ class PerformanceReviewFlowTest extends TestCase
         $this->assertStringNotContainsString('draft hr comment', $json);
     }
 
-    public function test_the_final_view_for_the_staff_member_is_hrs_rating_and_comment_only(): void
+    public function test_the_final_view_for_the_staff_member_is_their_own_the_supervisors_and_hrs_ratings(): void
     {
         $review = $this->finalisedReviewWithSecrets();
 
@@ -745,8 +786,9 @@ class PerformanceReviewFlowTest extends TestCase
         $this->assertSame(6.0, $payload['final']['score']);
         $this->assertSame('final words', $payload['final']['comment']);
         $this->assertSame([6, 6], array_column($payload['items'], 'hr_rating'));
+        $this->assertSame([3, 3], array_column($payload['items'], 'supervisor_rating'));
         $this->assertSame([8, 8], array_column($payload['items'], 'self_rating'));
-        $this->assertSame([], array_keys(array_diff_key($payload['items'][0], array_flip(['id', 'name', 'description', 'weight', 'self_rating', 'self_comment', 'hr_rating', 'hr_comment']))));
+        $this->assertSame([], array_keys(array_diff_key($payload['items'][0], array_flip(['id', 'name', 'description', 'weight', 'self_rating', 'self_comment', 'supervisor_rating', 'supervisor_comment', 'hr_rating', 'hr_comment']))));
     }
 
     public function test_a_staff_member_who_is_also_hr_still_gets_only_the_staff_view_of_their_own_review(): void
@@ -775,6 +817,7 @@ class PerformanceReviewFlowTest extends TestCase
         $this->assertStringNotContainsString('draft summary', $draft);
 
         $review = $this->service()->saveSelf($review, $this->userFor(10), $this->ratings($review, [8, 4], 'final self words'), 'self summary', true);
+        $review = $this->holdMeeting($review);
         $payload = $this->present($this->userFor(2), $review);
 
         $this->assertSame('supervisor', $payload['role']);
@@ -790,6 +833,7 @@ class PerformanceReviewFlowTest extends TestCase
         $this->publishedCycle();
         $review = $this->reviewOf(10);
         $review = $this->service()->saveSelf($review, $this->userFor(10), $this->ratings($review, [5, 5]), null, true);
+        $review = $this->holdMeeting($review);
         $review = $this->service()->saveSupervisor($review, $this->userFor(2), $this->ratings($review, [5, 5]), null, true);
         $review = $this->service()->saveHr($review, $this->hrUser(), $this->ratings($review, [9]), 'HR WORKING', false);
 
@@ -812,7 +856,7 @@ class PerformanceReviewFlowTest extends TestCase
         $this->assertSame([6, 6], array_column($payload['items'], 'hr_rating'));
         $this->assertSame('SECRET supervisor summary', $payload['supervisor_summary']);
         $this->assertSame('Zane Zonemanager', $payload['supervisor']);
-        $this->assertSame(['created', 'self_submitted', 'supervisor_submitted', 'finalised'], array_column($payload['history'], 'action'));
+        $this->assertSame(['created', 'self_submitted', 'meeting_scheduled', 'meeting_held', 'supervisor_submitted', 'finalised'], array_column($payload['history'], 'action'));
         $this->assertSame([2, 3], array_column($payload['supervisor_candidates'], 'id'));
         $this->assertSame(['correct'], $payload['actions']);
     }
@@ -828,6 +872,7 @@ class PerformanceReviewFlowTest extends TestCase
         $this->assertSame(['self_on_behalf', 'skip_self', 'reassign'], $this->present($this->hrUser(), $review)['actions']);
 
         $review = $this->service()->saveSelf($review, $this->userFor(10), $this->ratings($review, [5, 5]), null, true);
+        $review = $this->holdMeeting($review);
         $this->assertSame([], $this->present($this->userFor(10), $review)['actions']);
         $this->assertSame(['supervisor'], $this->present($this->userFor(2), $review)['actions']);
         $this->assertSame(['reassign'], $this->present($this->hrUser(), $review)['actions']);
@@ -840,6 +885,7 @@ class PerformanceReviewFlowTest extends TestCase
     {
         $this->publishedCycle();
         $review = $this->service()->saveSelf($this->reviewOf(11), $this->userFor(11), $this->ratings($this->reviewOf(11), [5, 5]), null, true);
+        $review = $this->holdMeeting($review);
         $presenter = app(PerformanceReviewPresenter::class);
 
         $this->assertNull($presenter->row($review)['final_score']);
