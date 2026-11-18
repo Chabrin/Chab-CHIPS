@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="utf-8">
-    <title>Return {{ $return->return_code }}</title>
+    <title>{{ $exportInfo['title'] }}</title>
     <style>
         @include('property.processed-returns.partials.pdf-styles')
 
@@ -25,7 +25,6 @@
     @php
         $money = fn($v) => number_format((float) $v, 2);
         $amt = fn($v) => abs(round((float) ($v ?? 0), 2)) > 0 ? number_format((float) $v, 2) : '';
-        $period = date('F Y', mktime(0, 0, 0, (int) $return->month, 1, (int) $return->year));
         $landlordLabel = $landlordDisplay ?? ($return->landlord_code ?? '-');
         $landlordTitle = trim(preg_replace('/\(' . preg_quote((string) $return->landlord_code, '/') . '\)$/', '', $landlordLabel)) ?: $landlordLabel;
         $signoffColumns = ['Prepared by' => 'prepared', 'Checked by' => 'checked', 'Approved by' => 'approved', 'Paid by' => null, 'Client name' => null];
@@ -33,7 +32,7 @@
 
     @include('pdf.partials.letterhead', [
         'title' => 'RETURN STATEMENT',
-        'period' => $period,
+        'period' => $exportInfo['title'],
         'metaLines' => ['Return ID: ' . $return->return_code, 'Printed: ' . date('d M Y, H:i')],
     ])
 
@@ -50,7 +49,7 @@
 
                         <tr><td class="k">Property</td><td>{{ $propertyDisplay ?? ($return->property_code ?? '-') }}</td></tr>
                         <tr><td class="k">Return ID</td><td><strong>{{ $return->return_code }}</strong></td></tr>
-                        <tr><td class="k">Type</td><td>{{ $return->return_type ?? '-' }}</td></tr>
+                        <tr><td class="k">Type</td><td>{{ $exportInfo['type'] }}</td></tr>
                         @if($return->voucher_number)
                         <tr><td class="k">Voucher</td><td>{{ $return->voucher_number }}</td></tr>
                         @endif
