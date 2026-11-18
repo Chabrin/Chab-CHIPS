@@ -39,6 +39,12 @@
                         <h5 class="mb-0">Returns List (Unpaid)</h5>
                     </div>
                     <div class="card-body">
+                        @if(request()->filled('generation'))
+                        <div class="alert alert-info d-flex justify-content-between align-items-center">
+                            <span>Showing returns from this generation.</span>
+                            <a href="{{ route('returns.batches.index', ['year' => $currentYear, 'month' => $currentMonth]) }}">View all returns for this month</a>
+                        </div>
+                        @endif
                         <!-- Filters -->
                         <div class="row mb-3 align-items-end">
                             <div class="col-md-2">
@@ -245,7 +251,8 @@
                 type: 'GET',
                 data: {
                     year: year,
-                    month: month
+                    month: month,
+                    generation: @json(request()->query('generation'))
                 },
                 success: function(response) {
                     if (response.success) {

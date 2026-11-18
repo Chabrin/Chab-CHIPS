@@ -407,6 +407,8 @@
                         icon: 'success',
                         title: '<span style="font-family:Roboto,Arial,sans-serif;font-weight:600;font-size:1.1rem;letter-spacing:0.5px;display:flex;align-items:center;"><span class="material-symbols-outlined" style="color:#2196F3;font-size:1.5em;margin-right:6px;vertical-align:middle;">check_circle</span>Success!</span>',
                         html: detailsHtml,
+                        timer: 1800,
+                        timerProgressBar: true,
                         allowOutsideClick: false,
                         confirmButtonText: '<span style="display:flex;align-items:center;"><span class="material-symbols-outlined" style="font-size:1.2em;margin-right:4px;vertical-align:middle;">done</span>OK</span>',
                         customClass: {
@@ -415,8 +417,7 @@
                         },
                         buttonsStyling: false
                     }).then(() => {
-                        // Redirect to list page
-                        window.location.href = '{{ route("returns.batches.index") }}';
+                        window.location.href = response.redirect_url || '{{ route("returns.batches.index") }}';
                     });
                 } else {
                     Swal.fire({

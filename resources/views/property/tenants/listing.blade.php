@@ -1,30 +1,28 @@
 @extends('layouts.main')
 
+@section('styles')
+<link rel="stylesheet" href="{{ asset('assets/css/tenant-listing.css') }}?v={{ filemtime(public_path('assets/css/tenant-listing.css')) }}">
+@endsection
+
 @section('content')
-<div class="page-body" style="padding-top:10px;">
+<div class="page-body" id="tenant-listing">
     <div class="container-fluid">
         <div class="row">
             <div class="col-sm-12">
-                <div class="card">
-                    <div class="card-header card-no-border d-flex align-items-center justify-content-between flex-wrap gap-2">
-                        <h5 class="mb-0">Tenant Management</h5>
-                        <div class="d-flex align-items-center gap-2 flex-wrap">
-                            <small class="text-muted" id="result_info" style="display:none;">
-                                Showing <strong id="result_count">0</strong> tenants (max 1000)
-                            </small>
-                            <div class="btn-group btn-group-sm" role="group" id="status-filter">
-                                <button type="button" class="btn btn-outline-secondary active" data-status="active">Active</button>
-                                <button type="button" class="btn btn-outline-secondary" data-status="exited">Exited</button>
-                                <button type="button" class="btn btn-outline-secondary" data-status="pending_unit">Pending Unit</button>
-                                <button type="button" class="btn btn-outline-secondary" data-status="all">All</button>
-                            </div>
-                            <a href="{{ route('units.tenants.create') }}" class="btn btn-sm btn-primary d-flex align-items-center">
-                                <span class="material-symbols-outlined">add_circle</span> Onboard tenant
+                <section class="card tenant-directory" aria-labelledby="tenant-directory-title">
+                    <header class="tenant-directory-header">
+                        <div>
+                            <p class="tenant-directory-eyebrow">Management</p>
+                            <h1 id="tenant-directory-title">Tenants</h1>
+                        </div>
+                        <div class="tenant-directory-actions">
+                            <a href="{{ route('units.tenants.create') }}" class="btn btn-primary d-inline-flex align-items-center gap-2">
+                                <span class="material-symbols-outlined" aria-hidden="true">person_add</span> Onboard tenant
                             </a>
                             <div class="dropdown">
-                                <button class="btn btn-sm btn-outline-secondary dropdown-toggle d-flex align-items-center" type="button" id="tenantActionsDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                                <button class="btn tenant-secondary-button dropdown-toggle d-flex align-items-center" type="button" id="tenantActionsDropdown" data-bs-toggle="dropdown" aria-expanded="false">
                                     <span class="material-symbols-outlined me-1" style="font-size:18px;">more_vert</span>
-                                    <span>Actions</span>
+                                    <span>Tenant actions</span>
                                 </button>
                                 <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="tenantActionsDropdown">
                                     <li>
@@ -40,38 +38,53 @@
                                 </ul>
                             </div>
                         </div>
-                    </div>
+                    </header>
 
-                    <div class="card-body">
+                    <div class="tenant-directory-body">
+                        <div class="tenant-directory-toolbar">
+                            <div role="group" aria-label="Filter by tenancy status" id="status-filter">
+                                <button type="button" class="active" data-status="active" aria-pressed="true">Active</button>
+                                <button type="button" data-status="exited" aria-pressed="false">Exited</button>
+                                <button type="button" data-status="pending_unit" aria-pressed="false">Pending unit</button>
+                                <button type="button" data-status="all" aria-pressed="false">All</button>
+                            </div>
+                            <span id="result_info" class="tenant-result-count" aria-live="polite" style="display:none;">
+                                <strong id="result_count">0</strong> matching tenants
+                            </span>
+                        </div>
+                        <div id="tenant-filters">
+                            <label>Search by tenant name
+                                <input type="search" class="form-control col-filter" data-filter="filter_names" placeholder="At least 3 characters">
+                            </label>
+                            <details>
+                                <summary>More filters</summary>
+                                <div class="tenant-extra-filters">
+                                    <label>Property<input type="search" class="form-control col-filter" data-filter="filter_property"></label>
+                                    <label>Landlord<input type="search" class="form-control col-filter" data-filter="filter_landlord"></label>
+                                    <label>Phone<input type="search" class="form-control col-filter" data-filter="filter_phone"></label>
+                                    <label>ID number<input type="search" class="form-control col-filter" data-filter="filter_id_number"></label>
+                                </div>
+                            </details>
+                        </div>
                         <div class="table-responsive custom-scrollbar">
                             <table class="display" id="tenants-table" style="width:100%;">
                                 <thead>
                                     <tr>
                                         <th>#</th>
-                                        <th>Names</th>
+                                        <th>Tenant</th>
                                         <th>Phone</th>
                                         <th>ID Number</th>
                                         <th>Property</th>
                                         <th>Landlord</th>
                                         <th>Status</th>
-                                        <th>Action</th>
-                                    </tr>
-                                    <tr class="column-filters">
-                                        <th></th>
-                                        <th><input type="text" class="form-control form-control-sm col-filter" data-filter="filter_names" placeholder="-- Search --" /></th>
-                                        <th><input type="text" class="form-control form-control-sm col-filter" data-filter="filter_phone" placeholder="-- Search --" /></th>
-                                        <th><input type="text" class="form-control form-control-sm col-filter" data-filter="filter_id_number" placeholder="-- Search --" /></th>
-                                        <th><input type="text" class="form-control form-control-sm col-filter" data-filter="filter_property" placeholder="-- Search --" /></th>
-                                        <th><input type="text" class="form-control form-control-sm col-filter" data-filter="filter_landlord" placeholder="-- Search --" /></th>
-                                        <th></th>
-                                        <th></th>
+                                        <th>Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody></tbody>
                             </table>
                         </div>
                     </div>
-                </div>
+                </section>
             </div>
         </div>
     </div>
@@ -120,48 +133,12 @@
 @endsection
 
 @section('scripts')
-<style>
-    .col-filter-wrap {
-        position: relative;
-    }
-
-    .col-filter-wrap .col-filter {
-        padding-right: 22px;
-    }
-
-    .col-filter-wrap .filter-spinner {
-        position: absolute;
-        right: 6px;
-        top: 50%;
-        margin-top: -7px;
-        width: 14px;
-        height: 14px;
-        border: 2px solid #ccc;
-        border-top-color: var(--accent, #3598db);
-        border-radius: 50%;
-        animation: filterspin .6s linear infinite;
-        display: none;
-    }
-
-    .col-filter-wrap.loading .filter-spinner {
-        display: block;
-    }
-
-    @keyframes filterspin {
-        to { transform: rotate(360deg); }
-    }
-
-    tr.tenant-exited td {
-        color: #9ca3af !important;
-    }
-
-    tr.tenant-exited td a .material-symbols-outlined {
-        color: #9ca3af !important;
-    }
-</style>
 <script>
     $(document).ready(function () {
         var currentStatus = 'active';
+        var pendingRequest;
+        const textRenderer = $.fn.dataTable.render.text();
+        const escapeText = textRenderer.display;
 
         var table = $('#tenants-table').DataTable({
             data: [],
@@ -172,22 +149,41 @@
                     searchable: false,
                     render: function (d, t, r, m) { return m.row + 1; }
                 },
-                { data: 'names' },
-                { data: 'mobile_number' },
-                { data: 'national_id' },
-                { data: 'property_name' },
-                { data: 'landlord_name' },
+                {
+                    data: 'names',
+                    render: function (name, type, row) {
+                        if (type !== 'display') return name;
+                        return '<a href="/tenants/' + encodeURIComponent(row.encrypted_id) + '">' + escapeText(name) + '</a>';
+                    }
+                },
+                { data: 'mobile_number', render: textRenderer },
+                { data: 'national_id', render: textRenderer },
+                {
+                    data: 'property_name',
+                    render: function (property, type, row) {
+                        if (type !== 'display') return property;
+                        const unit = row.unit_code ? '<span class="tenant-unit">Unit ' + escapeText(row.unit_code) + '</span>' : '';
+                        return escapeText(property) + unit;
+                    }
+                },
+                { data: 'landlord_name', render: textRenderer },
                 {
                     data: null,
                     orderable: false,
                     searchable: false,
                     render: function (d, t, r) {
                         if (r.is_exited) {
-                            var label = r.exit_date ? 'Exited · ' + r.exit_date : 'Exited';
-                            var title = r.exit_reason ? ' title="' + $('<div>').text(r.exit_reason).html() + '"' : '';
-                            return '<span class="badge bg-danger-light text-danger fw-normal"' + title + '>' + label + '</span>';
+                            const label = r.exit_date ? 'Exited · ' + r.exit_date : 'Exited';
+                            return $('<span>', {
+                                class: 'tenant-status tenant-status-exited',
+                                title: r.exit_reason || '',
+                                text: label
+                            })[0];
                         }
-                        return '<span class="badge bg-success-light text-success fw-normal">Active</span>';
+                        if (r.pending_unit) {
+                            return '<span class="tenant-status tenant-status-pending">Pending unit</span>';
+                        }
+                        return '<span class="tenant-status tenant-status-active">Active</span>';
                     }
                 },
                 {
@@ -195,17 +191,25 @@
                     orderable: false,
                     searchable: false,
                     render: function (d, t, r) {
-                        var html = '<div class="d-flex flex-row gap-2">' +
-                            '<a href="/tenants/' + r.encrypted_id + '" title="View Details">' +
-                            '<span class="material-symbols-outlined" style="font-size:18px;color:var(--accent);">folder_eye</span></a>' +
-                            '<a href="' + '{{ route("move.in.inspections.create") }}?tenant=' + r.encrypted_id + '" title="Record Move-In Inspection">' +
-                            '<span class="material-symbols-outlined" style="font-size:18px;color:var(--accent);">search_check</span></a>';
+                        if (t !== 'display') return '';
+                        const id = encodeURIComponent(r.encrypted_id);
+                        const actions = $('<div>', { class: 'tenant-row-actions' }).append(
+                            '<a href="/tenants/' + id + '" title="View Details" aria-label="View Details">' +
+                            '<span class="material-symbols-outlined" aria-hidden="true">visibility</span></a>' +
+                            '<a href="' + '{{ route("move.in.inspections.create") }}?tenant=' + id + '" title="Record Move-In Inspection" aria-label="Record Move-In Inspection">' +
+                            '<span class="material-symbols-outlined" aria-hidden="true">search_check</span></a>'
+                        );
                         if (r.pending_unit) {
-                            html += '<a href="#" class="assign-unit-link" data-id="' + r.encrypted_id + '" data-name="' + $('<div>').text(r.names).html() + '" title="Assign Unit">' +
-                                '<span class="material-symbols-outlined" style="font-size:18px;color:var(--accent);">home_work</span></a>';
+                            actions.append($('<a>', {
+                                href: '#',
+                                class: 'assign-unit-link',
+                                'data-id': r.encrypted_id,
+                                'data-name': r.names,
+                                title: 'Assign Unit',
+                                'aria-label': 'Assign Unit'
+                            }).append('<span class="material-symbols-outlined" aria-hidden="true">home_work</span>'));
                         }
-                        html += '</div>';
-                        return html;
+                        return actions[0];
                     }
                 }
             ],
@@ -219,13 +223,19 @@
             lengthChange: true,
             searching: false,
             ordering: true,
-            orderCellsTop: true,
+            layout: { topStart: null, topEnd: null, bottomStart: 'info', bottomEnd: ['pageLength', 'paging'] },
             order: [[1, 'asc']],
-            pageLength: 50
+            pageLength: 50,
+            language: {
+                emptyTable: 'No tenants match the selected status or filters.',
+                lengthMenu: 'Rows per page _MENU_',
+                info: '_START_–_END_ of _TOTAL_',
+                infoEmpty: '0 tenants'
+            }
         });
 
         // Wrap each filter input with a spinner element
-        $('#tenants-table thead .column-filters input.col-filter').each(function () {
+        $('#tenant-filters input.col-filter').each(function () {
             $(this).wrap('<div class="col-filter-wrap"></div>');
             $(this).after('<span class="filter-spinner"></span>');
         });
@@ -233,19 +243,21 @@
         var debounceTimer;
 
         function loadData() {
-            var $activeFilters = $('#tenants-table thead .column-filters .col-filter-wrap').filter(function () {
+            if (pendingRequest) pendingRequest.abort();
+            $('#tenant-filters .col-filter-wrap').removeClass('loading');
+            var $activeFilters = $('#tenant-filters .col-filter-wrap').filter(function () {
                 return $(this).find('input').val().trim().length >= 3;
             });
             $activeFilters.addClass('loading');
 
             var params = { status: currentStatus };
-            $('#tenants-table thead .column-filters input.col-filter').each(function () {
+            $('#tenant-filters input.col-filter').each(function () {
                 var key = $(this).data('filter');
                 var val = $(this).val().trim();
                 if (val.length >= 3) params[key] = val;
             });
 
-            $.ajax({
+            pendingRequest = $.ajax({
                 url: '{{ route("ajax.tenants.listing.data") }}',
                 type: 'GET',
                 data: params,
@@ -259,7 +271,8 @@
                         table.draw();
                     }
                 },
-                error: function (xhr) {
+                error: function (xhr, status) {
+                    if (status === 'abort') return;
                     $activeFilters.removeClass('loading');
                     var msg = 'Failed to load tenants.';
                     if (xhr.responseJSON && xhr.responseJSON.message) msg = xhr.responseJSON.message;
@@ -270,14 +283,15 @@
 
         // Status filter tabs
         $('#status-filter button').on('click', function () {
-            $('#status-filter button').removeClass('active');
-            $(this).addClass('active');
+            $('#status-filter button').removeClass('active').attr('aria-pressed', 'false');
+            $(this).addClass('active').attr('aria-pressed', 'true');
             currentStatus = $(this).data('status');
+            clearTimeout(debounceTimer);
             loadData();
         });
 
         // Column filters with debounce (3+ chars)
-        $('#tenants-table thead .column-filters input.col-filter').on('keyup', function () {
+        $('#tenant-filters input.col-filter').on('input', function () {
             clearTimeout(debounceTimer);
             debounceTimer = setTimeout(loadData, 400);
         });
@@ -285,8 +299,8 @@
         // Land directly on the Pending Unit tab after a bulk upload that left rows unassigned
         var initialStatus = new URLSearchParams(window.location.search).get('status');
         if (initialStatus && $('#status-filter button[data-status="' + initialStatus + '"]').length) {
-            $('#status-filter button').removeClass('active');
-            $('#status-filter button[data-status="' + initialStatus + '"]').addClass('active');
+            $('#status-filter button').removeClass('active').attr('aria-pressed', 'false');
+            $('#status-filter button[data-status="' + initialStatus + '"]').addClass('active').attr('aria-pressed', 'true');
             currentStatus = initialStatus;
         }
 

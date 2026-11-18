@@ -150,6 +150,30 @@ class User extends Authenticatable implements LaratrustUser
         return $this->hasOne(UserStaffLink::class);
     }
 
+    public function legacyStaff()
+    {
+        return $this->belongsTo(Staff::class, 'staff_id');
+    }
+
+    public function canUseStaffMessaging(): bool
+    {
+        $staff = $this->linkedStaff();
+
+        return !$this->block && $staff !== null
+            && in_array((int) $staff->current_status_id, [1, 4], true);
+    }
+
+    public function scopeMessagingEligible($query)
+    {
+        return $query->where('block', false)->where(function ($query) {
+            $query->whereHas('staffLink.staff', fn ($staff) => $staff->whereIn('current_status_id', [1, 4]))
+                ->orWhere(function ($legacy) {
+                    $legacy->whereDoesntHave('staffLink.staff')
+                        ->whereHas('legacyStaff', fn ($staff) => $staff->whereIn('current_status_id', [1, 4]));
+                });
+        });
+    }
+
     /**
      * The staff record linked to this system user: the link table first, then the legacy staff_id column.
      */
