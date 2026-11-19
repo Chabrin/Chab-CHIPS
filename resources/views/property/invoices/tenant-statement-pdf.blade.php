@@ -15,9 +15,9 @@
 
 <body>
     @php
-        $totalDebit = collect($statement)->sum('debit');
-        $totalCredit = collect($statement)->sum('credit');
-        $closingBalance = collect($statement)->last()['balance'] ?? 0;
+        $totalDebit = $summary['total_debit'];
+        $totalCredit = $summary['total_credit'];
+        $closingBalance = $summary['closing_balance'];
     @endphp
 
     @include('pdf.partials.letterhead', [
@@ -43,6 +43,9 @@
                 <div class="card">
                     <div class="card-label">STATEMENT SUMMARY</div>
                     <table class="summary">
+                        @if ($summary['opening_balance'] !== null)
+                            <tr><td class="k">Opening Balance</td><td class="v">{{ number_format($summary['opening_balance'], 2) }}</td></tr>
+                        @endif
                         <tr><td class="k">Total Dr</td><td class="v dr">{{ number_format($totalDebit, 2) }}</td></tr>
                         <tr><td class="k">Total Cr</td><td class="v cr">{{ number_format($totalCredit, 2) }}</td></tr>
                         <tr class="closing"><td class="k">Closing Balance</td><td class="v {{ $closingBalance < 0 ? 'neg' : '' }}">{{ number_format($closingBalance, 2) }}</td></tr>

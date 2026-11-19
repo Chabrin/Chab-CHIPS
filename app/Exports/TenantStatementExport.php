@@ -14,14 +14,7 @@ use PhpOffice\PhpSpreadsheet\Style\Border;
 
 class TenantStatementExport implements FromCollection, WithHeadings, WithStyles, WithTitle, WithCustomStartCell
 {
-    protected $statement;
-    protected $tenantInfo;
-
-    public function __construct($statement, $tenantInfo)
-    {
-        $this->statement = $statement;
-        $this->tenantInfo = $tenantInfo;
-    }
+    public function __construct(private array $data) {}
 
     public function startCell(): string
     {
@@ -30,9 +23,9 @@ class TenantStatementExport implements FromCollection, WithHeadings, WithStyles,
 
     public function collection()
     {
-        return collect($this->statement)->map(function ($entry) {
+        return collect($this->data['statement'])->map(function ($entry) {
             return [
-                'date' => $this->formatOrdinalDate($entry['date']),
+                'date' => $entry['date']?->format('jS M Y') ?? '-',
                 'reference' => $entry['reference'],
                 'narration' => $entry['narration'],
                 'debit' => $entry['debit'] > 0 ? number_format($entry['debit'], 2) : '',
@@ -56,18 +49,31 @@ class TenantStatementExport implements FromCollection, WithHeadings, WithStyles,
 
     public function styles(Worksheet $sheet)
     {
+        $tenantInfo = $this->data['tenantInfo'];
+        $summary = $this->data['summary'];
+
         // Set tenant info header
         $sheet->setCellValue('A1', 'TENANT STATEMENT');
         $sheet->mergeCells('A1:F1');
         $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(16);
         $sheet->getStyle('A1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
-        $sheet->setCellValue('A2', 'Tenant: ' . $this->tenantInfo['tenant_name']);
+        $sheet->setCellValue('A2', 'Tenant: ' . $tenantInfo['tenant_name']);
         $sheet->mergeCells('A2:F2');
         $sheet->getStyle('A2')->getFont()->setBold(true);
 
-        $sheet->setCellValue('A3', 'Property: ' . $this->tenantInfo['property_name'] . ' | Unit: ' . $this->tenantInfo['unit_name']);
+        $sheet->setCellValue('A3', 'Property: ' . $tenantInfo['property_name'] . ' | Unit: ' . $tenantInfo['unit_name']);
         $sheet->mergeCells('A3:F3');
+
+        $sheet->setCellValue('A4', 'Period: ' . $this->data['dateFrom'] . ' to ' . $this->data['dateTo']);
+        $sheet->mergeCells('A4:F4');
+
+        if ($summary['opening_balance'] !== null) {
+            $sheet->mergeCells('A5:E5');
+            $sheet->setCellValue('A5', 'Opening Balance');
+            $sheet->setCellValue('F5', number_format($summary['opening_balance'], 2));
+            $sheet->getStyle('F5')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+        }
 
         // Column widths
         $sheet->getColumnDimension('A')->setWidth(15);
@@ -94,13 +100,13 @@ class TenantStatementExport implements FromCollection, WithHeadings, WithStyles,
         ]);
 
         // Data rows borders and alignment
-        $lastRow = 6 + count($this->statement);
+        $lastRow = 6 + count($this->data['statement']);
         $totalsRow = $lastRow + 1;
 
         // Totals row values
-        $totalDebit = collect($this->statement)->sum('debit');
-        $totalCredit = collect($this->statement)->sum('credit');
-        $closingBalance = collect($this->statement)->last()['balance'] ?? 0;
+        $totalDebit = $summary['total_debit'];
+        $totalCredit = $summary['total_credit'];
+        $closingBalance = $summary['closing_balance'];
 
         $sheet->mergeCells('A' . $totalsRow . ':C' . $totalsRow);
         $sheet->setCellValue('A' . $totalsRow, 'Closing Balance');
@@ -132,11 +138,10 @@ class TenantStatementExport implements FromCollection, WithHeadings, WithStyles,
             ]
         ]);
 
-        // Right align numeric columns
-        $sheet->getStyle('D7:F' . $lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
-
-        // Bold the last data row
-        $sheet->getStyle('A' . $lastRow . ':F' . $lastRow)->getFont()->setBold(true);
+        if ($lastRow >= 7) {
+            $sheet->getStyle('D7:F' . $lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+            $sheet->getStyle('A' . $lastRow . ':F' . $lastRow)->getFont()->setBold(true);
+        }
 
         return [];
     }
@@ -146,22 +151,4 @@ class TenantStatementExport implements FromCollection, WithHeadings, WithStyles,
         return 'Tenant Statement';
     }
 
-    private function formatOrdinalDate($date)
-    {
-        $timestamp = strtotime($date);
-        $day = date('j', $timestamp);
-        $month = date('M', $timestamp);
-        $year = date('Y', $timestamp);
-
-        $suffix = 'th';
-        if ($day == 1 || $day == 21 || $day == 31) {
-            $suffix = 'st';
-        } elseif ($day == 2 || $day == 22) {
-            $suffix = 'nd';
-        } elseif ($day == 3 || $day == 23) {
-            $suffix = 'rd';
-        }
-
-        return $day . $suffix . ' ' . $month . ' ' . $year;
-    }
 }

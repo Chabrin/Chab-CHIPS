@@ -14,13 +14,14 @@ use App\Models\InvoiceWorkflow;
 use App\Models\LeaseAgreement;
 use App\Models\Property;
 use App\Models\ServiceAgreement;
-use App\Models\TenantAccountTransaction;
 use App\Models\Unit;
 use App\Services\ErrorDispatcher;
 use App\Services\InvoiceJournalService;
+use App\Services\TenantStatementService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Exception;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
@@ -393,7 +394,11 @@ class InvoicingController extends Controller
 
             $query = LeaseAgreement::where('property_id', $request->property_id)
                 ->whereNotNull('tenant_id')
-                ->with(['tenant:id,names,mobile_number,national_id,reference_number,email_address', 'tenant.tenantRecord:id,names,phone,email,national_id', 'unit:id,unit_code'])
+                ->with([
+                    'tenant:id,names,mobile_number,national_id,reference_number,email_address',
+                    'tenant.tenantRecord:id,names,phone,email,national_id',
+                    'unit:id,unit_code,unit_number,unit_name',
+                ])
                 ->select('id', 'tenant_id', 'property_id', 'unit_id', 'ref_number');
 
             if ($request->filled('search')) {
@@ -410,7 +415,10 @@ class InvoicingController extends Controller
 
             $tenants = $query->get()
                 ->filter(fn($lease) => $lease->tenant !== null)
-                ->map(function ($lease) {
+                ->groupBy('tenant_id')
+                ->map(function ($leases) {
+                    $lease = $leases->first();
+
                     return [
                         'id' => $lease->tenant->id,
                         'encrypted_id' => \Illuminate\Support\Facades\Crypt::encrypt($lease->tenant->id),
@@ -420,10 +428,12 @@ class InvoicingController extends Controller
                         'reference_number' => $lease->tenant->reference_number,
                         'email_address' => $lease->tenant->email_address,
                         'unit_code' => $lease->unit->unit_code ?? 'N/A',
+                        'unit_codes' => $leases->pluck('unit.unit_code')->filter(fn($code) => filled($code))->unique()->values(),
+                        'unit_labels' => $this->statementUnitLabels($leases),
                         'lease_ref' => $lease->ref_number,
                     ];
                 })
-                ->unique('id')
+                ->sortBy('names', SORT_NATURAL | SORT_FLAG_CASE)
                 ->values();
 
             return response()->json([
@@ -543,321 +553,131 @@ class InvoicingController extends Controller
     }
 
     /**
-     * Search tenant invoices (AJAX) — uses sys_pm_tenants_accounts_trans ledger
+     * Search the tenant ledger for statement transactions and balances.
      */
-    public function searchTenantInvoices(Request $request)
+    public function searchTenantInvoices(Request $request, TenantStatementService $statements)
     {
+        if (!$request->filled('tenant_id')) {
+            return response()->json(['success' => false, 'message' => 'Tenant ID is required'], 400);
+        }
 
-        Log::info('Searching tenant statements with filters: ' . json_encode($request->all()));
         try {
-            if (!$request->filled('tenant_id')) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Tenant ID is required'
-                ], 400);
-            }
+            $data = $statements->build($this->statementTenantId($request), ...$this->statementFilters($request));
 
-            try {
-                $tenantId = (int) Crypt::decrypt($request->tenant_id);
-                Log::info('[STATEMENT] tenant_id decrypted: ' . $tenantId);
-            } catch (\Exception $e) {
-                $tenantId = (int) $request->tenant_id;
-                Log::info('[STATEMENT] tenant_id used as-is (not encrypted): ' . $tenantId);
-            }
-
-            $dateType = $request->input('date_type', 'range');
-            $dateFrom = $request->input('date_from');
-            $dateTo = $request->input('date_to');
-
-            Log::info('[STATEMENT] Params — tenant_id: ' . $tenantId
-                . ' | property_id: ' . ($request->property_id ?? 'none')
-                . ' | date_type: ' . $dateType
-                . ' | date_from: ' . ($dateFrom ?? 'none')
-                . ' | date_to: ' . ($dateTo ?? 'none'));
-
-            $query = TenantAccountTransaction::where('tenant_id', $tenantId)
-                ->where('current_status_id', 1);
-            if ($request->filled('property_id')) {
-                $query->where('property_id', $request->property_id);
-            }
-
-            if ($dateType === 'range' && $dateFrom && $dateTo) {
-                $query->whereDate('date_time', '>=', $dateFrom)
-                    ->whereDate('date_time', '<=', $dateTo);
-            } elseif ($dateType === 'end' && $dateTo) {
-                $query->whereDate('date_time', '<=', $dateTo);
-            }
-
-            // Log the raw SQL before executing
-            Log::info('[STATEMENT] SQL: ' . $query->toSql());
-            Log::info('[STATEMENT] Bindings: ' . json_encode($query->getBindings()));
-
-            // Log total rows for this tenant regardless of date filter (helps diagnose empty results)
-            $totalForTenant = TenantAccountTransaction::where('tenant_id', $tenantId)->count();
-            $totalActive    = TenantAccountTransaction::where('tenant_id', $tenantId)->where('current_status_id', 1)->count();
-            Log::info('[STATEMENT] Rows in table for tenant_id=' . $tenantId . ' — total: ' . $totalForTenant . ' | active (status=1): ' . $totalActive);
-
-            // Log actual property_ids stored for this tenant — reveals if stamping used wrong IDs or NULLs
-            $propertyIds = TenantAccountTransaction::where('tenant_id', $tenantId)
-                ->selectRaw('property_id, count(*) as cnt')
-                ->groupBy('property_id')
-                ->orderByRaw('count(*) desc')
-                ->limit(10)
-                ->pluck('cnt', 'property_id')
-                ->toArray();
-            Log::info('[STATEMENT] property_id distribution for tenant_id=' . $tenantId . ': ' . json_encode($propertyIds));
-
-            $transactions = $query->orderBy('date_time', 'asc')
-                ->orderBy('id', 'asc')
-                ->get();
-
-            Log::info('[STATEMENT] Result count: ' . $transactions->count());
-
-            $statementEntries = [];
-            $balance = 0;
-
-            foreach ($transactions as $txn) {
-                $isDebit = strtoupper($txn->dr_cr) === 'DR';
-                $debit = abs($txn->debit_amount ?? 0);
-                $credit = abs($txn->credit_amount ?? 0);
-                $balance += $credit - $debit;
-
-                $statementEntries[] = [
-                    'date' => $txn->date_time,
-                    'reference' => $txn->invoice_number ?: ($txn->receipt_number ?: ($txn->entry_ref ?: '-')),
-                    'narration' => $txn->narration ?: ($isDebit ? 'Invoice' : 'Payment'),
-                    'debit' => $debit,
-                    'credit' => $credit,
-                    'type' => $isDebit ? 'invoice' : 'payment',
-                    'balance' => $balance,
-                    'date_formatted' => $txn->date_time ? date('d-m-Y', strtotime($txn->date_time)) : '-',
-                    'debit_formatted' => $debit > 0 ? number_format($debit, 2) : '-',
-                    'credit_formatted' => $credit > 0 ? number_format($credit, 2) : '-',
-                    'balance_formatted' => number_format($balance, 2),
-                ];
-            }
-
-            return response()->json([
-                'success' => true,
-                'statement' => $statementEntries
-            ]);
+            return response()->json(['success' => true] + $data);
         } catch (Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error generating tenant statement: ' . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to generate statement'
-            ], 500);
+
+            return response()->json(['success' => false, 'message' => 'Failed to generate statement'], 500);
         }
     }
 
-    /**
-     * Export tenant statement to Excel
-     */
-    public function exportTenantStatementExcel(Request $request)
+    public function exportTenantStatementExcel(Request $request, TenantStatementService $statements)
     {
         try {
-            // Decrypt tenant_id if encrypted
-            try {
-                $tenantId = (int) \Illuminate\Support\Facades\Crypt::decrypt($request->tenant_id);
-            } catch (\Exception $e) {
-                $tenantId = (int) $request->tenant_id;
-            }
-
-            // Get tenant details
-            $tenant = Client::find($tenantId);
-
-            if (!$tenant) {
+            $data = $this->tenantStatementExportData($request, $statements);
+            if ($data === null) {
                 return redirect()->back()->with('error', 'Tenant not found');
             }
 
-            // Get property info from the first transaction
-            $firstTxn = TenantAccountTransaction::where('tenant_id', $tenantId)
-                ->whereNotNull('property_id')
-                ->first();
-
-            $propertyName = 'N/A';
-            $unitName = 'N/A';
-            if ($firstTxn) {
-                $property = Property::find($firstTxn->property_id);
-                $unit = $firstTxn->unit_id ? Unit::find($firstTxn->unit_id) : null;
-                $propertyName = $property->property_name ?? 'N/A';
-                $unitName = $unit->unit_code ?? 'N/A';
-            }
-
-            $tenantInfo = [
-                'tenant_name' => $tenant->names ?? 'N/A',
-                'property_name' => $propertyName,
-                'unit_name' => $unitName,
-            ];
-
-            // Get statement data using TenantAccountTransaction
-            $dateType = $request->input('date_type', 'range');
-            $dateFrom = $request->input('date_from');
-            $dateTo = $request->input('date_to');
-
-            $query = TenantAccountTransaction::where('tenant_id', $tenantId)
-                ->where('current_status_id', 1);
-
-            if ($request->filled('property_id')) {
-                $query->where('property_id', $request->property_id);
-            }
-
-            if ($dateType === 'range' && $dateFrom && $dateTo) {
-                $query->whereDate('date_time', '>=', $dateFrom)
-                    ->whereDate('date_time', '<=', $dateTo);
-            } elseif ($dateType === 'end' && $dateTo) {
-                $query->whereDate('date_time', '<=', $dateTo);
-            }
-
-            $transactions = $query->orderBy('date_time', 'asc')
-                ->orderBy('id', 'asc')
-                ->get();
-
-            // Build statement entries (oldest first)
-            $statementEntries = [];
-            $balance = 0;
-
-            foreach ($transactions as $txn) {
-                $isDebit = strtoupper($txn->dr_cr) === 'DR';
-                $debit = abs($txn->debit_amount ?? 0);
-                $credit = abs($txn->credit_amount ?? 0);
-                $balance += $credit - $debit;
-
-                $statementEntries[] = [
-                    'date' => $txn->date_time,
-                    'reference' => $txn->invoice_number ?? '-',
-                    'narration' => $txn->narration ?? ($isDebit ? 'Invoice' : 'Payment'),
-                    'debit' => $debit,
-                    'credit' => $credit,
-                    'type' => $isDebit ? 'invoice' : 'payment',
-                    'balance' => $balance,
-                ];
-            }
-
-            $fileName = 'Tenant_Statement_' . ($tenant->reference_number ?? $tenantId) . '_' . date('Y-m-d') . '.xlsx';
-
-            return Excel::download(new TenantStatementExport($statementEntries, $tenantInfo), $fileName);
+            return Excel::download(new TenantStatementExport($data), $data['fileName'] . '.xlsx');
         } catch (Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error exporting tenant statement: ' . $e->getMessage());
+
             return redirect()->back()->with('error', 'Failed to export tenant statement');
         }
     }
 
-    /**
-     * Export tenant statement to PDF
-     */
-    public function exportTenantStatementPdf(Request $request)
+    public function exportTenantStatementPdf(Request $request, TenantStatementService $statements)
     {
         try {
-            // Decrypt tenant_id if encrypted
-            try {
-                $tenantId = (int) \Illuminate\Support\Facades\Crypt::decrypt($request->tenant_id);
-            } catch (\Exception $e) {
-                $tenantId = (int) $request->tenant_id;
-            }
-
-            // Get tenant details with relationships
-            $tenant = Client::find($tenantId);
-
-            if (!$tenant) {
+            $data = $this->tenantStatementExportData($request, $statements);
+            if ($data === null) {
                 return redirect()->back()->with('error', 'Tenant not found');
             }
-
-            // Get property info from the first transaction
-            $firstTxn = TenantAccountTransaction::where('tenant_id', $tenantId)
-                ->whereNotNull('property_id')
-                ->first();
-
-            $propertyName = 'N/A';
-            $unitName = 'N/A';
-            if ($firstTxn) {
-                $property = Property::find($firstTxn->property_id);
-                $unit = $firstTxn->unit_id ? Unit::find($firstTxn->unit_id) : null;
-                $propertyName = $property->property_name ?? 'N/A';
-                $unitName = $unit->unit_code ?? 'N/A';
-            }
-
-            $tenantInfo = [
-                'tenant_name' => $tenant->names ?? 'N/A',
-                'tenant_email' => $tenant->email_address ?? 'N/A',
-                'tenant_phone' => $tenant->mobile_number ?? 'N/A',
-                'property_name' => $propertyName,
-                'unit_name' => $unitName,
-            ];
-
-            // Get statement data using TenantAccountTransaction
-            $dateType = $request->input('date_type', 'range');
-            $dateFrom = $request->input('date_from');
-            $dateTo = $request->input('date_to');
-
-            $query = TenantAccountTransaction::where('tenant_id', $tenantId)
-                ->where('current_status_id', 1);
-
-            if ($request->filled('property_id')) {
-                $query->where('property_id', $request->property_id);
-            }
-
-            if ($dateType === 'range' && $dateFrom && $dateTo) {
-                $query->whereDate('date_time', '>=', $dateFrom)
-                    ->whereDate('date_time', '<=', $dateTo);
-            } elseif ($dateType === 'end' && $dateTo) {
-                $query->whereDate('date_time', '<=', $dateTo);
-            }
-
-            $transactions = $query->orderBy('date_time', 'asc')
-                ->orderBy('id', 'asc')
-                ->get();
-
-            // Build statement entries (oldest first)
-            $statementEntries = [];
-            $balance = 0;
-
-            foreach ($transactions as $txn) {
-                $isDebit = strtoupper($txn->dr_cr) === 'DR';
-                $debit = abs($txn->debit_amount ?? 0);
-                $credit = abs($txn->credit_amount ?? 0);
-                $balance += $credit - $debit;
-
-                $statementEntries[] = [
-                    'date' => $txn->date_time,
-                    'reference' => $txn->invoice_number ?: ($txn->receipt_number ?: ($txn->entry_ref ?: '-')),
-                    'narration' => $txn->narration ?: ($isDebit ? 'Invoice' : 'Payment'),
-                    'debit' => $debit,
-                    'credit' => $credit,
-                    'type' => $isDebit ? 'invoice' : 'payment',
-                    'balance' => $balance,
-                    'date_formatted' => $txn->date_time ? date('d-m-Y', strtotime($txn->date_time)) : '-',
-                    'debit_formatted' => $debit > 0 ? number_format($debit, 2) : '-',
-                    'credit_formatted' => $credit > 0 ? number_format($credit, 2) : '-',
-                    'balance_formatted' => number_format($balance, 2),
-                ];
-            }
-
-            $data = [
-                'tenantInfo' => $tenantInfo,
-                'statement' => $statementEntries,
-                'dateFrom' => $dateFrom ? date('d M Y', strtotime($dateFrom)) : 'Beginning',
-                'dateTo' => $dateTo ? date('d M Y', strtotime($dateTo)) : 'Today',
-            ];
 
             $pdf = Pdf::loadView('property.invoices.tenant-statement-pdf', $data)
                 ->setPaper('A4', 'portrait')
                 ->setOption(['enable_font_subsetting' => true]);
 
-            // Render first so the page numbers can be written on every page
+            // Render first so the page numbers can be written on every page.
             $pdf->render();
             $this->addPdfPageNumbers($pdf->getDomPDF());
 
-            $fileName = 'Tenant_Statement_' . ($tenant->reference_number ?? $tenantId) . '_' . date('Y-m-d') . '.pdf';
-
-            return $pdf->download($fileName);
+            return $pdf->download($data['fileName'] . '.pdf');
         } catch (Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error exporting tenant statement PDF: ' . $e->getMessage());
+
             return redirect()->back()->with('error', 'Failed to export tenant statement PDF');
         }
+    }
+
+    private function statementTenantId(Request $request): int
+    {
+        try {
+            return (int) Crypt::decrypt($request->input('tenant_id'));
+        } catch (\Illuminate\Contracts\Encryption\DecryptException $e) {
+            return (int) $request->input('tenant_id');
+        }
+    }
+
+    private function statementFilters(Request $request): array
+    {
+        $propertyId = $request->filled('property_id') ? (int) $request->input('property_id') : null;
+        $dateType = $request->input('date_type', 'range');
+        $dateFrom = $request->input('date_from');
+        $dateTo = $request->input('date_to');
+
+        if ($dateType === 'range' && $dateFrom && $dateTo) {
+            return [$propertyId, $dateFrom, $dateTo];
+        }
+
+        return [$propertyId, null, $dateType === 'end' && $dateTo ? $dateTo : null];
+    }
+
+    private function tenantStatementExportData(Request $request, TenantStatementService $statements): ?array
+    {
+        $tenant = Client::find($this->statementTenantId($request));
+        if ($tenant === null) {
+            return null;
+        }
+
+        [$propertyId, $dateFrom, $dateTo] = $this->statementFilters($request);
+        $property = null;
+        $units = '';
+        if ($propertyId !== null) {
+            $property = Property::find($propertyId);
+            $leases = LeaseAgreement::where('tenant_id', $tenant->id)
+                ->where('property_id', $propertyId)
+                ->with('unit:id,unit_number,unit_name')
+                ->get(['unit_id']);
+            $units = $this->statementUnitLabels($leases)->implode(', ');
+        }
+
+        return $statements->build($tenant->id, $propertyId, $dateFrom, $dateTo) + [
+            'tenantInfo' => [
+                'tenant_name' => $tenant->names ?? 'N/A',
+                'tenant_email' => $tenant->email_address ?? 'N/A',
+                'tenant_phone' => $tenant->mobile_number ?? 'N/A',
+                'property_name' => $propertyId === null ? 'All properties' : ($property?->property_name ?? 'N/A'),
+                'unit_name' => $units ?: 'N/A',
+            ],
+            'dateFrom' => $dateFrom ? date('d M Y', strtotime($dateFrom)) : 'Beginning',
+            'dateTo' => $dateTo ? date('d M Y', strtotime($dateTo)) : 'Present',
+            'fileName' => 'Tenant_Statement_' . ($tenant->reference_number ?? $tenant->id) . '_' . date('Y-m-d'),
+        ];
+    }
+
+    private function statementUnitLabels(Collection $leases): Collection
+    {
+        return $leases->map(function ($lease) {
+            $number = $lease->unit?->unit_number;
+
+            return filled($number) ? $number : $lease->unit?->unit_name;
+        })->filter(fn($label) => filled($label))->unique()->sort(SORT_NATURAL | SORT_FLAG_CASE)->values();
     }
 
     /**
