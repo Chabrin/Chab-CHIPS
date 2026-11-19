@@ -302,6 +302,7 @@ class LeasesController extends Controller
      */
     public function renewLease(Request $request, $id)
     {
+        \App\Services\TenantReviewService::assertLeaseEditable((int) $id);
         DB::beginTransaction();
         try {
             $validated = $request->validate([
@@ -477,6 +478,7 @@ class LeasesController extends Controller
             // re-fetches it internally for zone_id, but failing fast here keeps
             // the same "property not found" behavior this method always had).
             Property::findOrFail($validated['property_id']);
+            \App\Services\TenantReviewService::assertTenantEditable((int) $validated['tenant_id']);
 
             // A lease always needs an SLA — same guarantee the old required "SLA Ref"
             // dropdown gave, just enforced here now that it's derived, not picked.
@@ -683,6 +685,7 @@ class LeasesController extends Controller
      */
     public function update(Request $request, $id)
     {
+        \App\Services\TenantReviewService::assertLeaseEditable((int) $id);
         DB::beginTransaction();
         try {
             $lease = LeaseAgreement::findOrFail($id);
@@ -756,6 +759,7 @@ class LeasesController extends Controller
      */
     public function cancel(Request $request, $id)
     {
+        \App\Services\TenantReviewService::assertLeaseEditable((int) $id);
         DB::beginTransaction();
         try {
             $lease = LeaseAgreement::findOrFail($id);
@@ -1056,6 +1060,7 @@ class LeasesController extends Controller
      */
     public function updateSetupLease(Request $request, $id)
     {
+        \App\Services\TenantReviewService::assertLeaseEditable((int) $id);
         try {
             $lease = LeaseAgreement::findOrFail($id);
 
@@ -1104,6 +1109,7 @@ class LeasesController extends Controller
     public function activateSetupLease($id)
     {
         try {
+            \App\Services\TenantReviewService::assertLegacy((int) $id, 'lease');
             $lease = LeaseAgreement::findOrFail($id);
 
             if (!$lease->sla_id || (!$lease->date_end && !$lease->open_ended)) {
@@ -1134,6 +1140,7 @@ class LeasesController extends Controller
                 ->whereNotNull('l.sla_id')
                 ->where(fn ($q) => $q->whereNotNull('l.date_end')->orWhere('l.open_ended', true));
             $this->scopeUnresolvedMismatch($query, false);
+            \App\Services\TenantReviewService::legacyOnly($query, 'l.id', 'lease');
 
             $leaseIds = $request->input('lease_ids');
             if (is_array($leaseIds) && count($leaseIds)) {

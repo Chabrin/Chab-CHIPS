@@ -353,6 +353,16 @@ class PaymentAllocationService
             'return_updated' => false,
         ];
 
+        // Serialize allocation with onboarding invoice cancellation.
+        $lockedInvoice = DB::table('sys_pm_debtors_invoices')->where('id', $invoice->id)->lockForUpdate()->first();
+        if (!$lockedInvoice || (int) $lockedInvoice->current_status_id === 3) {
+            return $empty;
+        }
+        if (\Illuminate\Support\Facades\Schema::hasTable('tenant_reviews')
+            && \App\Models\TenantReview::where('lease_id', $lockedInvoice->lease_id)->where('stage', 'rejected')->exists()) {
+            return $empty;
+        }
+
         // (i) Resolve current balances fresh from the DB (or use caller's pre-computed value)
         $available      = $precomputedBalance
             ?? $this->calculatePaymentBalance($payment->id, (float) $payment->amount);

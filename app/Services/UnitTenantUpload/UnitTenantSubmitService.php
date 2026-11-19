@@ -228,6 +228,7 @@ class UnitTenantSubmitService
             'escalation_frequency' => 'Annually',
         ]);
 
+        app(\App\Services\TenantReviewService::class)->register($tenant, $lease, \App\Models\User::findOrFail($userId));
         $tenantRow->update(['submitted_at' => now(), 'tenant_id' => $tenant->id, 'lease_id' => $lease->id, 'error' => null]);
     }
 

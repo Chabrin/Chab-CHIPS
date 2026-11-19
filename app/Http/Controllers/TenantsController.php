@@ -298,10 +298,12 @@ class TenantsController extends Controller
      */
     public function store(Request $request)
     {
+        $commitAttempted = false;
         DB::beginTransaction();
         try {
             $validated = $this->validateTenantRequest($request);
             $this->validateIndividualOrCompanyFields($validated);
+            app(\App\Services\TenantReviewService::class)->assertPreparer((int) $validated['property_id'], $request->user());
             $validated['sla_ref'] = $this->resolveSlaId($validated['property_id']);
             $validated['rent_amount'] = $this->resolveRentAmount($validated['unit_id']);
             Log::info('Validated tenant data: ' . json_encode($validated));
@@ -319,7 +321,7 @@ class TenantsController extends Controller
             // getUnitsByProperty's ?vacant_only=1), but that's client-side — re-check
             // here so a unit that picked up an active lease between page load and
             // submit (or a direct POST) can't be double-assigned.
-            $unit = Unit::findOrFail($validated['unit_id']);
+            $unit = Unit::where('property_id', $validated['property_id'])->lockForUpdate()->findOrFail($validated['unit_id']);
             if (!$unit->isVacant()) {
                 throw \Illuminate\Validation\ValidationException::withMessages([
                     'unit_id' => ['Selected unit is no longer vacant — it already has an active lease.'],
@@ -369,18 +371,33 @@ class TenantsController extends Controller
             $this->saveMoveInInspection($request, $tenant, $validated);
             Log::info('Move-in inspection processed for tenant ID: ' . $tenant->id);
 
+            $review = app(\App\Services\TenantReviewService::class)->register($tenant, $leaseAgreement, $request->user());
+
+            $commitAttempted = true;
             DB::commit();
 
-            return redirect()->route('property.tenants.show', Crypt::encrypt($tenant->id))
-                ->with('success', 'Tenant created successfully!');
+            if ($request->expectsJson()) {
+                return response()->json(['success' => true, 'redirect' => route('tenant-reviews.show', $review)]);
+            }
+            return redirect()->route('tenant-reviews.show', $review)
+                ->with('success', 'Tenant saved and signed. '.$review->stageLabel().'.');
         } catch (\Illuminate\Validation\ValidationException $e) {
             DB::rollBack();
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'save_state' => 'not_saved', 'errors' => $e->errors()], 422);
+            }
             return redirect()->back()->withErrors($e->errors())->withInput();
         } catch (\Exception $e) {
             DB::rollBack();
             ErrorDispatcher::dispatch($e);
             Log::error('Error creating tenant: ' . $e->getMessage());
-            return redirect()->back()->with('error', 'Failed to create tenant: ' . $e->getMessage())->withInput();
+            $message = $commitAttempted
+                ? 'The save could not be confirmed. Check New Tenant Approvals before trying again.'
+                : 'The tenant could not be saved. Your details are still available. Please try again or report this error.';
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'save_state' => $commitAttempted ? 'unconfirmed' : 'not_saved', 'message' => $message], 500);
+            }
+            return redirect()->back()->with('error', $message)->withInput();
         }
     }
 
@@ -514,6 +531,7 @@ class TenantsController extends Controller
      */
     public function assignUnit(Request $request, $encryptedId)
     {
+        \App\Services\TenantReviewService::assertTenantEditable((int) Crypt::decrypt($encryptedId));
         try {
             $tenantId = Crypt::decrypt($encryptedId);
             // withAll(): a pending-unit tenant has no property yet, so the model's
@@ -521,6 +539,7 @@ class TenantsController extends Controller
             // property assignment to grant visibility) would never match it —
             // bypass it here the same way generateTenantReferenceNumber() does.
             $tenant = Client::withAll()->tenants()->findOrFail($tenantId);
+            \App\Services\TenantReviewService::assertTenantEditable((int) $tenantId);
 
             $validated = $request->validate([
                 'unit_id' => 'required|integer|exists:sys_pm_units,id',
@@ -1512,10 +1531,19 @@ class TenantsController extends Controller
         DB::beginTransaction();
         try {
             $id = Crypt::decrypt($encryptedId);
+            $review = app(\App\Services\TenantReviewService::class)->lockForCorrection($id, $request->user());
+            if ($review) {
+                $request->validate(['review_revision' => 'required|integer']);
+                abort_unless((int) $request->input('review_revision') === $review->revision, 409, 'This correction has changed. Refresh the form.');
+            }
             $tenant = Client::findOrFail($id);
 
             // Validate the request
             $validated = $this->validateTenantEditRequest($request);
+            if ($review && ((int) $validated['property_id'] !== (int) $review->lease->property_id
+                || (int) $validated['unit_id'] !== (int) $review->lease->unit_id)) {
+                throw \Illuminate\Validation\ValidationException::withMessages(['unit_id' => 'Correct this onboarding against its reserved property and unit.']);
+            }
             $this->validateIndividualOrCompanyFields($validated);
             $validated['sla_ref'] = $this->resolveSlaId($validated['property_id']);
             $validated['rent_amount'] = $this->resolveRentAmount($validated['unit_id']);
@@ -1539,8 +1567,21 @@ class TenantsController extends Controller
             $this->updateDocuments($request, $tenant->id);
             $this->updateNextOfKin($request, $tenant->id);
 
+            if ($review) {
+                $lease = $review->lease;
+                $lease->date_start = $validated['lease_start_date'];
+                $lease->date_end = $lease->open_ended ? null : \Carbon\Carbon::parse($validated['lease_start_date'])->addYears((int) $validated['lease_years']);
+                $lease->fill(['years' => $validated['lease_years'], 'sla_id' => $validated['sla_ref'],
+                    'escalation_rate' => $validated['escalation_rate'] ?? 0,
+                    'escalation_frequency' => $validated['frequency']])->save();
+                app(\App\Services\TenantReviewService::class)->resubmit($review, $request->user());
+            }
+
             DB::commit();
 
+            if ($review) {
+                return redirect()->route('tenant-reviews.show', $review)->with('success', 'Corrections signed. '.$review->stageLabel().'.');
+            }
             return redirect()->route('property.tenants.show', Crypt::encrypt($tenant->id))
                 ->with('success', 'Tenant updated successfully');
         } catch (\Illuminate\Validation\ValidationException $e) {
@@ -1781,6 +1822,7 @@ class TenantsController extends Controller
     {
         try {
             $document = ClientDocument::findOrFail($id);
+            app(\App\Services\TenantReviewService::class)->lockForCorrection((int) $document->parent_id, request()->user());
 
             // Delete file from storage
             if ($document->documents && Storage::disk('public')->exists($document->documents)) {

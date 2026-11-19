@@ -75,6 +75,13 @@ use App\Http\Controllers\PayrollMonthlyController;
 
 
 Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
+    Route::get('/approvals/new-tenants', [\App\Http\Controllers\TenantReviewController::class, 'index'])->name('tenant-reviews.index');
+    Route::get('/approvals/setup', [\App\Http\Controllers\TenantReviewController::class, 'setup'])->name('tenant-reviews.setup');
+    Route::post('/approvals/setup/tenant-onboarding', [\App\Http\Controllers\TenantReviewController::class, 'publish'])->name('tenant-reviews.publish');
+    Route::get('/approvals/new-tenants/{review}', [\App\Http\Controllers\TenantReviewController::class, 'show'])->name('tenant-reviews.show');
+    Route::post('/approvals/new-tenants/{review}/decision', [\App\Http\Controllers\TenantReviewController::class, 'decide'])->name('tenant-reviews.decide');
+    Route::post('/approvals/new-tenants/{review}/resubmit', [\App\Http\Controllers\TenantReviewController::class, 'resubmit'])->name('tenant-reviews.resubmit');
+    Route::post('/approvals/new-tenants/{review}/reconcile', [\App\Http\Controllers\TenantReviewController::class, 'reconcile'])->name('tenant-reviews.reconcile');
 
     // Staff messaging
     Route::get('/staff-messaging', [\App\Http\Controllers\StaffMessagingController::class, 'index'])->name('staff-messaging.index');
