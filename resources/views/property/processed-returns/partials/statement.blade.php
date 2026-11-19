@@ -1,4 +1,26 @@
 <div class="return-statement">
+    @php($settlementAmounts = array_column($settlementRows, 'amount', 'key'))
+    <section class="border rounded p-3 mb-3" aria-labelledby="return-overview-title">
+        <h6 class="mb-2" id="return-overview-title">Return at a glance</h6>
+        <dl class="row g-2 mb-0">
+            <div class="col-6 col-lg-3">
+                <dt class="text-muted fw-normal">Service charges</dt>
+                <dd class="fw-semibold mb-0">{{ number_format($totals['service_charge'], 2) }}</dd>
+            </div>
+            <div class="col-6 col-lg-3">
+                <dt class="text-muted fw-normal">Commission ({{ number_format($return->commission_rate ?? 0, 2) }}%)</dt>
+                <dd class="fw-semibold mb-0">{{ number_format($summary['commission'], 2) }}</dd>
+            </div>
+            <div class="col-6 col-lg-3">
+                <dt class="text-muted fw-normal">Recoveries and landlord deductions</dt>
+                <dd class="fw-semibold mb-0">{{ number_format($settlementAmounts['recoveries'] + $settlementAmounts['landlord_deductions'], 2) }}</dd>
+            </div>
+            <div class="col-6 col-lg-3">
+                <dt class="text-muted fw-normal">Amount payable</dt>
+                <dd class="fw-semibold mb-0">{{ number_format($settlementAmounts['payable'], 2) }}</dd>
+            </div>
+        </dl>
+    </section>
     <div class="table-responsive border rounded">
         <table class="table table-sm align-middle mb-0 statement-table">
             <colgroup>

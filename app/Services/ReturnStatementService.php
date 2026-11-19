@@ -297,13 +297,13 @@ class ReturnStatementService
         $overdraft = round((float) ($return->amount_overdraft ?? 0), 2);
 
         $rows = $recoveries;
-        $rows[] = ['strong', 'I. Total deductions', '', '', $recoveriesTotal];
+        $rows[] = ['strong', 'I. Total deductions', '', '', $recoveriesTotal, 'key' => 'recoveries'];
         $rows[] = ['strong', 'J. Nett income (H - I)', '', '', $nettIncome];
         $rows = array_merge($rows, $opening);
         $rows[] = ['strong', 'K. Add opening balance and other receipts', '', '', $openingTotal];
         $rows = array_merge($rows, $deductions);
-        $rows[] = ['strong', 'L. Total deductions from landlord account', '', '', $deductionsTotal];
-        $rows[] = ['closing', 'M. Amount payable (J + K - L)', '', '', $payable];
+        $rows[] = ['strong', 'L. Total deductions from landlord account', '', '', $deductionsTotal, 'key' => 'landlord_deductions'];
+        $rows[] = ['closing', 'M. Amount payable (J + K - L)', '', '', $payable, 'key' => 'payable'];
         $rows[] = ['plain', 'N. Less overdraft charge', '', '', $overdraft];
         $rows[] = ['closing', 'O. Nett balance (M - N)', '', '', round($payable - $overdraft, 2)];
 
@@ -312,7 +312,11 @@ class ReturnStatementService
             $rows[] = ['gap', 'Lines differ from the return\'s stored net amount of ' . number_format((float) $stored, 2) . ' by', '', '', round($payable - (float) $stored, 2)];
         }
 
-        return array_map(fn($row) => array_combine(['kind', 'label', 'ref', 'date', 'amount'], array_slice($row, 0, 5)), $rows);
+        return array_map(function ($row) {
+            $values = array_combine(['kind', 'label', 'ref', 'date', 'amount'], array_slice($row, 0, 5));
+
+            return isset($row['key']) ? $values + ['key' => $row['key']] : $values;
+        }, $rows);
     }
 
     /**

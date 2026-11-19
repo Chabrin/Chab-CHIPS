@@ -409,10 +409,12 @@ class ClientReturnsController extends Controller
                 ->map(fn($c) => trim((string) $c->property_code . ($c->property_name ? ' - ' . $c->property_name : '')))
                 ->filter()
                 ->implode(', ');
+            $heading = date('F Y', mktime(0, 0, 0, (int) $return->month, 1, (int) $return->year)) . ' - Merged Return';
         } else {
             $propertyName = $return->property_name
                 ?: DB::table('sys_pm_properties')->where('reference_number', $return->property_code)->value('property_name');
             $propertyLabel = trim((string) ($return->property_code ?? '') . ($propertyName ? ' - ' . $propertyName : ''));
+            $heading = $this->propertyReturnExportInfo($return, $propertyName)['title'];
         }
 
         $period = $isMaster
@@ -421,6 +423,7 @@ class ClientReturnsController extends Controller
 
         return [
             'return_code'    => $return->return_code,
+            'heading'        => $heading,
             'property_label' => $propertyLabel !== '' ? $propertyLabel : '-',
             'landlord_label' => $landlordLabel !== '' ? $landlordLabel : '-',
             'period'         => $period,
@@ -513,6 +516,7 @@ class ClientReturnsController extends Controller
                 'return' => [
                     'id' => encrypt($return->id),
                     'return_code' => $return->return_code,
+                    'heading' => $headerInfo['heading'],
                     'property_code' => $return->property_code ?? '-',
                     'property_label' => $headerInfo['property_label'],
                     'landlord_code' => $return->landlord_code,
@@ -1586,6 +1590,7 @@ class ClientReturnsController extends Controller
                 'return' => [
                     'id' => encrypt($return->id),
                     'return_code' => $return->return_code,
+                    'heading' => $headerInfo['heading'],
                     'property_code' => $return->property_code ?? '-',
                     'property_label' => $headerInfo['property_label'],
                     'landlord_code' => $return->landlord_code,
