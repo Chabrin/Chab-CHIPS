@@ -40,16 +40,35 @@
                         </div>
                         @endif
 
-                        <div class="property-directory-filters" role="group" aria-label="Filter properties">
-                            <label for="property-search">Search properties
-                                <input id="property-search" class="form-control" type="search" placeholder="Name, reference, zone or client" aria-controls="propertiesTable">
-                            </label>
-                            <label for="property-zone">Zone
+                        <div class="property-directory-filters property-search-controls" role="search" aria-label="Search properties">
+                            <div class="property-search-field">
+                                <label for="property-search">Search properties</label>
+                                <div class="property-search-input">
+                                    <input id="property-search" class="form-control" type="search" placeholder="Property name, reference, client or zone" autocomplete="off" aria-controls="propertiesTable">
+                                    <button id="property-search-clear" class="btn property-search-clear" type="button" aria-label="Clear search" title="Clear search" hidden>
+                                        <span class="material-symbols-outlined" aria-hidden="true">close</span>
+                                    </button>
+                                </div>
+                            </div>
+                            <div>
+                                <label for="property-zone">Zone</label>
                                 <select id="property-zone" class="form-select" aria-controls="propertiesTable"><option value="">All zones</option></select>
-                            </label>
-                            <label for="property-client">Client
-                                <select id="property-client" class="form-select" aria-controls="propertiesTable"><option value="">All clients</option></select>
-                            </label>
+                            </div>
+                            <div>
+                                <label for="property-client" id="property-client-label">Client</label>
+                                <select id="property-client" class="form-select" aria-controls="propertiesTable"><option value=""></option></select>
+                            </div>
+                        </div>
+                        <div id="property-active-filters" class="property-active-filters" role="group" aria-label="Active property filters" hidden>
+                            <button class="btn property-filter-chip" type="button" data-remove-filter="zone" hidden>
+                                <span class="property-filter-name"></span>
+                                <span class="material-symbols-outlined" aria-hidden="true">close</span>
+                            </button>
+                            <button class="btn property-filter-chip" type="button" data-remove-filter="client" hidden>
+                                <span class="property-filter-name"></span>
+                                <span class="material-symbols-outlined" aria-hidden="true">close</span>
+                            </button>
+                            <button id="property-filters-clear" class="btn property-filters-clear" type="button" hidden>Clear filters</button>
                         </div>
                         <div class="table-responsive custom-scrollbar">
                             <table id="propertiesTable" class="display" style="width:100%;">
@@ -74,27 +93,69 @@
 <script>
     $(document).ready(function() {
         const escapeText = $.fn.dataTable.render.text().display;
+        const search = document.getElementById('property-search');
+        const clearSearch = document.getElementById('property-search-clear');
+        const activeFilters = document.getElementById('property-active-filters');
+        const clearFilters = document.getElementById('property-filters-clear');
+        const zone = document.getElementById('property-zone');
+        const client = document.getElementById('property-client');
         const filters = [
-            { select: document.getElementById('property-zone'), field: 'zone_name', column: 1 },
-            { select: document.getElementById('property-client'), field: 'client_name', column: 2 }
+            { select: zone, label: 'Zone', name: 'zone_name', value: row => row.zone_name, chip: activeFilters.querySelector('[data-remove-filter="zone"]') },
+            { select: client, label: 'Client', name: 'client_name', value: row => String(row.client_id ?? '-'), chip: activeFilters.querySelector('[data-remove-filter="client"]') }
         ];
+        let searchTerms = [];
+
+        function normalize(value) {
+            return String(value ?? '').normalize('NFD').replace(/\p{M}/gu, '')
+                .toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+        }
+
+        function words(value) {
+            return normalize(value).split(' ').filter(Boolean);
+        }
+
+        function renderActiveFilters() {
+            let count = 0;
+            filters.forEach(({ select, label, chip }) => {
+                chip.hidden = !select.value;
+                if (chip.hidden) return;
+
+                const name = select.selectedOptions[0].text;
+                chip.querySelector('.property-filter-name').textContent = `${label}: ${name}`;
+                chip.setAttribute('aria-label', `Remove ${label.toLowerCase()} filter: ${name}`);
+                count++;
+            });
+            activeFilters.hidden = count === 0;
+            clearFilters.hidden = count < 2;
+        }
+
+        const $client = $(client).select2({
+            placeholder: 'All clients',
+            width: '100%',
+            dropdownParent: $(client.parentElement),
+            matcher: function(params, option) {
+                const name = normalize(option.text);
+                return words(params.term).every(term => name.includes(term)) ? option : null;
+            }
+        });
+        const clientControl = client.nextElementSibling.querySelector('[role="combobox"]');
+        clientControl.setAttribute('aria-labelledby', `property-client-label ${clientControl.getAttribute('aria-labelledby')}`);
 
         const table = $('#propertiesTable').DataTable({
             processing: true,
             ajax: {
                 url: "{{ route($inactive ? 'property.properties.inactive.data' : 'property.properties.data') }}",
                 dataSrc: function(response) {
-                    filters.forEach(({ select, field }) => {
+                    filters.forEach(({ select, name, value }) => {
                         const selected = select.value;
-                        const values = [...new Set(response.data.map(row => row[field]).filter(Boolean))]
-                            .sort((a, b) => a.localeCompare(b));
+                        const options = new Map(response.data.map(row => [value(row), row[name]]));
                         select.options.length = 1;
-                        values.forEach(value => select.add(new Option(value, value)));
-                        if (selected && !values.includes(selected)) {
-                            select.add(new Option(selected, selected));
-                        }
-                        select.value = selected;
+                        [...options].sort(([, a], [, b]) => a.localeCompare(b))
+                            .forEach(([id, text]) => select.add(new Option(text, id)));
+                        select.value = options.has(selected) ? selected : '';
                     });
+                    $client.trigger('change.select2');
+                    renderActiveFilters();
                     return response.data;
                 }
             },
@@ -161,20 +222,50 @@
                 info: '_START_–_END_ of _TOTAL_ properties',
                 infoEmpty: '0 properties',
                 emptyTable: @json($inactive ? 'No inactive properties are available.' : 'No properties are available.'),
-                zeroRecords: 'No properties match your search and filters.'
+                zeroRecords: 'No matching properties. Try a different search or remove a filter.'
             },
             order: [[0, 'asc']]
         });
 
-        $('#property-search').on('input', function() {
-            table.search(this.value).draw();
+        table.search.fixed('property-directory', function(_, row) {
+            if (filters.some(({ select, value }) => select.value && select.value !== value(row))) return false;
+            if (!searchTerms.length) return true;
+
+            const searchable = normalize([row.property_name, row.reference_number, row.zone_name, row.client_name].join(' '));
+            const compactReference = normalize(row.reference_number).replaceAll(' ', '');
+            return searchTerms.every(term => searchable.includes(term) || compactReference.includes(term));
         });
 
-        filters.forEach(({ select, field, column }) => {
-            select.addEventListener('change', function() {
-                const selected = this.value;
-                table.column(column).search(selected ? (_, row) => row[field] === selected : '').draw();
+        function updateSearch() {
+            searchTerms = words(search.value);
+            clearSearch.hidden = !search.value;
+            table.draw();
+        }
+
+        search.addEventListener('input', updateSearch);
+        clearSearch.addEventListener('click', function() {
+            search.value = '';
+            updateSearch();
+            search.focus();
+        });
+
+        function updateFilters() {
+            renderActiveFilters();
+            table.draw();
+        }
+
+        filters.forEach(({ select, chip }) => {
+            $(select).on('change', updateFilters);
+            chip.addEventListener('click', function() {
+                $(select).val('').trigger('change');
+                (select === client ? clientControl : select).focus();
             });
+        });
+
+        clearFilters.addEventListener('click', function() {
+            zone.value = '';
+            $client.val('').trigger('change');
+            search.focus();
         });
 
         @unless($inactive)
