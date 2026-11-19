@@ -1,251 +1,291 @@
-﻿@extends('layouts.main')
+@extends('layouts.main')
+
 @section('content')
 <div class="page-body" style="padding-top:10px;">
     <div class="container-fluid">
-        <div class="row">
-            <div class="col-sm-12">
-                <div class="card">
-                    <div class="card-header card-no-border d-flex align-items-center justify-content-between">
-                        <h5 class="mb-0">Tenant Payments (Allocated)</h5>
+        <section class="card" aria-labelledby="payment-page-title">
+            <div class="card-header">
+                <h5 id="payment-page-title">Tenant Payments (Allocated)</h5>
+            </div>
+            <div class="card-body">
+                <form id="payment_filters" data-today="{{ now()->toDateString() }}" novalidate>
+                    <div class="row g-3 align-items-end">
+                        <div class="col-lg-4 col-md-6">
+                            <label for="property_select" class="form-label mb-1">Property</label>
+                            <select class="form-select form-select-sm" id="property_select" required>
+                                <option value=""></option>
+                                @foreach($properties as $prop)
+                                    <option value="{{ $prop->id }}">{{ $prop->property_name }}{{ $prop->reference_number ? ' (' . $prop->reference_number . ')' : '' }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="col-lg-2 col-md-6">
+                            <label for="period_select" class="form-label mb-1">Period</label>
+                            <select class="form-select form-select-sm" id="period_select">
+                                <option value="custom">Custom dates</option>
+                                <option value="this_month">This month</option>
+                                <option value="last_month">Last month</option>
+                                <option value="last_90_days">Last 90 days</option>
+                            </select>
+                        </div>
+                        <div class="col-lg-2 col-6">
+                            <label for="date_from" class="form-label mb-1">From</label>
+                            <input type="date" class="form-control form-control-sm" id="date_from" required>
+                        </div>
+                        <div class="col-lg-2 col-6">
+                            <label for="date_to" class="form-label mb-1">To</label>
+                            <input type="date" class="form-control form-control-sm" id="date_to" required>
+                        </div>
+                        <div class="col-lg-auto">
+                            <button type="submit" class="btn btn-primary btn-sm d-inline-flex align-items-center gap-1" id="search_btn">
+                                <span class="material-symbols-outlined" aria-hidden="true">search</span>
+                                Search payments
+                            </button>
+                        </div>
                     </div>
-                    <div class="card-body">
-                        <!-- Filters - condensed single row -->
-                        <div class="row">
-                            <div class="col-md-4">
-                                <label for="property_select" class="form-label mb-1">Property <span class="text-danger">*</span></label>
-                                <select class="form-control form-control-sm" id="property_select" style="width:100%;">
-                                    <option value="">-- Select Property --</option>
-                                    @foreach($properties as $prop)
-                                    <option value="{{ $prop->id }}">{{ $prop->property_name }} ({{ $prop->reference_number ?? '' }})</option>
-                                    @endforeach
-                                </select>
-                            </div>
-                            <div class="col-md-4">
-                                <label for="date_from" class="form-label mb-1">From <span class="text-danger">*</span></label>
-                                <input type="date" class="form-control form-control-sm" id="date_from">
-                            </div>
-                            <div class="col-md-4">
-                                <label for="date_to" class="form-label mb-1">To <span class="text-danger">*</span></label>
-                                <input type="date" class="form-control form-control-sm" id="date_to">
-                            </div>
-                            
-                        </div>
-                        <div class=" d-flex gap-2 justify-content-end align-items-end">
-                            <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="search_btn">
-                                <span class="spinner-border spinner-border-sm" role="status" id="search_spinner" style="display:none;"></span>
-                                <span class="material-symbols-outlined" id="search_icon">search</span>
-                                <span class="ms-1">Search</span>
-                            </button>
-                            <button type="button" class="btn btn-success btn-sm d-flex align-items-center" id="export_btn" disabled>
-                                <span class="spinner-border spinner-border-sm" role="status" id="export_spinner" style="display:none;"></span>
-                                <span class="material-symbols-outlined" id="export_icon">download</span>
-                                <span class="ms-1">Excel</span>
-                            </button>
-                        </div>
-                        <small class="text-muted d-block mb-2">Select a property and date range, then search.</small>
+                    <p class="text-danger mt-2 mb-0" id="payment_error" role="alert" hidden></p>
+                    <p class="text-muted mt-3 mb-0" id="payment_status" role="status">Choose a property and date range to see allocated payments.</p>
+                </form>
+            </div>
+        </section>
 
-                        <div id="results_area">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <small class="text-muted" id="result_info" style="display:none;">Found <strong id="result_count">0</strong> records</small>
-                            </div>
-                            <div class="table-responsive custom-scrollbar">
-                                <table class="display" id="payments-table" style="width:100%;">
-                                    <thead>
-                                        <tr>
-                                            <th>#</th>
-                                            <th>Date</th>
-                                            <th>Tenant</th>
-                                            <th>Narration</th>
-                                            <th class="text-end">Allocated</th>
-                                            <th class="text-end">Trans Amt</th>
-                                            <th>Mode</th>
-                                            <th>Channel</th>
-                                            <th>Remarks</th>
-                                        </tr>
-                                        <tr class="column-filters">
-                                            <th></th>
-                                            <th></th>
-                                            <th><input type="text" class="form-control form-control-sm" placeholder="-- Search --" /></th>
-                                            <th><input type="text" class="form-control form-control-sm" placeholder="-- Search --" /></th>
-                                            <th></th>
-                                            <th></th>
-                                            <th></th>
-                                            <th></th>
-                                            <th><input type="text" class="form-control form-control-sm" placeholder="-- Search --" /></th>
-                                        </tr>
-                                    </thead>
-                                    <tbody></tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
+        <section class="card" id="results_area" aria-labelledby="payments-results-title" hidden>
+            <div class="card-header">
+                <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between">
+                    <h5 id="payments-results-title">Allocated payments</h5>
+                    <button type="button" class="btn btn-outline-primary btn-sm d-inline-flex align-items-center gap-1" id="export_btn" disabled>
+                        <span class="material-symbols-outlined" aria-hidden="true">download</span>
+                        Export period to Excel
+                    </button>
                 </div>
             </div>
-        </div>
+            <div class="card-body">
+                <p class="mb-3" id="payment_scope"></p>
+                <div class="row g-3 align-items-end mb-3">
+                    <div class="col-sm">
+                        <dl class="d-flex flex-wrap gap-4 mb-0">
+                            <div>
+                                <dt class="text-muted fw-normal">Allocation records</dt>
+                                <dd class="fw-semibold mb-0" id="result_count"></dd>
+                            </div>
+                            <div>
+                                <dt class="text-muted fw-normal">Total allocated for period (KES)</dt>
+                                <dd class="fw-semibold mb-0" id="allocated_total"></dd>
+                            </div>
+                        </dl>
+                    </div>
+                    <div class="col-sm-5 col-lg-4">
+                        <label for="payment_search" class="form-label mb-1">Search within results</label>
+                        <input type="search" class="form-control form-control-sm" id="payment_search"
+                               placeholder="Tenant, narration, channel or remarks" aria-controls="payments-table">
+                    </div>
+                </div>
+
+                <div class="table-responsive custom-scrollbar" tabindex="0" role="region" aria-label="Allocated payment records">
+                    <table class="display w-100" id="payments-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">#</th>
+                                <th scope="col">Date</th>
+                                <th scope="col">Tenant</th>
+                                <th scope="col">Narration</th>
+                                <th scope="col" class="text-end">Allocated amount</th>
+                                <th scope="col" class="text-end">Transaction amount</th>
+                                <th scope="col">Payment mode</th>
+                                <th scope="col">Channel</th>
+                                <th scope="col">Remarks</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
     </div>
 </div>
 @endsection
 
 @section('scripts')
 <script>
-    $(document).ready(function() {
-        // Init DataTable empty on page load
-        var tableColumns = [{
-                data: null,
-                orderable: false,
-                searchable: false,
-                render: function(d, t, r, m) {
-                    return m.row + 1;
-                }
-            },
-            {
-                data: 'date_time'
-            },
-            {
-                data: 'tenant_name'
-            },
-            {
-                data: 'narration',
-                render: function(d) {
-                    return '<small>' + (d || '-') + '</small>';
-                }
-            },
-            {
-                data: 'amount',
-                className: 'text-end'
-            },
-            {
-                data: 'trans_amount',
-                className: 'text-end'
-            },
-            {
-                data: 'payment_mode'
-            },
-            {
-                data: 'payment_channel'
-            },
-            {
-                data: 'trans_remarks',
-                render: function(d) {
-                    return '<small>' + (d || '-') + '</small>';
-                }
-            }
-        ];
-
-        var table = $('#payments-table').DataTable({
-            data: [],
-            columns: tableColumns,
-            paging: true,
-            info: true,
-            lengthChange: true,
-            searching: true,
-            ordering: true,
-            orderCellsTop: true,
-            order: [
-                [1, 'asc']
-            ],
-            pageLength: 50
-        });
-
-        // Client-side column filters
-        $('#payments-table thead .column-filters input').on('keyup change', function() {
-            var colIdx = $(this).closest('th').index();
-            table.column(colIdx).search(this.value).draw();
-        });
-
-        // Init Select2 for property
-        $('#property_select').select2({
-            placeholder: '-- Select Property --',
+    $(function() {
+        const form = $('#payment_filters');
+        const propertyPicker = $('#property_select').select2({
+            placeholder: 'Search by property name or reference',
             allowClear: true,
             width: '100%'
         });
+        const selection = propertyPicker.next('.select2').find('.select2-selection');
+        const propertyLabel = $('label[for="property_select"]').attr('id', 'payment_property_label');
+        selection.attr('aria-labelledby', propertyLabel.attr('id') + ' ' + selection.attr('aria-labelledby'));
 
-        function validateDates(from, to) {
-            if (new Date(to) < new Date(from)) {
-                alert('The end date must be on or after the start date.');
-                return false;
+        const from = $('#date_from');
+        const to = $('#date_to');
+        const period = $('#period_select');
+        const resultSearch = $('#payment_search');
+        const results = $('#results_area');
+        const status = $('#payment_status');
+        const errorMessage = $('#payment_error');
+        const searchButton = $('#search_btn');
+        const exportButton = $('#export_btn');
+        let loadedFilters;
+
+        const text = $.fn.dataTable.render.text();
+        const number = new Intl.NumberFormat('en-KE');
+        const money = new Intl.NumberFormat('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const shortDate = new Intl.DateTimeFormat('en-GB', {
+            day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC'
+        });
+        const onlyDate = value => new Date(value + 'T00:00:00Z');
+        const dateInput = date => date.toISOString().slice(0, 10);
+
+        const today = onlyDate(form.data('today'));
+        const year = today.getUTCFullYear();
+        const month = today.getUTCMonth();
+        const firstThisMonth = new Date(Date.UTC(year, month, 1));
+        const firstLastMonth = new Date(Date.UTC(year, month - 1, 1));
+        const lastLastMonth = new Date(Date.UTC(year, month, 0));
+        const ninetyDaysAgo = new Date(Date.UTC(year, month, today.getUTCDate() - 89));
+        const ranges = {
+            this_month: [firstThisMonth, today],
+            last_month: [firstLastMonth, lastLastMonth],
+            last_90_days: [ninetyDaysAgo, today]
+        };
+
+        period.on('change', function() {
+            const range = ranges[this.value];
+            if (range) {
+                from.val(dateInput(range[0]));
+                to.val(dateInput(range[1]));
             }
-            return true;
-        }
+        });
+        from.add(to).on('input', () => period.val('custom'));
+        form.on('change', () => errorMessage.prop('hidden', true));
 
-        $('#date_from').on('change', function() {
-            $('#date_to').attr('min', this.value);
+        const table = $('#payments-table').DataTable({
+            columns: [
+                { data: null, defaultContent: '', orderable: false, searchable: false },
+                {
+                    data: 'date_time',
+                    className: 'text-nowrap',
+                    render: function(value, type) {
+                        if (type === 'sort' || type === 'type') {
+                            const match = /^(\d{2})-(\d{2})-(\d{4}) (\d{2}:\d{2})$/.exec(value || '');
+                            return match ? match[3] + match[2] + match[1] + match[4] : '';
+                        }
+                        return type === 'display' ? text.display(value) : value;
+                    }
+                },
+                { data: 'tenant_name', render: text },
+                { data: 'narration', render: text },
+                {
+                    data: { _: 'amount', sort: 'amount_raw', type: 'amount_raw' },
+                    className: 'text-end text-nowrap'
+                },
+                {
+                    data: { _: 'trans_amount', sort: 'trans_amount_raw', type: 'trans_amount_raw' },
+                    className: 'text-end text-nowrap'
+                },
+                { data: 'payment_mode', render: text },
+                { data: 'payment_channel', render: text },
+                { data: 'trans_remarks', render: text }
+            ],
+            layout: { topEnd: null },
+            order: [[1, 'asc']],
+            pageLength: 50,
+            language: {
+                emptyTable: 'No allocated payments were found for this property and period.',
+                zeroRecords: 'No allocated payments match your search.'
+            },
+            drawCallback: function() {
+                const api = this.api();
+                const start = api.page.info().start;
+                api.rows({ page: 'current' }).nodes().each((row, index) => {
+                    row.cells[0].textContent = start + index + 1;
+                });
+            }
+        });
+        resultSearch.on('input', function() {
+            table.search(this.value).draw();
         });
 
-        // Search button
-        $('#search_btn').on('click', function() {
-            var propertyId = $('#property_select').val();
-            var dateFrom = $('#date_from').val();
-            var dateTo = $('#date_to').val();
+        function showError(message, field) {
+            errorMessage.text(message).prop('hidden', false);
+            if (field) field.trigger('focus');
+        }
+
+        form.on('submit', function(event) {
+            event.preventDefault();
+            if (searchButton.prop('disabled')) return;
+
+            const propertyId = propertyPicker.val();
+            const dateFrom = from.val();
+            const dateTo = to.val();
 
             if (!propertyId) {
-                alert('Please select a property.');
+                showError('Choose a property.', selection);
                 return;
             }
             if (!dateFrom || !dateTo) {
-                alert('Please select both dates.');
+                showError('Enter both a start date and an end date.', dateFrom ? to : from);
                 return;
             }
-            if (!validateDates(dateFrom, dateTo)) return;
+            if (dateFrom > dateTo) {
+                showError('The end date must be on or after the start date.', to);
+                return;
+            }
 
-            $('#search_spinner').show();
-            $('#search_icon').hide();
-            $('#search_btn').prop('disabled', true);
+            const filters = { property_id: propertyId, date_from: dateFrom, date_to: dateTo };
+            const propertyName = propertyPicker.find(':selected').text();
+            loadedFilters = null;
+            exportButton.prop('disabled', true);
+            searchButton.prop('disabled', true);
+            results.prop('hidden', true);
+            errorMessage.prop('hidden', true);
+            status.removeClass('visually-hidden').text('Loading allocated payments\u2026');
 
             $.ajax({
                 url: '{{ route("ajax.payments.allocated.search") }}',
                 type: 'POST',
-                data: {
-                    _token: '{{ csrf_token() }}',
-                    property_id: propertyId,
-                    date_from: dateFrom,
-                    date_to: dateTo
-                },
-                success: function(response) {
-                    if (response.success) {
-                        $('#result_info').show();
-                        $('#result_count').text(response.count);
-                        $('#export_btn').prop('disabled', response.count === 0);
-
-                        table.clear();
-                        table.rows.add(response.payments);
-                        table.draw();
-                    } else {
-                        alert(response.message || 'Search failed.');
-                    }
-                },
-                error: function(xhr) {
-                    var msg = 'Search failed.';
-                    if (xhr.responseJSON && xhr.responseJSON.message) msg = xhr.responseJSON.message;
-                    alert(msg);
-                },
-                complete: function() {
-                    $('#search_spinner').hide();
-                    $('#search_icon').show();
-                    $('#search_btn').prop('disabled', false);
+                dataType: 'json',
+                data: { ...filters, _token: '{{ csrf_token() }}' }
+            }).done(function(response) {
+                if (!response.success || !Array.isArray(response.payments)) {
+                    status.text('');
+                    showError('Could not load allocated payments. Search again to retry.');
+                    return;
                 }
+
+                const payments = response.payments;
+                const total = payments.reduce((sum, payment) => sum + Math.round(Number(payment.amount_raw ?? 0) * 10000), 0);
+                const scope = [propertyName, shortDate.format(onlyDate(dateFrom)) + ' to ' + shortDate.format(onlyDate(dateTo))];
+                $('#payment_scope').text(scope.join(' \u00b7 '));
+                $('#result_count').text(number.format(payments.length));
+                $('#allocated_total').text(money.format(total / 10000));
+                resultSearch.val('').prop('disabled', payments.length === 0);
+                results.prop('hidden', false);
+                table.clear().search('');
+                table.rows.add(payments).draw();
+                table.columns.adjust();
+
+                loadedFilters = filters;
+                exportButton.prop('disabled', payments.length === 0);
+                status.text(payments.length
+                    ? number.format(payments.length) + ' allocation records loaded.'
+                    : 'No allocated payments were found for this property and period.');
+            }).fail(function(xhr) {
+                status.text('');
+                const message = xhr.responseJSON?.message || 'Could not load allocated payments. Search again to retry.';
+                showError(message);
+            }).always(function() {
+                searchButton.prop('disabled', false);
+                status.addClass('visually-hidden');
             });
         });
 
-        // Export to Excel
-        $('#export_btn').on('click', function() {
-            var propertyId = $('#property_select').val();
-            var dateFrom = $('#date_from').val();
-            var dateTo = $('#date_to').val();
-            if (!propertyId || !dateFrom || !dateTo) return;
-            if (!validateDates(dateFrom, dateTo)) return;
-
-            $('#export_spinner').show();
-            $('#export_icon').hide();
-            $('#export_btn').prop('disabled', true);
-
-            window.location.href = '{{ route("ajax.payments.allocated.export") }}?property_id=' + propertyId + '&date_from=' + dateFrom + '&date_to=' + dateTo;
-
-            setTimeout(function() {
-                $('#export_spinner').hide();
-                $('#export_icon').show();
-                $('#export_btn').prop('disabled', false);
-            }, 3000);
+        exportButton.on('click', function() {
+            if (loadedFilters) {
+                window.location.href = '{{ route("ajax.payments.allocated.export") }}?' + new URLSearchParams(loadedFilters);
+            }
         });
     });
 </script>
