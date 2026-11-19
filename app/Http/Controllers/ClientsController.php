@@ -103,7 +103,10 @@ class ClientsController extends Controller
             }
 
             if ($searchValue !== '') {
-                $tokens = array_filter(explode(' ', preg_replace('/\s+/', ' ', trim($searchValue))));
+                $phone = $this->clientPhoneSubscriber($searchValue);
+                $tokens = $phone !== null
+                    ? [$searchValue]
+                    : preg_split('/\s+/', $searchValue, -1, PREG_SPLIT_NO_EMPTY);
                 foreach ($tokens as $token) {
                     $query->where(function ($q) use ($token) {
                         $q->where('names', 'ILIKE', "%{$token}%")
@@ -118,6 +121,8 @@ class ClientsController extends Controller
                         if (is_numeric($token)) {
                             $q->orWhere('id', $token);
                         }
+
+                        $this->addClientPhoneSearch($q, $token);
                     });
                 }
             }
@@ -131,11 +136,21 @@ class ClientsController extends Controller
                 6 => 'registered_date',
             ];
 
-            // DataTables per-column search: columns[i][search][value]
             $requestColumns = data_get($request->all(), 'columns', []);
+            // Named columns let the directory choose its own display order. Keep the old
+            // indexes for callers that don't send column names.
+            $columnField = static function (int $index) use ($requestColumns, $columns): ?string {
+                $name = data_get($requestColumns, "{$index}.name");
+                if ($name === null || $name === '') {
+                    return $columns[$index] ?? null;
+                }
+
+                return in_array($name, $columns, true) ? $name : null;
+            };
+
             if (is_array($requestColumns)) {
                 foreach ($requestColumns as $index => $column) {
-                    $field = $columns[(int) $index] ?? null;
+                    $field = $columnField((int) $index);
                     if ($field === null) {
                         continue;
                     }
@@ -157,6 +172,11 @@ class ClientsController extends Controller
                         } else {
                             $query->whereRaw('1 = 0');
                         }
+                    } elseif ($field === 'mobile_number') {
+                        $query->where(function ($q) use ($colSearch) {
+                            $q->where('mobile_number', 'ILIKE', "%{$colSearch}%");
+                            $this->addClientPhoneSearch($q, $colSearch);
+                        });
                     } else {
                         $query->where($field, 'ILIKE', "%{$colSearch}%");
                     }
@@ -167,7 +187,7 @@ class ClientsController extends Controller
             $recordsFiltered = (clone $query)->count();
 
             $orderIndex = (int) data_get($request->all(), 'order.0.column', 2);
-            $orderBy = $columns[$orderIndex] ?? 'names';
+            $orderBy = $columnField($orderIndex) ?? 'names';
             $orderDir = strtolower((string) data_get($request->all(), 'order.0.dir', 'asc')) === 'desc' ? 'desc' : 'asc';
 
             $start = max((int) $request->input('start', 0), 0);
@@ -178,6 +198,7 @@ class ClientsController extends Controller
             $length = min($length, 100);
 
             $clients = $query->orderBy($orderBy, $orderDir)
+                ->orderBy('id')
                 ->skip($start)
                 ->take($length)
                 ->get()
@@ -223,6 +244,34 @@ class ClientsController extends Controller
             ]);
             return response()->json(['error' => 'Failed to load clients'], 500);
         }
+    }
+
+    private function clientPhoneSubscriber(string $value): ?string
+    {
+        if (!preg_match('/^[\d+().\s-]+$/D', $value)) {
+            return null;
+        }
+
+        $digits = preg_replace('/\D/', '', $value);
+
+        return preg_match('/^(?:0|(?:00)?254)([17]\d{1,8})$/D', $digits, $matches) ? $matches[1] : null;
+    }
+
+    private function addClientPhoneSearch($query, string $value): void
+    {
+        $subscriber = $this->clientPhoneSubscriber($value);
+        if ($subscriber === null) {
+            return;
+        }
+
+        $phone = "COALESCE(mobile_number, '')";
+        foreach ([' ', '+', '-', '(', ')', '.'] as $separator) {
+            $phone = "REPLACE({$phone}, '{$separator}', '')";
+        }
+
+        $query->orWhereRaw("({$phone} LIKE ? OR {$phone} LIKE ? OR {$phone} LIKE ?)", [
+            "0{$subscriber}%", "254{$subscriber}%", "00254{$subscriber}%",
+        ]);
     }
 
     /**
