@@ -391,6 +391,9 @@ class UnitTenantUploadBatchService
      */
     private function canonical(array $row): array
     {
+        if (array_key_exists('vat_able', $row)) {
+            $row['vat_able'] = UnitTenantUploadColumns::normalizeVat($row['vat_able']);
+        }
         $lists = ['unit_type' => 'unit_types', 'usage_type' => 'usage_types', 'topology' => 'topologies', 'unit_category' => 'categories', 'tenant_type' => 'tenant_types', 'gender' => 'genders', 'title' => 'titles', 'nationality' => 'countries'];
 
         foreach ($lists as $field => $list) {

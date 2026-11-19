@@ -197,8 +197,8 @@ class UnitTenantUploadValidator
 
         $errors = array_merge($errors, $this->lengthErrors($row, array_diff(array_keys(UnitTenantUploadColumns::UNITS), ['unit_description'])));
 
-        if ($this->filled($row['vat_able'] ?? null) && !in_array(trim((string) $row['vat_able']), ['0', '1'], true)) {
-            $errors[] = "vat_able must be 0 or 1 (got '{$row['vat_able']}')";
+        if ($this->filled($row['vat_able'] ?? null) && !in_array(UnitTenantUploadColumns::normalizeVat($row['vat_able']), ['0', '1'], true)) {
+            $errors[] = "vat_able must be Yes or No (older files may use 1 or 0; got '{$row['vat_able']}')";
         }
 
         return $errors;
@@ -220,7 +220,7 @@ class UnitTenantUploadValidator
         $required = ['unit_number', 'lease_start_date', 'mobile_no'];
         $required = array_merge($required, $isCompany
             ? ['company_name', 'registration_number', 'contact_phone', 'contact_name']
-            : ['names', 'other_contact_phone', 'other_contact_name']);
+            : ['names']);
         $missing = $this->missing($row, $required);
         if ($missing) {
             $errors[] = implode(', ', $missing) . ' required';

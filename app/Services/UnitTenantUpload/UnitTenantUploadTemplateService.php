@@ -76,7 +76,7 @@ class UnitTenantUploadTemplateService
             'genders' => Gender::orderBy('id')->pluck('name')->all(),
             'titles' => Salutation::orderBy('id')->pluck('name')->all(),
             'countries' => SystemCountry::orderBy('country_name')->pluck('country_name')->all(),
-            'vat' => ['0', '1'],
+            'vat' => ['No', 'Yes'],
         ];
     }
 
@@ -208,7 +208,8 @@ class UnitTenantUploadTemplateService
             'Individuals need a National ID or a Passport number (either one).',
             'unit_number, National ID, passport and registration number: letters A-Z, digits, spaces and - / . only (no accents or other symbols).',
             'Pick dropdown values from the list; leave blank where optional. unit_type blank = Normal.',
-            'vat_able: 0 = no VAT, 1 = VAT (blank = 0).',
+            'vat_able: select Yes if VAT applies, or No if it does not (blank = No). Older files may use 1 = Yes or 0 = No.',
+            'Other contact name and phone are optional on individual_tenants.',
             'lease_start_date and lease_end_date format: YYYY-MM-DD. Leave lease_end_date blank for an open-ended lease (no end date); fill it for a fixed-term lease.',
             'Do not rename sheets, add or delete rows. Maximum ' . UnitTenantUploadColumns::MAX_ROWS . ' units per file.',
         ];

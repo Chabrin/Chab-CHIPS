@@ -310,7 +310,7 @@ class UnitTenantSubmitService
             'unit_condition_id' => $row->unit_condition,
             'rent_amount' => (float) str_replace(',', '', $row->rent_amount),
             'description' => $row->unit_description,
-            'vat_able' => trim((string) $row->vat_able) === '1' ? 'Yes' : 'No',
+            'vat_able' => UnitTenantUploadColumns::normalizeVat($row->vat_able) === '1' ? 'Yes' : 'No',
             'initial_water_meter_reading' => (float) str_replace(',', '', $row->initial_water_reading),
             'date_time' => now(),
             'created_by_id' => $userId,

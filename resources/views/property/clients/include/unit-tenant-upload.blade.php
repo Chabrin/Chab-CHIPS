@@ -334,6 +334,10 @@
                 if (kind !== 'units' && field === 'unit_number') { return; }
                 var label = utuLabel(field) + (optional ? '' : ' *');
                 var val = row[field] === null || row[field] === undefined ? '' : row[field];
+                if (field === 'vat_able') {
+                    if (val === '1') val = 'Yes';
+                    if (val === '0') val = 'No';
+                }
                 var input;
                 if (utuCurrent.options[field]) {
                     input = '<select class="form-select form-select-sm" name="' + field + '"><option value=""></option>';

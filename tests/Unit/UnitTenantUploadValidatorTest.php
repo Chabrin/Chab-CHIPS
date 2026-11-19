@@ -50,6 +50,40 @@ class UnitTenantUploadValidatorTest extends TestCase
         $this->assertNull($result['tenants'][10]);
     }
 
+    public function test_other_contact_name_and_phone_are_optional_for_individuals(): void
+    {
+        foreach ([[null, null], ['Bob', null], [null, '0712345678']] as [$name, $phone]) {
+            $result = $this->check([1 => $this->unit()], [10 => $this->individual([
+                'other_contact_name' => $name, 'other_contact_phone' => $phone,
+            ])]);
+            $this->assertNull($result['tenants'][10]);
+        }
+    }
+
+    public function test_vat_choices_accept_yes_no_and_legacy_numbers_but_reject_other_values(): void
+    {
+        foreach (['Yes', 'No', ' yes ', 'NO', '1', '0', null] as $value) {
+            $result = $this->check([1 => $this->unit(['vat_able' => $value])], []);
+            $this->assertNull($result['units'][1]);
+        }
+        foreach (['2', '16', 'maybe'] as $value) {
+            $result = $this->check([1 => $this->unit(['vat_able' => $value])], []);
+            $this->assertStringContainsString('vat_able must be Yes or No', $result['units'][1]);
+        }
+    }
+
+    public function test_staged_vat_choices_keep_the_same_numeric_meaning_as_legacy_uploads(): void
+    {
+        $service = new \App\Services\UnitTenantUpload\UnitTenantUploadBatchService(
+            $this->validator(), UnitTenantUploadLookups::fromArray([])
+        );
+        $canonical = new \ReflectionMethod($service, 'canonical');
+        foreach (['Yes' => '1', 'No' => '0', '1' => '1', '0' => '0', ' YES ' => '1', '' => null] as $input => $expected) {
+            $row = $canonical->invoke($service, ['vat_able' => (string) $input]);
+            $this->assertSame($expected, $row['vat_able']);
+        }
+    }
+
     public function test_unit_required_fields_and_unknown_lookups_are_reported(): void
     {
         $result = $this->check([1 => $this->unit(['unit_number' => null, 'topology' => 'Nonsense', 'rent_amount' => 'abc', 'vat_able' => '2'])], []);
@@ -57,7 +91,7 @@ class UnitTenantUploadValidatorTest extends TestCase
         $this->assertStringContainsString('unit_number required', $result['units'][1]);
         $this->assertStringContainsString("Topology 'Nonsense' not recognised", $result['units'][1]);
         $this->assertStringContainsString('Rent Amount', $result['units'][1]);
-        $this->assertStringContainsString('vat_able must be 0 or 1', $result['units'][1]);
+        $this->assertStringContainsString('vat_able must be Yes or No', $result['units'][1]);
     }
 
     public function test_topology_matches_by_name_or_slug_ignoring_case_and_spaces(): void
