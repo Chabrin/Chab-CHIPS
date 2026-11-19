@@ -21,7 +21,7 @@ class UnitTenantUploadParserService
      * @param string $path
      * @return array ['units' => [...], 'individual' => [...], 'corporate' => [...]]
      */
-    public function parse(string $path): array
+    public function parse(string $path, bool $existingUnits = false, ?int $propertyId = null): array
     {
         try {
             $spreadsheet = IOFactory::load($path);
@@ -29,11 +29,25 @@ class UnitTenantUploadParserService
             throw new InvalidArgumentException('The file could not be read. Please upload the downloaded template (.xlsx).');
         }
 
+        if ($existingUnits && $propertyId !== null) {
+            $metadata = $spreadsheet->getSheetByName('_upload');
+            if (!$metadata || $metadata->getCell('A1')->getValue() !== 'existing_units'
+                || (string) $metadata->getCell('B1')->getValue() !== (string) $propertyId) {
+                throw new InvalidArgumentException('Download the Tenants for existing units template for the selected property and fill it in. This file is for a different property or upload mode.');
+            }
+        }
+
         $parsed = [
-            'units' => $this->readSheet($spreadsheet, UnitTenantUploadColumns::SHEET_UNITS, false),
+            'units' => $this->readSheet($spreadsheet, UnitTenantUploadColumns::SHEET_UNITS, false, $existingUnits),
             'individual' => $this->readSheet($spreadsheet, UnitTenantUploadColumns::SHEET_INDIVIDUAL, true),
             'corporate' => $this->readSheet($spreadsheet, UnitTenantUploadColumns::SHEET_CORPORATE, true),
         ];
+
+        if ($existingUnits) {
+            $numbers = array_map(fn ($row) => mb_strtolower((string) $row['unit_number']), array_merge($parsed['individual'], $parsed['corporate']));
+            $parsed['units'] = array_values(array_filter($parsed['units'], fn ($row) => in_array(mb_strtolower((string) $row['unit_number']), $numbers, true)));
+            if (!$numbers) throw new InvalidArgumentException('Enter at least one tenant on the individual_tenants or corporate_tenants sheet.');
+        }
 
         if (count($parsed['units']) === 0) {
             throw new InvalidArgumentException('The units sheet has no data rows.');
@@ -54,14 +68,14 @@ class UnitTenantUploadParserService
      * @param bool $isTenantSheet
      * @return array
      */
-    private function readSheet(Spreadsheet $spreadsheet, string $name, bool $isTenantSheet): array
+    private function readSheet(Spreadsheet $spreadsheet, string $name, bool $isTenantSheet, bool $existingUnits = false): array
     {
         $sheet = $spreadsheet->getSheetByName($name);
         if (!$sheet) {
             throw new InvalidArgumentException("The sheet '{$name}' is missing. Please use the downloaded template.");
         }
 
-        $columns = array_keys(UnitTenantUploadColumns::forSheet($name));
+        $columns = $existingUnits ? ['unit_number'] : array_keys(UnitTenantUploadColumns::forSheet($name));
         $positions = $this->headerPositions($sheet, $name, $columns);
         $rows = [];
 

@@ -15,6 +15,7 @@ class TempUploadBatch extends Model
         'property_id',
         'client_id',
         'file_name',
+        'mode',
         'status',
         'total_units',
         'total_tenants',
@@ -26,6 +27,8 @@ class TempUploadBatch extends Model
     ];
 
     public const STATUS_STAGED = 'staged';
+    public const MODE_NEW = 'new_units';
+    public const MODE_EXISTING = 'existing_units';
     public const STATUS_SUBMITTING = 'submitting';
     public const STATUS_SUBMITTED = 'submitted';
 

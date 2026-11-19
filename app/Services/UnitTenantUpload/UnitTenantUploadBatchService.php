@@ -35,19 +35,21 @@ class UnitTenantUploadBatchService
      * @param int|null $userId
      * @return TempUploadBatch
      */
-    public function stage(Property $property, array $parsed, string $fileName, ?int $userId): TempUploadBatch
+    public function stage(Property $property, array $parsed, string $fileName, ?int $userId, string $mode = TempUploadBatch::MODE_NEW): TempUploadBatch
     {
-        $batch = DB::transaction(function () use ($property, $parsed, $fileName, $userId) {
+        if (!in_array($mode, [TempUploadBatch::MODE_NEW, TempUploadBatch::MODE_EXISTING], true)) throw new DomainException('Select a valid upload mode.');
+        $batch = DB::transaction(function () use ($property, $parsed, $fileName, $userId, $mode) {
             // One upload at a time: the duplicate checks below must see every other upload's committed rows.
             DB::getDriverName() === 'pgsql' ? DB::select('SELECT pg_advisory_xact_lock(?)', [7240042]) : Property::whereKey($property->id)->lockForUpdate()->first();
 
-            $errors = $this->validateUpload($property, $parsed);
+            $errors = $this->validateUpload($property, $parsed, $mode);
             if ($errors) {
                 throw new UnitTenantUploadRejected($errors);
             }
 
             $batch = TempUploadBatch::create([
                 'property_id' => $property->id,
+                'mode' => $mode,
                 'client_id' => $property->client_id,
                 'file_name' => mb_substr($fileName, 0, 200),
                 'status' => TempUploadBatch::STATUS_STAGED,
@@ -55,6 +57,10 @@ class UnitTenantUploadBatchService
             ]);
 
             foreach ($parsed['units'] as $row) {
+                if ($mode === TempUploadBatch::MODE_EXISTING) {
+                    $unit = Unit::where('property_id', $property->id)->whereRaw('LOWER(unit_number) = ?', [mb_strtolower($row['unit_number'])])->sole();
+                    $row = ['row_no' => $row['row_no'], 'unit_number' => $unit->unit_number, 'unit_id' => $unit->id];
+                }
                 TempBatchUnit::create(['batch_id' => $batch->id] + $this->canonical($row));
             }
             foreach (['individual', 'corporate'] as $sheet) {
@@ -78,7 +84,7 @@ class UnitTenantUploadBatchService
      * @param array $parsed
      * @return array
      */
-    public function validateUpload(Property $property, array $parsed): array
+    public function validateUpload(Property $property, array $parsed, string $mode = TempUploadBatch::MODE_NEW): array
     {
         $unitRows = $parsed['units'];
         $tenantRows = array_merge(
@@ -86,7 +92,7 @@ class UnitTenantUploadBatchService
             array_map(fn($row) => $row + ['sheet' => 'corporate'], $parsed['corporate'])
         );
 
-        $existing = $this->validator->loadExisting($property->id, $unitRows, $tenantRows) + $this->validator->loadStaged($property->id, $tenantRows);
+        $existing = $this->validator->loadExisting($property->id, $unitRows, $tenantRows, $mode === TempUploadBatch::MODE_EXISTING) + $this->validator->loadStaged($property->id, $tenantRows);
         $result = $this->validator->validate($unitRows, $tenantRows, $existing);
         $errors = [];
 
@@ -135,7 +141,7 @@ class UnitTenantUploadBatchService
         $unitRows = $units->map->toArray()->all();
         $tenantRows = $tenants->map->toArray()->all();
 
-        $existing = $this->validator->loadExisting($batch->property_id, $unitRows, $tenantRows);
+        $existing = $this->validator->loadExisting($batch->property_id, $unitRows, $tenantRows, $batch->mode === TempUploadBatch::MODE_EXISTING);
         $result = $this->validator->validate($unitRows, $tenantRows, $existing);
 
         foreach ($result['units'] as $id => $error) {
@@ -162,6 +168,7 @@ class UnitTenantUploadBatchService
     public function updateUnit(TempBatchUnit $row, array $data): TempBatchUnit
     {
         $batch = $this->editableBatch($row);
+        if ($batch->mode === TempUploadBatch::MODE_EXISTING) throw new DomainException('Existing unit details cannot be changed by this upload.');
         $values = $this->canonical($this->clean($data, array_keys(UnitTenantUploadColumns::UNITS)));
         $oldNumber = $row->unit_number;
 
@@ -247,6 +254,9 @@ class UnitTenantUploadBatchService
 
         DB::transaction(function () use ($row, $batch) {
             $this->lockStaged($batch, $row);
+            if ($batch->mode === TempUploadBatch::MODE_EXISTING) {
+                $batch->units()->whereNull('submitted_at')->whereRaw('LOWER(unit_number) = ?', [mb_strtolower($row->unit_number)])->forceDelete();
+            }
             $row->forceDelete();
             $this->revalidate($batch);
         });
@@ -307,14 +317,22 @@ class UnitTenantUploadBatchService
     {
         $present = fn($row) => $row->toArray() + ['state' => $row->submitted_at ? 'submitted' : ($row->error ? 'error' : 'ready')];
         $property = $batch->property;
-        $withCode = fn($row) => $present($row) + ['unit_code' => $property ? Unit::generateUnitCode($property, $row->unit_number) : $row->unit_number];
+        $withCode = function ($row) use ($present, $property, $batch) {
+            $data = $present($row) + ['unit_code' => $property ? Unit::generateUnitCode($property, $row->unit_number) : $row->unit_number];
+            if ($batch->mode === TempUploadBatch::MODE_EXISTING) {
+                $unit = Unit::where('property_id', $batch->property_id)->find($row->unit_id);
+                $data['rent_amount'] = $unit?->rent_amount;
+                $data['vat_able'] = $unit?->vat_able;
+            }
+            return $data;
+        };
 
         return [
-            'batch' => $batch->only(['id', 'file_name', 'status', 'total_units', 'total_tenants']),
+            'batch' => $batch->only(['id', 'file_name', 'mode', 'status', 'total_units', 'total_tenants']),
             'units' => $batch->units()->get()->map($withCode)->all(),
             'tenants' => $batch->tenants()->get()->map($present)->all(),
             'columns' => [
-                'units' => UnitTenantUploadColumns::UNITS,
+                'units' => $batch->mode === TempUploadBatch::MODE_EXISTING ? ['unit_number' => false, 'rent_amount' => true, 'vat_able' => true] : UnitTenantUploadColumns::UNITS,
                 'individual' => UnitTenantUploadColumns::INDIVIDUAL,
                 'corporate' => UnitTenantUploadColumns::CORPORATE,
             ],
@@ -327,7 +345,7 @@ class UnitTenantUploadBatchService
                 'gender' => $this->lookups->names('genders'),
                 'title' => $this->lookups->names('titles'),
                 'nationality' => $this->lookups->names('countries'),
-                'vat_able' => ['0', '1'],
+                'vat_able' => ['No', 'Yes'],
             ],
         ];
     }

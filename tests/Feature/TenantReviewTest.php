@@ -81,6 +81,132 @@ class TenantReviewTest extends TestCase
 
     private function user(int $id): User { return User::findOrFail($id); }
 
+    private function existingUnitUpload(): array
+    {
+        foreach (['2026_10_04_000010_create_temp_upload_batches_table.php', '2026_10_04_000011_create_temp_batch_units_table.php',
+            '2026_10_04_000012_create_temp_batch_tenants_table.php', '2026_10_07_000002_add_lease_end_date_to_temp_batch_tenants.php',
+            '2026_11_19_120000_add_mode_to_temp_upload_batches.php'] as $migration) {
+            (require database_path('migrations/'.$migration))->up();
+        }
+        $lookups = \App\Services\UnitTenantUpload\UnitTenantUploadLookups::fromArray([]);
+        $batches = new \App\Services\UnitTenantUpload\UnitTenantUploadBatchService(
+            new \App\Services\UnitTenantUpload\UnitTenantUploadValidator($lookups), $lookups
+        );
+        $submitter = new \App\Services\UnitTenantUpload\UnitTenantSubmitService($batches, $lookups, app(\App\Services\ServiceAgreementApprovalService::class));
+        $unit = Unit::create(['property_id' => 1, 'unit_number' => 'A2', 'unit_code' => 'TEST-A2',
+            'rent_amount' => 26796, 'vat_able' => 'Yes', 'occupancy_status_id' => 31]);
+        $tenant = array_fill_keys(array_keys(\App\Services\UnitTenantUpload\UnitTenantUploadColumns::INDIVIDUAL), null);
+        $tenant = array_replace($tenant, ['row_no' => 2, 'unit_number' => 'A2', 'names' => 'Upload test',
+            'mobile_no' => '0712345678', 'national_id' => 'UPLOAD-TEST-123', 'lease_start_date' => '2026-12-01']);
+        $parsed = ['units' => [['row_no' => 2, 'unit_number' => 'A2']], 'individual' => [$tenant], 'corporate' => []];
+        return [$batches, $submitter, $unit, $parsed];
+    }
+
+    public function test_existing_unit_upload_creates_pending_tenant_and_lease_without_duplicating_or_repricing_unit(): void
+    {
+        [$batches, $submitter, $unit, $parsed] = $this->existingUnitUpload();
+        $batch = $batches->stage(Property::find(1), $parsed, 'existing.xlsx', 1, 'existing_units');
+        $this->assertSame('existing_units', $batch->mode);
+        $this->assertSame($unit->id, (int) $batch->units()->sole()->unit_id);
+        $this->actingAs($this->user(1));
+        $this->assertSame(['submitted' => 1, 'failed' => 0], $submitter->submit($batch, 1));
+        $this->assertSame(2, Unit::count());
+        $this->assertSame(26796.0, (float) $unit->fresh()->rent_amount);
+        $this->assertSame('Yes', $unit->fresh()->vat_able);
+        $review = TenantReview::sole();
+        $this->assertSame($unit->id, (int) $review->lease->unit_id);
+        $this->assertSame(26796.0, (float) $review->tenant->rent_amount);
+        $this->assertSame('zone_manager', $review->stage);
+        $this->assertSame(1, (int) $review->tenant->current_status_id);
+        $this->expectException(\DomainException::class);
+        $submitter->submit($batch->fresh(), 1);
+    }
+
+    public function test_existing_unit_upload_rechecks_occupancy_at_submission(): void
+    {
+        [$batches, $submitter, $unit, $parsed] = $this->existingUnitUpload();
+        $batch = $batches->stage(Property::find(1), $parsed, 'existing.xlsx', 1, 'existing_units');
+        LeaseAgreement::create(['unit_id' => $unit->id, 'property_id' => 1, 'tenant_id' => 1, 'current_status_id' => 1]);
+        $this->assertSame(['submitted' => 0, 'failed' => 1], $submitter->submit($batch, 1));
+        $this->assertSame(1, Client::withoutGlobalScopes()->count());
+        $this->assertStringContainsString('pending onboarding', $batch->units()->sole()->error);
+    }
+
+    public function test_existing_unit_template_lists_available_units_and_round_trips_only_filled_tenants(): void
+    {
+        $this->existingUnitUpload();
+        foreach ([new \App\Models\UnitType, new \App\Models\UsageType, new \App\Models\UnitTopology,
+            new \App\Models\TenantType, new \App\Models\UnitCategory, new \App\Models\SystemCountry,
+            new \App\Models\Gender, new \App\Models\Salutation] as $model) {
+            Schema::create($model->getTable(), function (Blueprint $t) {
+                $t->id();
+                $t->softDeletes();
+                foreach (['name', 'type_name', 'topology_name', 'slug', 'category_name', 'country_name'] as $column) $t->string($column)->nullable();
+            });
+        }
+        $service = new \App\Services\UnitTenantUpload\UnitTenantUploadTemplateService;
+        $book = $service->build(Property::find(1), true);
+        $units = $book->getSheetByName('units');
+        $this->assertSame('unit_number', $units->getCell('A1')->getValue());
+        $this->assertSame('unit_code', $units->getCell('B1')->getValue());
+        $this->assertSame('A2', $units->getCell('A2')->getValue());
+        $this->assertSame('B', $units->getHighestColumn());
+        $this->assertTrue($units->getProtection()->getSheet());
+        $sheet = $book->getSheetByName('individual_tenants');
+        $this->assertSame('FFFFFF00', $sheet->getStyle('F1')->getFill()->getStartColor()->getARGB());
+        $this->assertSame('FFFFFF00', $sheet->getStyle('G1')->getFill()->getStartColor()->getARGB());
+        $sheet->setCellValue('C2', '2026-12-01')->setCellValue('D2', '0712345678')
+            ->setCellValue('E2', 'Template test')->setCellValue('J2', 'TEMPLATE-123');
+        $path = tempnam(sys_get_temp_dir(), 'existing-upload-');
+        try {
+            (new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($book))->save($path);
+            $parser = new \App\Services\UnitTenantUpload\UnitTenantUploadParserService;
+            $parsed = $parser->parse($path, true, 1);
+            $this->assertCount(1, $parsed['units']);
+            $this->assertCount(1, $parsed['individual']);
+            $this->assertSame([], $parsed['corporate']);
+            $this->assertArrayNotHasKey('rent_amount', $parsed['units'][0]);
+            try {
+                $parser->parse($path, true, 999);
+                $this->fail('A template for another property must be refused.');
+            } catch (\InvalidArgumentException $e) {
+                $this->assertStringContainsString('different property or upload mode', $e->getMessage());
+            }
+        } finally {
+            unlink($path);
+        }
+        $new = $service->build(Property::find(1));
+        $this->assertSame('No', $new->getSheetByName('lists')->getCell('I2')->getValue());
+        $this->assertSame('Yes', $new->getSheetByName('lists')->getCell('I3')->getValue());
+    }
+
+    public function test_existing_unit_upload_blocks_wrong_property_and_occupied_units_and_duplicate_staging(): void
+    {
+        [$batches, , $unit, $parsed] = $this->existingUnitUpload();
+        $unit->update(['property_id' => 999]);
+        $this->assertNotEmpty($batches->validateUpload(Property::find(1), $parsed, 'existing_units'));
+        $unit->update(['property_id' => 1]);
+        Client::withoutGlobalScopes()->where('id', 1)->update(['unit_id' => $unit->id, 'type_id' => 2]);
+        $this->assertNotEmpty($batches->validateUpload(Property::find(1), $parsed, 'existing_units'));
+        Client::withoutGlobalScopes()->where('id', 1)->update(['unit_id' => 1]);
+        $batch = $batches->stage(Property::find(1), $parsed, 'existing.xlsx', 1, 'existing_units');
+        $this->assertNotEmpty($batches->validateUpload(Property::find(1), $parsed, 'existing_units'));
+        $this->expectException(\DomainException::class);
+        $batches->updateUnit($batch->units()->sole(), ['rent_amount' => '1']);
+    }
+
+    public function test_existing_unit_upload_pins_original_unit_and_deleting_staged_tenant_keeps_real_unit(): void
+    {
+        [$batches, , $unit, $parsed] = $this->existingUnitUpload();
+        $batch = $batches->stage(Property::find(1), $parsed, 'existing.xlsx', 1, 'existing_units');
+        $unit->update(['unit_number' => 'RENAMED']);
+        $batches->revalidate($batch);
+        $this->assertNotNull($batch->units()->sole()->error);
+        $batches->deleteTenant($batch->tenants()->sole());
+        $this->assertSame(0, $batch->units()->count());
+        $this->assertSame('RENAMED', $unit->fresh()->unit_number);
+        $this->assertSame(26796.0, (float) $unit->fresh()->rent_amount);
+    }
     private function review(): TenantReview
     {
         return DB::transaction(fn () => $this->reviews->register(Client::withoutGlobalScopes()->findOrFail(1), LeaseAgreement::findOrFail(1), $this->user(1)));
