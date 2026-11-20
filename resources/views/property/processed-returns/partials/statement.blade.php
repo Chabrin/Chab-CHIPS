@@ -39,6 +39,7 @@
                     @foreach(\App\Services\ReturnStatementService::COLUMNS as $key => $label)
                         @if($key === 'remarks')
                         <td>
+                            @if($row['remarks_line_id'])
                             <form class="statement-remarks-form" action="{{ route('returns.remarks', ['id' => encrypt($return->id), 'lineId' => encrypt($row['remarks_line_id'])]) }}" method="post">
                                 <label class="visually-hidden">Remarks for {{ $row['tenant_name'] }}, room {{ $row['unit_code'] }}</label>
                                 <textarea class="form-control form-control-sm statement-remarks" name="remarks" rows="1" maxlength="{{ \App\Services\ReturnStatementService::REMARKS_LIMIT }}" title="Up to {{ \App\Services\ReturnStatementService::REMARKS_LIMIT }} characters" aria-label="Remarks for {{ $row['tenant_name'] }}, room {{ $row['unit_code'] }}">{{ $row['remarks'] }}</textarea>
@@ -46,6 +47,9 @@
                                 <button type="submit" class="btn btn-outline-primary btn-sm statement-save">Save</button>
                                 <small class="statement-save-status" role="status" aria-live="polite"></small>
                             </form>
+                            @else
+                            <span class="text-muted">No transactions</span>
+                            @endif
                         </td>
                         @elseif(in_array($key, ['unit_code', 'tenant_name']))
                         <td>{{ $row[$key] }}</td>
