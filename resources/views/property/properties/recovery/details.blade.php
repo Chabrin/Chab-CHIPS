@@ -8,7 +8,7 @@
                     <div class="card-header card-no-border d-flex align-items-center">
                         <h4 class="mb-0">Recovery Details <span class="text-muted">- {{ $recovery->ref_number }}</span></h4>
                         <div class="ms-auto d-flex gap-2">
-                            @if($isPaidOwner && (int) $recovery->current_status_id === 1)
+                            @if($isInvoiceRecovery && (int) $recovery->current_status_id === 1)
                             {{-- Always shown while the recovery is Pending; greyed out, with the reason on hover, when this user cannot act --}}
                             @php($canAct = $refusal === null)
                             <span @if(!$canAct) title="{{ $refusal }}" @endif>
@@ -67,11 +67,11 @@
                             </div>
                         </div>
 
-                        @if($isPaidOwner)
-                        <!-- Paid Owner: the invoice, the proof and the confirmation -->
+                        @if($isInvoiceRecovery)
+                        <!-- The invoice it settles, the proof, the receipt and the confirmation -->
                         <div class="row mb-4">
                             <div class="col-md-12">
-                                <h5 class="border-bottom pb-2 mb-3">Paid Owner</h5>
+                                <h5 class="border-bottom pb-2 mb-3">{{ $reason['label'] }}</h5>
                             </div>
                             <div class="col-md-3 mb-3">
                                 <label class="form-label text-muted">Invoice</label>
@@ -91,6 +91,20 @@
                                 <p class="fw-bold">{{ $confirmer }}</p>
                             </div>
                             <div class="col-md-3 mb-3">
+                                <label class="form-label text-muted">Commission</label>
+                                <p class="fw-bold">{{ $recovery->commisionable === 'Yes' ? 'Kept' : 'Marked for reversal' }}</p>
+                                @if($recovery->commisionable !== 'Yes')
+                                <small class="text-muted">Not applied yet: commission is worked out on the rent as before.</small>
+                                @endif
+                            </div>
+                            @if((int) $recovery->current_status_id === 5)
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label text-muted">Receipt to the tenant</label>
+                                <p class="fw-bold">{{ $recovery->ref_number }}</p>
+                                <small class="text-muted">Settled by recovery: no cash came in.</small>
+                            </div>
+                            @endif
+                            <div class="col-md-3 mb-3">
                                 <label class="form-label text-muted">Proof document</label>
                                 <p class="mb-0">
                                     @if($recovery->proof_path && $canViewProof)
@@ -101,7 +115,7 @@
                                     @elseif($recovery->proof_path)
                                         <span class="text-muted">No access to the document</span>
                                     @else
-                                        <span class="text-danger">None attached</span>
+                                        <span class="{{ $reason['proof_required'] ? 'text-danger' : 'text-muted' }}">None attached</span>
                                     @endif
                                 </p>
                             </div>
@@ -242,12 +256,12 @@
 </script>
 @endif
 
-@if($isPaidOwner && $refusal === null)
+@if($isInvoiceRecovery && $refusal === null)
 <div class="modal fade" id="po-reject-modal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h6 class="modal-title">Reject paid-owner recovery</h6>
+                <h6 class="modal-title">Reject recovery</h6>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
@@ -279,7 +293,7 @@
         }
 
         document.getElementById('po-confirm-btn').addEventListener('click', function () {
-            if (!confirm('Confirm this paid-owner recovery? The tenant invoice will be paid down and the client ledger debited. This cannot be undone.')) { return; }
+            if (!confirm('Confirm this recovery? The tenant invoice will be paid down, the tenant given a receipt and the client ledger debited. This cannot be undone.')) { return; }
             var button = this;
             button.disabled = true;
             send('confirm', {}, function (res) {

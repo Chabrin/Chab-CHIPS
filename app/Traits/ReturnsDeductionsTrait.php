@@ -22,9 +22,10 @@ trait ReturnsDeductionsTrait
      * Propose the deductions of a return: the client's unrecovered debits (advances, registration fee and the other
      * deduction types) as DR lines, oldest first, up to what the return owes the client after commission and VAT.
      *
-     * A debit is taken if it is from the return's month, or from an earlier month and is an advance, the registration fee
-     * or a paid-owner debit (0007, which may be confirmed after its month's return was approved), so what did not fit one
-     * month's return rolls forward. Nothing is recovered here: the debits are only reserved
+     * A debit is taken if it is from the return's month, or from an earlier month and is an advance, the registration fee,
+     * a paid-owner debit (0007) or the debit of a confirmed recovery (0024 with a REC-year-number reference, which may be
+     * confirmed after its month's return was approved), so what did not fit one month's return rolls forward. The older
+     * 0024 debits (Landlord Recovery Posting, no REC- reference) stay with their own month. Nothing is recovered here: the debits are only reserved
      * for this return (return_code is set, is_recovered stays 0) and are recovered when the return gets its final
      * approval (ReturnPostingService). Regenerating the return frees them again.
      *
@@ -94,7 +95,7 @@ trait ReturnsDeductionsTrait
                   AND la.entry_type_code IN ('0007','0008','0009','0010','0012','0013','0014','0015','0016','0019','0020','0023','0024','0026','0030','0036')
                   AND (
                         (la.year = ? AND la.month = ?)
-                        OR (la.year * 100 + la.month < ? AND (la.advance_id IS NOT NULL OR la.entry_type_code IN ('0023', '0007')))
+                        OR (la.year * 100 + la.month < ? AND (la.advance_id IS NOT NULL OR la.entry_type_code IN ('0023', '0007') OR (la.entry_type_code = '0024' AND la.transaction_number LIKE 'REC-%')))
                       )
                   AND {$scope}
             ), chosen AS (

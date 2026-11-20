@@ -12,6 +12,7 @@ use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\GenericReportExport;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use App\Services\ErrorDispatcher;
+use App\Services\RecoveryReportService;
 use App\Models\TenantPayment;
 use App\Models\TenantAccountTransaction;
 use App\Models\DebtorInvoice;
@@ -23,6 +24,15 @@ use App\Models\TenantExit;
 
 class AccountsReportsController extends Controller
 {
+    protected RecoveryReportService $recoveryReport;
+
+    /**
+     * Inject the recovery report service.
+     */
+    public function __construct(RecoveryReportService $recoveryReport) {
+        $this->recoveryReport = $recoveryReport;
+    }
+
     // ═══════════════════════════════════════════════════════════
     // 1. ARREARS / AGING REPORT
     // ═══════════════════════════════════════════════════════════
@@ -1504,59 +1514,51 @@ class AccountsReportsController extends Controller
     // 13. RECOVERY REGISTER
     // ═══════════════════════════════════════════════════════════
 
+    /**
+     * The Recovery Register page, with the reasons for its filter.
+     */
     public function recoveryRegister(): View
     {
         $properties = Property::select('id', 'property_name', 'reference_number')
             ->orderBy('property_name')
             ->get();
 
-        return view('reports.accounts.recovery-register', compact('properties'));
+        $reasons = DB::table('sys_set_transactions_types')
+            ->where('is_recovery', 1)
+            ->whereIn('id', DB::table('sys_pm_recoveries')->select('type_id')->distinct())
+            ->orderBy('type_name')
+            ->get(['id', 'type_name']);
+
+        return view('reports.accounts.recovery-register', compact('properties', 'reasons'));
     }
 
+    /**
+     * The register's filters as the page and the export send them.
+     */
+    protected function recoveryFilters(Request $request): array
+    {
+        return [
+            'date_from' => $request->input('date_from'),
+            'date_to' => $request->input('date_to'),
+            'property_id' => $request->input('property_id'),
+            'type_id' => $request->input('type_id'),
+            'status' => $request->input('status'),
+        ];
+    }
+
+    /**
+     * The register's rows and its totals by reason, landlord, tenant and age (AJAX).
+     */
     public function getRecoveryRegister(Request $request): JsonResponse
     {
         try {
-            $dateFrom   = $request->input('date_from');
-            $dateTo     = $request->input('date_to');
-            $propertyId = $request->input('property_id');
-
-            $query = DB::table('sys_pm_recoveries as rec')
-                ->select(
-                    'rec.id',
-                    'rec.recovery_date',
-                    'rec.narration',
-                    'rec.amount',
-                    'rec.is_commissionable',
-                    'rec.returns_batch',
-                    'c.names as tenant_name',
-                    'p.property_name'
-                )
-                ->leftJoin('sys_pm_clients as c', 'c.id', '=', 'rec.tenant_id')
-                ->leftJoin('sys_pm_properties as p', 'p.id', '=', 'rec.property_id')
-                ->when($dateFrom,   fn($q) => $q->whereDate('rec.recovery_date', '>=', $dateFrom))
-                ->when($dateTo,     fn($q) => $q->whereDate('rec.recovery_date', '<=', $dateTo))
-                ->when($propertyId, fn($q) => $q->where('rec.property_id', $propertyId))
-                ->orderBy('rec.recovery_date', 'desc');
-
-            $rows = $query->get();
-
-            $data = $rows->map(function ($r, $i) {
-                return [
-                    'no'              => $i + 1,
-                    'recovery_date'   => $r->recovery_date ? \Carbon\Carbon::parse($r->recovery_date)->format('d/m/Y') : 'N/A',
-                    'tenant'          => $r->tenant_name ?? 'N/A',
-                    'property'        => $r->property_name ?? 'N/A',
-                    'narration'       => $r->narration ?? '-',
-                    'amount'          => number_format((float) $r->amount, 2),
-                    'commissionable'  => $r->is_commissionable ? 'Yes' : 'No',
-                    'returns_batch'   => $r->returns_batch ?? '-',
-                ];
-            });
+            $rows = $this->recoveryReport->rows($this->recoveryFilters($request));
 
             return response()->json([
                 'success' => true,
-                'data'    => $data,
-                'count'   => $data->count(),
+                'data' => $rows->values(),
+                'count' => $rows->count(),
+                'summary' => $this->recoveryReport->summary($rows),
             ]);
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
@@ -1565,47 +1567,40 @@ class AccountsReportsController extends Controller
         }
     }
 
+    /**
+     * The register and its totals as an Excel file.
+     */
     public function exportRecoveryRegister(Request $request)
     {
         try {
-            $dateFrom   = $request->input('date_from');
-            $dateTo     = $request->input('date_to');
-            $propertyId = $request->input('property_id');
+            $filters = $this->recoveryFilters($request);
+            $rows = $this->recoveryReport->rows($filters);
+            $summary = $this->recoveryReport->summary($rows);
 
-            $rows = DB::table('sys_pm_recoveries as rec')
-                ->select(
-                    'rec.recovery_date', 'rec.narration', 'rec.amount',
-                    'rec.is_commissionable', 'rec.returns_batch',
-                    'c.names as tenant_name', 'p.property_name'
-                )
-                ->leftJoin('sys_pm_clients as c', 'c.id', '=', 'rec.tenant_id')
-                ->leftJoin('sys_pm_properties as p', 'p.id', '=', 'rec.property_id')
-                ->when($dateFrom,   fn($q) => $q->whereDate('rec.recovery_date', '>=', $dateFrom))
-                ->when($dateTo,     fn($q) => $q->whereDate('rec.recovery_date', '<=', $dateTo))
-                ->when($propertyId, fn($q) => $q->where('rec.property_id', $propertyId))
-                ->orderBy('rec.recovery_date', 'desc')
-                ->get();
+            $headings = ['#', 'Reference', 'Recovery Date', 'Reason', 'Status', 'Landlord', 'Property', 'Unit', 'Tenant', 'Invoice', 'Narration', 'Amount (KES)', 'Commissionable', 'Receipt', 'Returns Batch', 'Age (days)'];
+            $exportRows = $rows->map(fn ($r) => [
+                $r['no'], $r['reference'], $r['recovery_date'], $r['reason'], $r['status'], $r['landlord'], $r['property'], $r['unit'],
+                $r['tenant'], $r['invoice'], $r['narration'], $r['amount_raw'], $r['commissionable'], $r['receipt'], $r['returns_batch'], $r['age_days'] ?? '-',
+            ])->toArray();
 
-            $headings = ['#', 'Recovery Date', 'Tenant', 'Property', 'Narration', 'Amount (KES)', 'Commissionable', 'Returns Batch'];
-            $exportRows = $rows->map(function ($r, $i) {
-                return [
-                    $i + 1,
-                    $r->recovery_date ? \Carbon\Carbon::parse($r->recovery_date)->format('d/m/Y') : 'N/A',
-                    $r->tenant_name ?? 'N/A',
-                    $r->property_name ?? 'N/A',
-                    $r->narration ?? '-',
-                    number_format((float) $r->amount, 2),
-                    $r->is_commissionable ? 'Yes' : 'No',
-                    $r->returns_batch ?? '-',
-                ];
-            })->toArray();
+            // The totals by reason, age, landlord and tenant go under the register, one block each
+            foreach (['by_reason' => 'By reason', 'by_age' => 'By age', 'by_landlord' => 'By landlord', 'by_tenant' => 'By tenant'] as $key => $title) {
+                $exportRows[] = [];
+                $exportRows[] = ['', '', '', $title, 'Count', 'Amount (KES)'];
+                foreach ($summary[$key] as $group) {
+                    $exportRows[] = ['', '', '', $group['label'], $group['count'], $group['amount']];
+                }
+            }
 
             return Excel::download(
                 GenericReportExport::build(
                     'Recovery Register',
                     $headings,
                     $exportRows,
-                    ['Period: ' . ($dateFrom ?? 'All') . ' to ' . ($dateTo ?? 'All'), 'Generated: ' . now()->format('d/m/Y H:i:s')]
+                    [
+                        'Period: ' . ($filters['date_from'] ?? 'All') . ' to ' . ($filters['date_to'] ?? 'All') . '   Total: ' . $summary['total']['count'] . ' recoveries, KES ' . number_format($summary['total']['amount'], 2),
+                        'Generated: ' . now()->format('d/m/Y H:i:s'),
+                    ]
                 ),
                 'recovery-register-' . now()->format('Ymd') . '.xlsx'
             );

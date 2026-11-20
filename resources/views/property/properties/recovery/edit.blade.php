@@ -172,7 +172,7 @@
                                         <div class="small mb-1">Current: <a href="{{ route('property.recoveries.proof', Crypt::encrypt($recovery->id)) }}" target="_blank">{{ $recovery->proof_name }}</a> (choose a file to replace it)</div>
                                     @endif
                                     <input type="file" class="form-control @error('proof_file') is-invalid @enderror" id="proof_file" name="proof_file" accept="application/pdf,.pdf">
-                                    <small class="text-muted">PDF, up to 10 MB.</small>
+                                    <small class="text-muted" id="proof-help">PDF, up to 10 MB.</small>
                                     @error('proof_file')
                                     <div class="invalid-feedback d-block">{{ $message }}</div>
                                     @enderror
@@ -192,6 +192,7 @@
                                         <option value="No" {{ old('commisionable', $recovery->commisionable) == 'No' ? 'selected' : '' }}>No</option>
                                         <option value="Yes" {{ old('commisionable', $recovery->commisionable) == 'Yes' ? 'selected' : '' }}>Yes</option>
                                     </select>
+                                    <small class="text-muted d-none" id="commission-note"></small>
                                     @error('commisionable')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
@@ -230,6 +231,25 @@
                 processResults: function(data) { return data; }
             }
         });
+
+        // The five reasons (Paid Owner, Sat Deposit, Overpaid, Absconded, Paid Vacant) set the commission flag themselves and
+        // need the tenant, unit and invoice they settle; only Paid Owner needs the proof document
+        const reasonOptions = @json($reasonOptions ?? (object) []);
+        function applyReason() {
+            const reason = reasonOptions[$('#type_id').val()];
+            if (reason) {
+                $('#commisionable').val(reason.commission).prop('disabled', true).trigger('change');
+                $('#commission-note').text(reason.commission_note).removeClass('d-none');
+                $('#proof-help').text(reason.proof_required ? "The landlord's signed acknowledgement or receipt. PDF, up to 10 MB." : 'Optional supporting document. PDF, up to 10 MB.');
+                $('#narration').attr('placeholder', reason.placeholder);
+            } else {
+                $('#commisionable').prop('disabled', false).trigger('change');
+                $('#commission-note').addClass('d-none');
+                $('#proof-help').text('PDF, up to 10 MB.');
+            }
+        }
+        $('#type_id').on('change', applyReason);
+        applyReason();
 
         // Form submission with spinner
         $('#recoveryForm').on('submit', function(e) {

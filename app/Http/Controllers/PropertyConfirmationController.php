@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Services\PaidOwnerService;
+use App\Services\RecoveryService;
 use Illuminate\Http\Request;
 use App\Models\ConfirmationLog;
 use App\Models\DebtorInvoice;
@@ -18,13 +18,13 @@ class PropertyConfirmationController extends Controller
     use HasWorkflowStatuses;
     use TenantExitSettlementCalculatorTrait;
 
-    protected PaidOwnerService $paidOwner;
+    protected RecoveryService $recoveries;
 
     /**
-     * Inject the paid-owner service, which decides which recoveries are confirmed elsewhere.
+     * Inject the recovery service, which decides which recoveries are confirmed on the Recovery page.
      */
-    public function __construct(PaidOwnerService $paidOwner) {
-        $this->paidOwner = $paidOwner;
+    public function __construct(RecoveryService $recoveries) {
+        $this->recoveries = $recoveries;
     }
 
     public function index()
@@ -506,10 +506,11 @@ class PropertyConfirmationController extends Controller
                 break;
 
             case 'Recoveries':
-                // Paid-owner recoveries are confirmed on the Recovery page, where confirming also pays the tenant's invoice
-                // down and debits the client ledger; a plain approve here would only flip the status.
+                // The five recovery reasons (Paid Owner, Sat Deposit, Overpaid, Absconded, Paid Vacant) are confirmed on the
+                // Recovery page, where confirming also pays the tenant's invoice down and debits the client ledger; a plain
+                // approve here would only flip the status.
                 $base = \App\Models\Recovery::where('current_status_id', 1) // Pending
-                    ->where('type_id', '!=', (int) $this->paidOwner->typeId());
+                    ->whereNotIn('type_id', $this->recoveries->reasonTypeIds());
                 if ($search !== '') {
                     $base->where(function ($q) use ($search) {
                         $q->where('ref_number', 'ILIKE', "%{$search}%")
@@ -786,8 +787,8 @@ class PropertyConfirmationController extends Controller
 
                 case 'Recoveries':
                     $record = \App\Models\Recovery::findOrFail($id);
-                    if ($this->paidOwner->isPaidOwner($record)) {
-                        return response()->json(['success' => false, 'error' => 'A paid-owner recovery is confirmed or rejected on the Recovery page.'], 422);
+                    if ($this->recoveries->isInvoiceRecovery($record)) {
+                        return response()->json(['success' => false, 'error' => 'This recovery is confirmed or rejected on the Recovery page.'], 422);
                     }
                     $previousStatus = $record->current_status_id;
                     $record->current_status_id = 5; // Approved
@@ -1307,8 +1308,8 @@ class PropertyConfirmationController extends Controller
 
                 case 'Recoveries':
                     $record = \App\Models\Recovery::findOrFail($id);
-                    if ($this->paidOwner->isPaidOwner($record)) {
-                        return response()->json(['success' => false, 'error' => 'A paid-owner recovery is confirmed or rejected on the Recovery page.'], 422);
+                    if ($this->recoveries->isInvoiceRecovery($record)) {
+                        return response()->json(['success' => false, 'error' => 'This recovery is confirmed or rejected on the Recovery page.'], 422);
                     }
                     $previousStatus = $record->current_status_id;
                     $record->current_status_id = 41; // Rejected
@@ -1412,7 +1413,11 @@ class PropertyConfirmationController extends Controller
                     break;
 
                 case 'Recoveries':
-                    \App\Models\Recovery::whereIn('id', $ids)->where('type_id', '!=', (int) $this->paidOwner->typeId())->update(['current_status_id' => 5]);
+                    // the five reasons are confirmed on the Recovery page: say which ones were left out
+                    foreach (\App\Models\Recovery::whereIn('id', $ids)->whereIn('type_id', $this->recoveries->reasonTypeIds())->pluck('ref_number') as $ref) {
+                        $skipped[] = $ref . ' (confirmed on the Recovery page)';
+                    }
+                    \App\Models\Recovery::whereIn('id', $ids)->whereNotIn('type_id', $this->recoveries->reasonTypeIds())->update(['current_status_id' => 5]);
                     break;
 
                 case 'Lease Agreements':
@@ -1480,7 +1485,8 @@ class PropertyConfirmationController extends Controller
         $ids = $request->input('ids', []);
         $section = $request->input('section');
         $rejectionReason = $request->input('rejection_reason', null);
-        
+        $skipped = [];
+
         try {
             switch ($section) {
                 case 'Clients':
@@ -1504,7 +1510,11 @@ class PropertyConfirmationController extends Controller
                     break;
 
                 case 'Recoveries':
-                    \App\Models\Recovery::whereIn('id', $ids)->where('type_id', '!=', (int) $this->paidOwner->typeId())->update(['current_status_id' => 41]);
+                    // the five reasons are rejected on the Recovery page: say which ones were left out
+                    foreach (\App\Models\Recovery::whereIn('id', $ids)->whereIn('type_id', $this->recoveries->reasonTypeIds())->pluck('ref_number') as $ref) {
+                        $skipped[] = $ref . ' (rejected on the Recovery page)';
+                    }
+                    \App\Models\Recovery::whereIn('id', $ids)->whereNotIn('type_id', $this->recoveries->reasonTypeIds())->update(['current_status_id' => 41]);
                     break;
 
                 case 'Lease Agreements':
@@ -1542,10 +1552,16 @@ class PropertyConfirmationController extends Controller
                 'rejection_reason' => $rejectionReason,
                 'records_count' => count($ids),
                 'new_status_id' => 41,
-                'action_type' => 'bulk_rejection'
+                'action_type' => 'bulk_rejection',
+                'skipped' => $skipped ?: null,
             ]);
 
-            return response()->json(['success' => true, 'message' => 'Records rejected successfully']);
+            $message = 'Records rejected successfully';
+            if (!empty($skipped)) {
+                $message .= '. Skipped: ' . implode(', ', $skipped);
+            }
+
+            return response()->json(['success' => true, 'message' => $message]);
         } catch (\Exception $e) {
             Log::error('Error bulk rejecting records: ' . $e->getMessage());
             return response()->json(['success' => false, 'error' => 'Failed to reject records'], 500);

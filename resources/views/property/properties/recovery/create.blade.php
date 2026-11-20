@@ -150,7 +150,7 @@
                                 <div class="col-md-3 mb-3">
                                     <label for="proof_file" class="form-label">Proof document (PDF) <span class="text-danger d-none" id="proof-file-star">*</span></label>
                                     <input type="file" class="form-control @error('proof_file') is-invalid @enderror" id="proof_file" name="proof_file" accept="application/pdf,.pdf">
-                                    <small class="text-muted">The landlord's signed acknowledgement or receipt. PDF, up to 10 MB.</small>
+                                    <small class="text-muted" id="proof-help">PDF, up to 10 MB.</small>
                                     @error('proof_file')
                                     <div class="invalid-feedback d-block">{{ $message }}</div>
                                     @enderror
@@ -170,6 +170,7 @@
                                         <option value="No" {{ old('commisionable') == 'No' ? 'selected' : 'selected' }}>No</option>
                                         <option value="Yes" {{ old('commisionable') == 'Yes' ? 'selected' : '' }}>Yes</option>
                                     </select>
+                                    <small class="text-muted d-none" id="commission-note"></small>
                                     @error('commisionable')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
@@ -482,19 +483,26 @@
         });
 
 
-        // Type change handler - adjust form based on recovery type
-        const paidOwnerTypeId = {{ $paidOwnerTypeId ?? 'null' }};
+        // Type change handler - adjust form based on recovery type. The five reasons (Paid Owner, Sat Deposit, Overpaid,
+        // Absconded, Paid Vacant) name the tenant, unit and invoice they settle, and the reason sets the commission flag.
+        const reasonOptions = @json($reasonOptions ?? (object) []);
         $('#type').on('change', function() {
             let typeId = $(this).val();
-            if (paidOwnerTypeId && typeId == paidOwnerTypeId) {
-                // A paid-owner recovery names the tenant, unit and invoice that was paid, and earns commission as the rent does
-                $('#commissionable').val('Yes').trigger('change');
-                $('#unit_id, #offset_invoice, #proof_file').prop('required', true);
-                $('#proof-file-star').removeClass('d-none');
-                $('#narration').attr('placeholder', 'Tenant paid the owner directly for...');
+            const reason = reasonOptions[typeId];
+            if (reason) {
+                $('#commissionable').val(reason.commission).prop('disabled', true).trigger('change');
+                $('#commission-note').text(reason.commission_note).removeClass('d-none');
+                $('#unit_id, #offset_invoice').prop('required', true);
+                $('#proof_file').prop('required', reason.proof_required);
+                $('#proof-file-star').toggleClass('d-none', !reason.proof_required);
+                $('#proof-help').text(reason.proof_required ? "The landlord's signed acknowledgement or receipt. PDF, up to 10 MB." : 'Optional supporting document. PDF, up to 10 MB.');
+                $('#narration').attr('placeholder', reason.placeholder);
             } else {
+                $('#commissionable').prop('disabled', false).trigger('change');
+                $('#commission-note').addClass('d-none');
                 $('#unit_id, #offset_invoice, #proof_file').prop('required', false);
                 $('#proof-file-star').addClass('d-none');
+                $('#proof-help').text('PDF, up to 10 MB.');
             }
             let typeText = $('#type option:selected').text();
             
@@ -511,6 +519,11 @@
                 $('#narration').attr('placeholder', placeholders[typeText]);
             }
         });
+
+        // After a failed save the form comes back with the type already chosen
+        if ($('#type').val()) {
+            $('#type').trigger('change');
+        }
     });
 </script>
 @endsection
