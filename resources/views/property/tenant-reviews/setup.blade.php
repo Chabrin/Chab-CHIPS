@@ -6,6 +6,7 @@
     @if(session('success'))<div class="alert alert-success" role="status">{{ session('success') }}</div>@endif
     @if($errors->any())<div class="alert alert-danger" role="alert">{{ $errors->first() }}</div>@endif
     <p>The preparing Field Officer signs when saving the tenant. Choose the approval roles that follow. The last step gives final approval to the tenant and lease.</p>
+    <p>Before adding an approver role, grant it the <strong>New Tenant Approvals</strong> module and the <strong>view_tenant_onboarding</strong> and <strong>review_tenant_onboarding</strong> permissions in Roles. Selecting a role here does not grant those permissions.</p>
     <p>Publishing applies the new sequence to new tenant submissions. Reviews already in progress, including returned corrections, keep their saved version.</p>
     <form id="tenant-workflow-form" action="{{ route('tenant-reviews.publish') }}" method="POST">
         @csrf

@@ -148,7 +148,11 @@
                     data: 'date_time'
                 },
                 {
-                    data: 'reference_number'
+                    data: 'reference_number',
+                    render: function(data, type, row) {
+                        if (type !== 'display') return data;
+                        return $('<a>').attr('href', row.details_url).text(data || 'View invoice')[0].outerHTML;
+                    }
                 },
                 {
                     data: 'tenant_name',

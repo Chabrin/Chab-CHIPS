@@ -236,8 +236,8 @@
 
         // Wrap each filter input with a spinner element
         $('#tenant-filters input.col-filter').each(function () {
-            $(this).wrap('<div class="col-filter-wrap"></div>');
-            $(this).after('<span class="filter-spinner"></span>');
+            $(this).wrap('<span class="col-filter-wrap"></span>');
+            $(this).after('<span class="filter-spinner" aria-hidden="true"></span>');
         });
 
         var debounceTimer;

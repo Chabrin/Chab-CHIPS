@@ -51,7 +51,11 @@ class TenantReviewTest extends TestCase
         }
         Schema::create('cb_roles', function (Blueprint $t) { $t->id(); $t->string('name'); $t->string('display_name'); $t->boolean('is_global')->default(true); });
         Schema::create('cb_role_user', function (Blueprint $t) { $t->integer('role_id'); $t->integer('user_id'); $t->string('user_type')->nullable(); });
-        Schema::create('cb_permissions', function (Blueprint $t) { $t->id(); $t->string('name'); });
+        Schema::create('cb_permissions', function (Blueprint $t) { $t->id(); $t->string('name'); $t->string('display_name')->nullable(); $t->text('description')->nullable(); $t->integer('module_id')->nullable(); $t->timestamps(); });
+        Schema::create('cb_modules', function (Blueprint $t) { $t->id(); $t->string('module_name'); });
+        Schema::create('cb_sub_modules', function (Blueprint $t) { $t->id(); $t->string('sub_module_name'); $t->string('sub_module_url'); $t->integer('module_id'); $t->string('icon')->nullable(); $t->integer('order'); $t->string('added_by')->nullable(); $t->timestamp('added_on')->nullable(); $t->timestamps(); });
+        Schema::create('cb_sub_module_permissions', function (Blueprint $t) { $t->id(); $t->integer('role_id'); $t->integer('sub_module_id'); $t->string('added_by')->nullable(); $t->timestamp('added_on')->nullable(); });
+        DB::table('cb_modules')->insert(['id' => 10, 'module_name' => 'Approval Control']);
         Schema::create('cb_permission_role', function (Blueprint $t) { $t->integer('permission_id'); $t->integer('role_id'); });
         Schema::create('cb_permission_user', function (Blueprint $t) { $t->integer('permission_id'); $t->integer('user_id'); $t->string('user_type'); });
         Schema::create('sys_user_staff_links', function (Blueprint $t) { $t->id(); $t->integer('user_id'); $t->integer('staff_id'); });
@@ -66,8 +70,11 @@ class TenantReviewTest extends TestCase
             DB::table('sys_user_staff_links')->insert(['user_id' => $id, 'staff_id' => $id * 10]);
         }
         DB::table('cb_permissions')->insert(['id' => 1, 'name' => 'update_approval_workflows']);
+        DB::table('cb_permissions')->insert([['id' => 2, 'name' => 'create_tenants'], ['id' => 3, 'name' => 'update_tenants']]);
+        DB::table('cb_permission_role')->insert([['permission_id' => 2, 'role_id' => 1], ['permission_id' => 3, 'role_id' => 1]]);
         DB::table('cb_permission_role')->insert(['permission_id' => 1, 'role_id' => 4]);
         (require database_path('migrations/2026_11_18_110000_version_tenant_review_workflows.php'))->up();
+        (require database_path('migrations/2026_11_20_140000_register_tenant_onboarding_access.php'))->up();
         DB::table('sys_set_zones')->insert(['id' => 1, 'zone_manager_id' => 20]);
         Property::withoutEvents(fn () => Property::create(['id' => 1, 'zone_id' => 1, 'field_officer_id' => 10]));
         // The model does not mass assign its primary key.
@@ -383,11 +390,51 @@ class TenantReviewTest extends TestCase
         $response->assertRedirect(route('tenant-reviews.show', $review));
         $this->assertSame('zone_manager', $review->stage);
         $this->assertSame(1, (int) $review->tenant->current_status_id);
+        $this->assertSame('+254712345678', $review->tenant->mobile_number);
         $this->assertSame(1, (int) $review->lease->current_status_id);
         $invoice = DebtorInvoice::sole();
         $this->assertSame(50000.0, (float) $invoice->total_amount);
         $this->assertSame(50000.0, (float) TenantAccountTransaction::sole()->debit_amount);
         $this->assertSame((int) $review->lease_id, (int) Deposit::sole()->lease_id);
+    }
+
+    public function test_individual_onboarding_accepts_either_identity_document_and_saves_an_international_phone(): void
+    {
+        $this->withoutMiddleware()->actingAs($this->user(1));
+
+        foreach ([
+            ['national_id', '12345678', 'NATIONAL_ID', '+254 712 345 678', '+254712345678'],
+            ['passport_number', 'P1234567', 'PASSPORT', '+256-772-123-456', '+256772123456'],
+        ] as [$field, $number, $documentType, $phone, $savedPhone]) {
+            $unit = Unit::create(['property_id' => 1, 'rent_amount' => 25000, 'unit_code' => $documentType, 'vat_able' => 'No']);
+            $this->postJson('/units/tenants', [
+                'property_id' => 1, 'unit_id' => $unit->id, 'lease_start_date' => '2026-12-01',
+                'lease_years' => 1, 'frequency' => 'Annually', 'tenant_type' => 1,
+                'names' => 'Test tenant', 'nationality_id' => 1, 'registered_date' => '2026-11-18',
+                $field => $number, 'mobile_number' => $phone,
+            ])->assertOk()->assertJsonPath('success', true);
+
+            $this->assertDatabaseHas('cb_tenant_records', [
+                'id_document_type' => $documentType, $field => $number, 'phone' => $savedPhone,
+            ]);
+        }
+    }
+
+    public function test_individual_onboarding_rejects_missing_identification_and_phone_without_country_code(): void
+    {
+        $this->withoutMiddleware()->actingAs($this->user(1));
+        $unit = Unit::create(['property_id' => 1, 'rent_amount' => 25000, 'unit_code' => 'TEST-2', 'vat_able' => 'No']);
+        $details = [
+            'property_id' => 1, 'unit_id' => $unit->id, 'lease_start_date' => '2026-12-01',
+            'lease_years' => 1, 'frequency' => 'Annually', 'tenant_type' => 1,
+            'names' => 'Test tenant', 'nationality_id' => 1, 'registered_date' => '2026-11-18',
+        ];
+
+        $this->postJson('/units/tenants', $details + ['mobile_number' => '+254712345678'])
+            ->assertUnprocessable()->assertJsonValidationErrors('national_id');
+        $this->postJson('/units/tenants', $details + ['national_id' => '12345678', 'mobile_number' => '0712345678'])
+            ->assertUnprocessable()->assertJsonValidationErrors('mobile_number');
+        $this->assertSame(0, TenantReview::count());
     }
 
     public function test_next_reviewer_gets_an_in_app_notification(): void
@@ -465,6 +512,7 @@ class TenantReviewTest extends TestCase
 
     public function test_added_steps_need_separate_signatures_before_the_final_approval(): void
     {
+        DB::table('cb_permission_role')->insert(['role_id' => 4, 'permission_id' => DB::table('cb_permissions')->where('name', 'review_tenant_onboarding')->value('id')]);
         $workflows = app(\App\Services\TenantReviewWorkflowService::class);
         $workflows->publish([2, 4, 3], $workflows->current()->id, $this->user(4));
         $review = $this->review();
@@ -541,5 +589,108 @@ class TenantReviewTest extends TestCase
             }
         }
         $this->assertSame(1, \App\Models\TenantReviewWorkflowVersion::count());
+    }
+
+    public function test_onboarding_menus_and_permissions_are_registered_without_duplicate_grants(): void
+    {
+        (require database_path('migrations/2026_11_20_140000_register_tenant_onboarding_access.php'))->up();
+        $this->assertSame(3, DB::table('cb_sub_modules')->count());
+        $this->assertSame(6, DB::table('cb_permissions')->count());
+        $this->assertSame(10, (int) DB::table('cb_permissions')->where('name', 'update_approval_workflows')->value('module_id'));
+        $this->assertSame(6, DB::table('cb_sub_module_permissions')->count());
+        $this->assertFalse(app(\App\Services\TenantReviewWorkflowService::class)->canManage($this->user(1)));
+    }
+
+    public function test_removing_review_permission_blocks_direct_decisions_but_keeps_view_access(): void
+    {
+        $review = $this->review();
+        $this->assertTrue($this->reviews->reviewer($review, $this->user(2)));
+        DB::table('cb_permission_role')->where('role_id', 2)->where('permission_id', DB::table('cb_permissions')->where('name', 'review_tenant_onboarding')->value('id'))->delete();
+        $this->assertTrue($this->reviews->canView($review, $this->user(2)));
+        $this->assertFalse($this->reviews->reviewer($review, $this->user(2)));
+        $this->withoutMiddleware([\App\Http\Middleware\OneLogin::class, \App\Http\Middleware\EnsureStaffPasswordIsCurrent::class, \App\Http\Middleware\AccessChecker::class])->actingAs($this->user(2));
+        $this->postJson('/approvals/new-tenants/'.$review->id.'/decision', ['revision' => 1, 'stage' => 'zone_manager', 'action' => 'approve'])->assertForbidden();
+        $this->assertSame('zone_manager', $review->fresh()->stage);
+    }
+
+    public function test_removing_the_module_blocks_direct_links_and_post_requests(): void
+    {
+        $review = $this->review();
+        DB::table('cb_sub_module_permissions')->where('role_id', 2)->delete();
+        $this->assertFalse($this->reviews->canView($review, $this->user(2)));
+        $this->withoutMiddleware([\App\Http\Middleware\OneLogin::class, \App\Http\Middleware\EnsureStaffPasswordIsCurrent::class, \App\Http\Middleware\AccessChecker::class])->actingAs($this->user(2));
+        $this->getJson('/approvals/new-tenants')->assertForbidden();
+        $this->getJson('/approvals/new-tenants/'.$review->id)->assertForbidden();
+        $this->postJson('/approvals/new-tenants/'.$review->id.'/decision', ['revision' => 1, 'stage' => 'zone_manager', 'action' => 'approve'])->assertForbidden();
+    }
+
+    public function test_setup_module_and_accounts_permission_are_enforced_separately(): void
+    {
+        $this->assertTrue($this->reviews->canReconcile($this->user(4)));
+        $accountsPermission = DB::table('cb_permissions')->where('name', 'reconcile_tenant_onboarding')->value('id');
+        DB::table('cb_permission_role')->where('role_id', 4)->where('permission_id', $accountsPermission)->delete();
+        $this->assertFalse($this->reviews->canReconcile($this->user(4)));
+        $review = $this->review();
+        $this->withoutMiddleware()->actingAs($this->user(4));
+        $this->getJson('/approvals/new-tenants/reconciliation')->assertForbidden();
+        $this->postJson('/approvals/new-tenants/'.$review->id.'/reconcile', ['revision' => 1, 'reason' => 'Test'])->assertForbidden();
+        $setup = DB::table('cb_sub_modules')->where('sub_module_url', '/approvals/setup')->value('id');
+        DB::table('cb_sub_module_permissions')->where('role_id', 4)->where('sub_module_id', $setup)->delete();
+        $this->postJson('/approvals/setup/tenant-onboarding', ['version' => 1, 'steps' => [['role_id' => 3]]])->assertForbidden();
+    }
+
+    public function test_a_role_needs_module_and_permissions_before_being_added_to_a_workflow(): void
+    {
+        $workflows = app(\App\Services\TenantReviewWorkflowService::class);
+        $this->expectException(ValidationException::class);
+        $workflows->publish([2, 4, 3], $workflows->current()->id, $this->user(4));
+    }
+
+    public function test_granting_review_permission_does_not_let_the_preparer_approve_their_own_tenant(): void
+    {
+        DB::table('cb_permission_role')->insert(['role_id' => 1, 'permission_id' => DB::table('cb_permissions')->where('name', 'review_tenant_onboarding')->value('id')]);
+        $review = $this->review();
+        $this->assertTrue(\App\Services\TenantReviewAccess::allows($this->user(1), 'review_tenant_onboarding'));
+        $this->assertFalse($this->reviews->reviewer($review, $this->user(1)));
+        $this->assertFalse($this->reviews->reviewer($review, $this->user(3)));
+    }
+
+    public function test_revoking_view_permission_stops_review_access_even_when_the_module_remains_checked(): void
+    {
+        $review = $this->review();
+        DB::table('cb_permission_role')->where('role_id', 2)->where('permission_id', DB::table('cb_permissions')->where('name', 'view_tenant_onboarding')->value('id'))->delete();
+        $this->assertTrue(\App\Services\TenantReviewAccess::roleHasPage(2, '/approvals/new-tenants'));
+        $this->assertFalse($this->reviews->canView($review, $this->user(2)));
+        $this->assertFalse($this->reviews->reviewer($review, $this->user(2)));
+    }
+
+    public function test_standard_role_screens_list_the_registered_onboarding_modules_and_permissions(): void
+    {
+        $values = ['role' => DB::table('cb_roles')->where('id', 1)->first(),
+            'modules' => \App\Models\Module::with('submodules')->get(), 'assigned' => [],
+            'permissions' => DB::table('cb_permissions')->get(), 'errors' => new \Illuminate\Support\ViewErrorBag()];
+        foreach (['modulesaccess' => ['New Tenant Approvals', 'Approval Setup', 'Rejected Tenant Reconciliation'],
+            'permissionsaccess' => ['view_tenant_onboarding', 'review_tenant_onboarding', 'reconcile_tenant_onboarding', 'update_approval_workflows']] as $view => $labels) {
+            $source = str_replace("@extends('layouts.main')", '', file_get_contents(resource_path('views/roles/'.$view.'.blade.php')));
+            $html = \Illuminate\Support\Facades\Blade::render($source."\n@yield('content')", $values, true);
+            $this->assertStringContainsString('Approval Control', $html);
+            foreach ($labels as $label) $this->assertStringContainsString($label, $html);
+        }
+    }
+
+    public function test_the_existing_tenant_creation_and_edit_permissions_are_still_required(): void
+    {
+        $review = $this->review();
+        $this->decide($review, 2, 'return', 'Correct the details.');
+        DB::table('cb_permission_role')->where('role_id', 1)->where('permission_id', 2)->delete();
+        try {
+            $this->reviews->assertPreparer(1, $this->user(1));
+            $this->fail('Viewing onboarding must not grant tenant creation.');
+        } catch (ValidationException $e) {
+            $this->assertStringContainsString('create_tenants', $e->errors()['property_id'][0]);
+        }
+        DB::table('cb_permission_role')->where('role_id', 1)->where('permission_id', 3)->delete();
+        $this->expectException(HttpException::class);
+        $this->reviews->lockForCorrection(1, $this->user(1));
     }
 }

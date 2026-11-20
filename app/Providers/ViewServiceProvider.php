@@ -29,29 +29,16 @@ class ViewServiceProvider extends ServiceProvider
             $submenusGrouped = $allowedSubmenus->groupBy('module_id');
             $modules = DB::table('cb_modules')->orderBy('module_order')->get();
 
-            if (\Illuminate\Support\Facades\Schema::hasTable('tenant_reviews') && !$user->block) {
-                $reviews = app(\App\Services\TenantReviewService::class);
-                $roles = config('tenant_review.roles');
-                $workflowSetup = app(\App\Services\TenantReviewWorkflowService::class);
-                $flexibleReady = \Illuminate\Support\Facades\Schema::hasTable('tenant_review_workflow_versions');
-                $canManage = $workflowSetup->canManage($user);
-                if ($canManage || $reviews->hasRole($user, array_merge([$roles['field_officer']], $roles['accounts']))
-                    || ($flexibleReady && $workflowSetup->participates($user))) {
-                    $module = $modules->firstWhere('module_name', 'Approval Control');
-                    if ($module) {
-                        $entries = $submenusGrouped->get($module->id, collect());
-                        $entries->push((object) ['sub_module_name' => 'New Tenant Approvals', 'sub_module_url' => route('tenant-reviews.index', [], false)]);
-                        if ($canManage) {
-                            $entries->push((object) ['sub_module_name' => 'Approval Setup', 'sub_module_url' => route('tenant-reviews.setup', [], false)]);
-                        }
-                        if ($reviews->accounts($user)) {
-                            $entries->push((object) ['sub_module_name' => 'Rejected Tenant Reconciliation', 'sub_module_url' => route('tenant-reviews.index', ['accounts' => 1], false)]);
-                        }
-                        $submenusGrouped->put($module->id, $entries);
-                    }
-                }
-            }
-
+            // Tenant onboarding uses the same registered module grants as the rest of the app.
+            $allowedSubmenus = $allowedSubmenus->filter(function ($entry) use ($user) {
+                return match ($entry->sub_module_url) {
+                    \App\Services\TenantReviewAccess::REVIEWS => \App\Services\TenantReviewAccess::allows($user, 'view_tenant_onboarding'),
+                    \App\Services\TenantReviewAccess::SETUP => app(\App\Services\TenantReviewWorkflowService::class)->canManage($user),
+                    \App\Services\TenantReviewAccess::ACCOUNTS => app(\App\Services\TenantReviewService::class)->canReconcile($user),
+                    default => true,
+                };
+            });
+            $submenusGrouped = $allowedSubmenus->groupBy('module_id');
             // Build menu data for each module the user has access to
             $menuData = [];
             foreach ($modules as $menu) {

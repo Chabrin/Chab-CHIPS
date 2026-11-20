@@ -69,6 +69,40 @@ class InvoicingController extends Controller
         }
     }
 
+    public function tenantInvoiceDetails(Request $request, string $encryptedId)
+    {
+        // Detail URLs are not menu entries, so check the parent menu explicitly.
+        $roleId = DB::table('cb_role_user')->where('user_id', $request->user()->id)->value('role_id');
+        abort_unless(DB::table('cb_sub_module_permissions as p')
+            ->join('cb_sub_modules as m', 'm.id', '=', 'p.sub_module_id')
+            ->where('p.role_id', $roleId)
+            ->where('m.sub_module_url', '/tenants/invoiceitems')->exists(), 403);
+
+        try {
+            $id = Crypt::decryptString($encryptedId);
+        } catch (\Illuminate\Contracts\Encryption\DecryptException $e) {
+            abort(404);
+        }
+
+        // Respect the property's normal staff/zone visibility, including direct URLs.
+        $invoice = DebtorInvoice::tenantInvoices()->whereHas('property')
+            ->with(['tenant', 'property', 'unit', 'lease', 'paymentAllocations.payment'])
+            ->findOrFail($id);
+        $item = InvoiceableItem::find($invoice->item_type_id);
+        $creator = DB::table('josya_users')->where('id', $invoice->created_by)->value('name');
+        $deposits = Deposit::where('invoice_id', $invoice->id)->get();
+        $transactions = \App\Models\TenantAccountTransaction::where('invoice_id', $invoice->id)
+            ->orderBy('date_time')->orderBy('id')->get();
+        $batchInvoices = filled($invoice->batch_number)
+            ? DebtorInvoice::tenantInvoices()->where('batch_number', $invoice->batch_number)
+                ->where('property_id', $invoice->property_id)->orderBy('id')->limit(21)->get()
+            : collect();
+
+        return view('property.invoices.tenant-invoice-details', compact(
+            'invoice', 'item', 'creator', 'deposits', 'transactions', 'batchInvoices'
+        ));
+    }
+
     /**
      * Search invoice items (AJAX)
      */
@@ -186,6 +220,7 @@ class InvoicingController extends Controller
                         'id' => $invoice->id,
                         'date_time' => $invoice->date_time ? $invoice->date_time->format('d-m-Y') : '-',
                         'reference_number' => $invoice->reference_number ?? '-',
+                        'details_url' => route('invoices.tenant.items.show', Crypt::encryptString((string) $invoice->id)),
                         'tenant_name' => $invoice->tenant->names ?? '-',
                         'tenant_encrypted_id' => $invoice->tenant ? $invoice->tenant->encrypted_id : null,
                         'property_name' => $invoice->property->property_name ?? '-',

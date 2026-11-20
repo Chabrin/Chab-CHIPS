@@ -76,6 +76,7 @@ use App\Http\Controllers\PayrollMonthlyController;
 
 Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/approvals/new-tenants', [\App\Http\Controllers\TenantReviewController::class, 'index'])->name('tenant-reviews.index');
+    Route::get('/approvals/new-tenants/reconciliation', [\App\Http\Controllers\TenantReviewController::class, 'index'])->name('tenant-reviews.reconciliation');
     Route::get('/approvals/setup', [\App\Http\Controllers\TenantReviewController::class, 'setup'])->name('tenant-reviews.setup');
     Route::post('/approvals/setup/tenant-onboarding', [\App\Http\Controllers\TenantReviewController::class, 'publish'])->name('tenant-reviews.publish');
     Route::get('/approvals/new-tenants/{review}', [\App\Http\Controllers\TenantReviewController::class, 'show'])->name('tenant-reviews.show');
@@ -984,6 +985,7 @@ Route::middleware('throttle:5,1')->group(function () {
     // Tenant Invoice Items (MUST come before /tenants/{encryptedId} route)
     Route::get('/tenants/invoiceitems', [App\Http\Controllers\InvoicingController::class, 'tenantInvoiceItems'])->name('invoices.tenant.items.index');
     Route::get('/tenants/invoiceitems/create', [App\Http\Controllers\InvoicingController::class, 'createInvoiceItem'])->name('invoices.tenant.items.create');
+    Route::get('/tenants/invoiceitems/{encryptedId}/details', [App\Http\Controllers\InvoicingController::class, 'tenantInvoiceDetails'])->name('invoices.tenant.items.show');
     Route::post('/ajax/invoices/items/search', [App\Http\Controllers\InvoicingController::class, 'searchInvoiceItems'])->name('ajax.invoices.items.search');
     Route::post('/ajax/invoices/items/store', [App\Http\Controllers\InvoicingController::class, 'storeInvoiceItem'])->name('ajax.invoices.items.store');
 

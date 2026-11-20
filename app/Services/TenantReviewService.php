@@ -25,6 +25,7 @@ class TenantReviewService
 
     public function reviewer(TenantReview $review, User $user): bool
     {
+        if (!TenantReviewAccess::allows($user, 'view_tenant_onboarding') || !TenantReviewAccess::allows($user, 'review_tenant_onboarding')) return false;
         $step = $review->currentStep();
         if (!$step || (int) $review->prepared_by === (int) $user->id
             || !$this->matchesStep($review, $user, $step)) {
@@ -50,9 +51,15 @@ class TenantReviewService
         return $this->hasRole($user, config('tenant_review.roles.accounts'));
     }
 
+    public function canReconcile(User $user): bool
+    {
+        return $this->accounts($user) && TenantReviewAccess::allows($user, 'view_tenant_onboarding')
+            && TenantReviewAccess::allows($user, 'reconcile_tenant_onboarding', TenantReviewAccess::ACCOUNTS);
+    }
+
     public function canView(TenantReview $review, User $user): bool
     {
-        if ($user->block) return false;
+        if (!TenantReviewAccess::allows($user, 'view_tenant_onboarding')) return false;
         if ((int) $review->prepared_by === (int) $user->id || $this->accounts($user)) return true;
         return collect(array_slice($review->steps(), 1))->contains(fn ($step) => $this->matchesStep($review, $user, $step));
     }
@@ -70,6 +77,12 @@ class TenantReviewService
 
     public function assertPreparer(int $propertyId, User $user): void
     {
+        if (!TenantReviewAccess::permissionGranted($user, 'create_tenants')) {
+            throw ValidationException::withMessages(['property_id' => 'Your role needs the create_tenants permission before saving and signing a new tenant.']);
+        }
+        if (!TenantReviewAccess::allows($user, 'view_tenant_onboarding')) {
+            throw ValidationException::withMessages(['property_id' => 'Your role needs the New Tenant Approvals module and view_tenant_onboarding permission before saving and signing.']);
+        }
         if (!Schema::hasTable('tenant_reviews')) {
             throw ValidationException::withMessages(['property_id' => 'Apply the tenant approval migration before saving a new tenant.']);
         }
@@ -133,6 +146,8 @@ class TenantReviewService
         if (!Schema::hasTable('tenant_reviews')) return null;
         $review = TenantReview::where('tenant_id', $tenantId)->lockForUpdate()->first();
         if (!$review || $review->stage === 'approved') return null;
+        abort_unless(TenantReviewAccess::allows($user, 'view_tenant_onboarding'), 403);
+        abort_unless(TenantReviewAccess::permissionGranted($user, 'update_tenants'), 403);
         abort_unless(!$user->block && (int) $review->prepared_by === (int) $user->id && $review->stage === 'correction', 403,
             'Pending onboarding details can only be corrected by the preparing Field Officer after a return.');
         return $review;
@@ -161,8 +176,9 @@ class TenantReviewService
                     ->whereIn('cb_roles.id', $roleIds)->orWhereIn('name', $accountsRoles)->orWhereIn('display_name', $accountsRoles))->get();
                 $recipients->push(User::find($review->prepared_by));
                 foreach ($recipients->filter()->unique('id') as $recipient) {
+                    if (!$this->canView($review, $recipient)) continue;
                     if ((int) $recipient->id !== (int) $review->prepared_by && !$this->reviewer($review, $recipient)
-                        && !($review->accounts_pending && $this->accounts($recipient))) continue;
+                        && !($review->accounts_pending && $this->canReconcile($recipient))) continue;
                     \App\Models\Notification::create(['type' => 'tenant_review', 'notifiable_type' => User::class,
                         'notifiable_id' => $recipient->id, 'title' => 'Tenant onboarding update',
                         'message' => $review->stageLabel(), 'data' => ['review_id' => $review->id],

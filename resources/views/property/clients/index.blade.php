@@ -1,60 +1,75 @@
 @extends('layouts.main')
 
+@section('styles')
+<link rel="stylesheet" href="{{ asset('assets/css/client-list.css') }}?v={{ filemtime(public_path('assets/css/client-list.css')) }}">
+@endsection
+
 @section('content')
-<div class="page-body" style="padding-top:10px;">
+<div class="page-body" id="clients-directory">
     <div class="container-fluid">
-        <section class="card" aria-labelledby="clients-list-title">
-            <div class="card-header d-flex flex-wrap gap-2 justify-content-between align-items-center">
-                <h5 id="clients-list-title">Clients</h5>
+        <section class="card client-list-card" aria-labelledby="clients-list-title">
+            <header class="client-list-header">
+                <div>
+                    <p class="client-list-eyebrow">Management</p>
+                    <h1 id="clients-list-title">Clients</h1>
+                </div>
                 @permission('create_clients')
-                    <a href="{{ route('property.clients.create') }}" class="btn btn-primary btn-sm d-inline-flex align-items-center gap-1">
-                        <span class="material-symbols-outlined" aria-hidden="true">add_circle</span>
+                    <a href="{{ route('property.clients.create') }}" class="btn btn-primary client-list-add">
+                        <i class="fa fa-plus-circle" aria-hidden="true"></i>
                         Add Client
                     </a>
                 @endpermission
-            </div>
-            <div class="card-body">
-                <div class="mb-3" role="search" aria-label="Client directory">
-                    <div class="row g-2 align-items-end">
-                        <div class="col-sm-9 col-lg-6">
-                            <label for="client-search" class="form-label mb-1">Search clients</label>
-                            <input id="client-search" type="search" class="form-control form-control-sm"
-                                   placeholder="Name, phone, ID number or client reference" autocomplete="off" aria-controls="clients-table">
+            </header>
+            <div class="client-list-body">
+                <div class="client-list-search-area" role="search" aria-label="Client directory">
+                    <div class="client-list-toolbar">
+                        <div class="client-list-search-field">
+                            <label for="client-search">Search clients</label>
+                            <div class="client-list-search-control">
+                                <i class="fa fa-search" aria-hidden="true"></i>
+                                <input id="client-search" type="search" class="form-control"
+                                       placeholder="Name, phone, ID number or client reference" autocomplete="off" aria-controls="clients-table">
+                            </div>
                         </div>
-                        <div class="col-auto">
-                            <button type="button" class="btn btn-outline-secondary btn-sm" id="clear-client-filters" hidden>Clear search and filters</button>
+                        <div class="client-list-toolbar-actions">
+                            <button type="button" class="btn btn-sm client-list-filter-toggle"
+                                    data-bs-toggle="collapse" data-bs-target="#client-list-filter-panel"
+                                    aria-expanded="false" aria-controls="client-list-filter-panel">
+                                <i class="fa fa-sliders" aria-hidden="true"></i>
+                                <span id="client-filter-summary">More filters</span>
+                            </button>
+                            <button type="button" class="btn btn-sm client-list-clear" id="clear-client-filters" hidden>Clear search and filters</button>
                         </div>
                     </div>
-                    <details class="mt-2">
-                        <summary class="text-primary fw-semibold" id="client-filter-summary">More filters</summary>
-                        <div class="row g-2 mt-1">
-                            <div class="col-sm-6 col-lg-3">
-                                <label for="client-filter-name" class="form-label mb-1">Client name</label>
-                                <input id="client-filter-name" class="form-control form-control-sm" type="search" data-client-filter="names" aria-controls="clients-table">
+                    <div class="collapse" id="client-list-filter-panel">
+                        <div class="client-list-filter-grid">
+                            <div>
+                                <label for="client-filter-name">Client name</label>
+                                <input id="client-filter-name" class="form-control" type="search" data-client-filter="names" aria-controls="clients-table">
                             </div>
-                            <div class="col-sm-6 col-lg-3">
-                                <label for="client-filter-reference" class="form-label mb-1">Client reference</label>
-                                <input id="client-filter-reference" class="form-control form-control-sm" type="search" data-client-filter="reference_number" aria-controls="clients-table">
+                            <div>
+                                <label for="client-filter-reference">Client reference</label>
+                                <input id="client-filter-reference" class="form-control" type="search" data-client-filter="reference_number" aria-controls="clients-table">
                             </div>
-                            <div class="col-sm-6 col-lg-3">
-                                <label for="client-filter-phone" class="form-label mb-1">Phone</label>
-                                <input id="client-filter-phone" class="form-control form-control-sm" type="search" data-client-filter="mobile_number" aria-controls="clients-table">
+                            <div>
+                                <label for="client-filter-phone">Phone</label>
+                                <input id="client-filter-phone" class="form-control" type="search" data-client-filter="mobile_number" aria-controls="clients-table">
                             </div>
-                            <div class="col-sm-6 col-lg-3">
-                                <label for="client-filter-id" class="form-label mb-1">ID number</label>
-                                <input id="client-filter-id" class="form-control form-control-sm" type="search" data-client-filter="national_id" aria-controls="clients-table">
+                            <div>
+                                <label for="client-filter-id">ID number</label>
+                                <input id="client-filter-id" class="form-control" type="search" data-client-filter="national_id" aria-controls="clients-table">
                             </div>
                         </div>
-                    </details>
+                    </div>
                 </div>
 
                 <div id="client-list-error" class="alert alert-light-danger" role="alert" hidden>
                     Could not load clients.
-                    <button id="retry-client-list" type="button" class="btn btn-link btn-sm p-0">Try again</button>
+                    <button id="retry-client-list" type="button" class="btn btn-sm client-list-clear">Try again</button>
                 </div>
 
                 <div class="table-responsive custom-scrollbar" tabindex="0" role="region" aria-label="Client records">
-                    <table class="display w-100" id="clients-table">
+                    <table class="w-100" id="clients-table">
                         <thead>
                             <tr>
                                 <th scope="col">Client name</th>
@@ -95,8 +110,8 @@
         }
 
         function actionIcon(url, label, iconName) {
-            return $('<a>', { href: url, title: label, 'aria-label': label, class: 'link-primary p-1' })
-                .append($('<span>', { class: 'material-symbols-outlined align-middle', 'aria-hidden': 'true', text: iconName }));
+            return $('<a>', { href: url, title: label, 'aria-label': label, class: 'client-list-icon-action' })
+                .append($('<i>', { class: 'fa fa-' + iconName, 'aria-hidden': 'true' }));
         }
 
         const table = $('#clients-table')
@@ -114,8 +129,12 @@
                         name: 'names',
                         render: function(value, type, row) {
                             if (type !== 'display') return value;
-                            const name = displayValue(value, 'Name missing');
-                            return $('<a>', { href: clientUrl(row.encrypted_id), class: 'link-primary fw-semibold', text: name })[0];
+                            const name = displayValue(value, '');
+                            return $('<a>', {
+                                href: clientUrl(row.encrypted_id),
+                                class: name ? 'client-list-name' : 'client-list-name client-list-name-missing',
+                                text: name || 'Name missing'
+                            })[0];
                         }
                     },
                     { data: 'reference_number', name: 'reference_number', className: 'text-nowrap', render: value => text.display(displayValue(value)) },
@@ -129,8 +148,8 @@
                         render: function(value, type, row) {
                             if (type !== 'display') return '';
                             const url = clientUrl(value);
-                            const actions = $('<div>', { class: 'd-flex gap-1' }).append(actionIcon(url, 'Open client', 'visibility'));
-                            if (row.can_update) actions.append(actionIcon(url + '/edit', 'Edit client', 'edit_document'));
+                            const actions = $('<div>', { class: 'client-list-row-actions' }).append(actionIcon(url, 'Open client', 'eye'));
+                            if (row.can_update) actions.append(actionIcon(url + '/edit', 'Edit client', 'pencil'));
                             return actions[0];
                         }
                     },

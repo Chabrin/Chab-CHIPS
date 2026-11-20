@@ -506,23 +506,15 @@
                                         </div>
 
                                         <div class="col-md-4 mb-3">
-                                            <label for="phone" class="form-label">Phone</label>
-                                            <input type="text" class="form-control @error('phone') is-invalid @enderror"
-                                                   id="phone" name="phone"
-                                                   value="{{ old('phone') }}" placeholder="e.g., +254712345678">
-                                            @error('phone')
-                                            <div class="invalid-feedback">{{ $message }}</div>
-                                            @enderror
-                                        </div>
-
-                                        <div class="col-md-4 mb-3">
-                                            <label for="mobile_number" class="form-label">Mobile Number <span class="text-danger">*</span></label>
-                                            <input type="text" class="form-control @error('mobile_number') is-invalid @enderror" 
-                                                   id="mobile_number" name="mobile_number" 
-                                                   value="{{ old('mobile_number') }}" required>
+                                            <label for="mobile_number" class="form-label">Phone number <span class="text-danger">*</span></label>
+                                            <input type="tel" class="form-control @error('mobile_number') is-invalid @enderror"
+                                                   id="mobile_number" name="mobile_number" autocomplete="tel"
+                                                   value="{{ old('mobile_number', old('phone')) }}" placeholder="+254712345678"
+                                                   aria-describedby="tenant-phone-hint" required>
                                             @error('mobile_number')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
+                                            <div id="tenant-phone-hint" class="form-text">Start with the country code, for example +254.</div>
                                         </div>
 
                                         <div class="col-md-4 mb-3">
@@ -577,28 +569,30 @@
                                             @enderror
                                         </div>
 
-                                        <div class="col-md-4 mb-3 individual-only">
-                                            <label for="passport_number" class="form-label">Passport Number <span class="text-danger">*</span></label>
-                                            <input type="text" class="form-control @error('passport_number') is-invalid @enderror"
-                                                   id="passport_number" name="passport_number"
-                                                   value="{{ old('passport_number') }}">
-                                            @error('passport_number')
-                                            <div class="invalid-feedback">{{ $message }}</div>
-                                            @enderror
-                                            <small class="text-danger d-none duplicate-check-message" id="passport_number_duplicate"></small>
-                                        </div>
-
-                                        <div class="col-md-4 mb-3 individual-only">
-                                            <label for="national_id" class="form-label">National ID <span class="text-danger">*</span></label>
-                                            <input type="text" class="form-control @error('national_id') is-invalid @enderror"
-                                                   id="national_id" name="national_id"
-                                                   value="{{ old('national_id') }}">
-                                            @error('national_id')
-                                            <div class="invalid-feedback">{{ $message }}</div>
-                                            @enderror
-                                            <small class="text-danger d-none duplicate-check-message" id="national_id_duplicate"></small>
-                                            <small class="text-muted d-block">National ID or Passport Number is required.</small>
-                                        </div>
+                                        <fieldset class="col-12 mb-3 individual-only" aria-describedby="tenant-identification-hint">
+                                            <legend class="form-label float-none w-auto mb-1">Identification <span class="text-danger" aria-hidden="true">*</span></legend>
+                                            <p id="tenant-identification-hint" class="form-text mt-0 mb-2">Enter a National ID or passport number. One is required.</p>
+                                            <div class="row">
+                                                <div class="col-md-4 mb-2">
+                                                    <label for="national_id" class="form-label">National ID</label>
+                                                    <input type="text" class="form-control @error('national_id') is-invalid @enderror"
+                                                           id="national_id" name="national_id" value="{{ old('national_id') }}">
+                                                    @error('national_id')
+                                                    <div class="invalid-feedback">{{ $message }}</div>
+                                                    @enderror
+                                                    <small class="text-danger d-none duplicate-check-message" id="national_id_duplicate"></small>
+                                                </div>
+                                                <div class="col-md-4 mb-2">
+                                                    <label for="passport_number" class="form-label">Passport Number</label>
+                                                    <input type="text" class="form-control @error('passport_number') is-invalid @enderror"
+                                                           id="passport_number" name="passport_number" value="{{ old('passport_number') }}">
+                                                    @error('passport_number')
+                                                    <div class="invalid-feedback">{{ $message }}</div>
+                                                    @enderror
+                                                    <small class="text-danger d-none duplicate-check-message" id="passport_number_duplicate"></small>
+                                                </div>
+                                            </div>
+                                        </fieldset>
 
                                         <div class="col-md-12 mb-3">
                                             <label for="address" class="form-label">Address</label>
@@ -751,9 +745,9 @@
                                         </div>
 
                                         <div class="col-12 mb-3">
-                                            <button type="button" class="btn btn-primary btn-sm" id="addNextOfKin">
-                                                <span class="material-symbols-outlined me-1" style="font-size:16px;">add</span>
-                                                Add Next of Kin
+                                            <button type="button" class="btn btn-primary btn-sm d-inline-flex align-items-center gap-2 px-3 py-2" id="addNextOfKin">
+                                                <span class="material-symbols-outlined lh-1" aria-hidden="true">add</span>
+                                                <span>Add Next of Kin</span>
                                             </button>
                                         </div>
 

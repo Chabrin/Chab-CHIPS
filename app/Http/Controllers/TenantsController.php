@@ -996,6 +996,16 @@ class TenantsController extends Controller
      */
     private function validateTenantRequest(Request $request)
     {
+        $phone = $request->input('mobile_number');
+        if (is_string($phone)) {
+            $phone = preg_replace('/[\s().-]+/u', '', $phone);
+            // A Kenyan number that already includes 254 only needs the leading plus.
+            if (preg_match('/^254[0-9]{9}$/D', $phone ?? '')) {
+                $phone = '+'.$phone;
+            }
+            $request->merge(['mobile_number' => $phone]);
+        }
+
         return $request->validate([
             // Unit Details
             // sla_ref/rent_amount are no longer submitted — resolved server-side in store()
@@ -1019,8 +1029,7 @@ class TenantsController extends Controller
             'names' => 'nullable|string|max:255',
             'gender' => 'nullable|in:Male,Female,Other',
             'tenant_type' => 'required|integer|in:1,3',
-            'phone' => 'nullable|string|max:20',
-            'mobile_number' => 'required',
+            'mobile_number' => ['bail', 'required', 'string', 'regex:/^\+[1-9][0-9]{6,14}$/D'],
             'email_address' => 'nullable|email|max:255',
             'pin_number' => 'nullable|string|max:50',
             'registered_date' => 'required|date',
@@ -1061,6 +1070,9 @@ class TenantsController extends Controller
             'next_of_kin.*.national_id' => 'nullable|string|max:50',
             'next_of_kin.*.second_name' => 'nullable|string|max:255',
             'next_of_kin.*.last_name' => 'nullable|string|max:255',
+        ], [
+            'mobile_number.required' => 'Enter a phone number.',
+            'mobile_number.regex' => 'Enter the phone number with its country code, for example +254712345678.',
         ]);
     }
 

@@ -12,7 +12,7 @@ class TenantReviewWorkflowService
 {
     public function canManage(User $user): bool
     {
-        return !$user->block && $user->hasPermission('update_approval_workflows');
+        return TenantReviewAccess::allows($user, 'update_approval_workflows', TenantReviewAccess::SETUP);
     }
 
     public function current(): TenantReviewWorkflowVersion
@@ -47,6 +47,9 @@ class TenantReviewWorkflowService
         foreach (array_values($roleIds) as $index => $roleId) {
             $role = DB::table('cb_roles')->find($roleId);
             if (!$role) throw ValidationException::withMessages(['steps' => 'Choose an existing approver role for each step.']);
+            if (!TenantReviewAccess::roleCanReview((int) $role->id)) {
+                throw ValidationException::withMessages(['steps' => 'Give '.$role->display_name.' the New Tenant Approvals module plus view_tenant_onboarding and review_tenant_onboarding permissions before choosing it as an approver.']);
+            }
             $zoneRole = config('tenant_review.roles.zone_manager');
             $isZone = $role->name === $zoneRole || $role->display_name === $zoneRole;
             $steps[] = ['stage' => 'approval_'.($index + 1), 'role_id' => (int) $role->id,

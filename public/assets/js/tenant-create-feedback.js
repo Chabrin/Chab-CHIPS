@@ -18,6 +18,7 @@
         const next = document.getElementById('tenantNextSection');
         const position = document.getElementById('tenantSectionPosition');
         const tabs = Array.from(document.querySelectorAll('#unitTenantTabs [role="tab"]'));
+        const phone = form.elements.mobile_number;
         let saving = false;
         let completed = false;
         let messageId = 0;
@@ -114,7 +115,16 @@
             if (button) reveal(target(button.dataset.errorTarget));
         });
 
+        function validatePhone() {
+            const number = phone.value.replace(/[\s().-]+/g, '');
+            const valid = /^\+[1-9][0-9]{6,14}$/.test(number) || /^254[0-9]{9}$/.test(number);
+            phone.setCustomValidity(phone.value && !valid
+                ? 'Enter the phone number with its country code, for example +254712345678.'
+                : '');
+        }
+
         function validationErrors() {
+            validatePhone();
             const items = [];
             Array.from(form.elements).forEach(function (field) {
                 if (!field.willValidate || field.validity.valid) return;
@@ -139,6 +149,7 @@
         }
 
         form.addEventListener('input', function (event) {
+            if (event.target === phone) validatePhone();
             if (event.target.validity?.valid) {
                 event.target.classList.remove('is-invalid');
                 event.target.removeAttribute('aria-invalid');

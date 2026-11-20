@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\TenantReview;
 use App\Services\TenantReviewService;
 use App\Services\TenantReviewWorkflowService;
+use App\Services\TenantReviewAccess;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -16,8 +17,9 @@ class TenantReviewController extends Controller
     {
         $user = $request->user();
         abort_if($user->block, 403);
+        abort_unless(TenantReviewAccess::allows($user, 'view_tenant_onboarding'), 403);
         $this->workflows->current();
-        $query = TenantReview::with(['tenant', 'lease', 'workflowVersion'])->orderByDesc('id');
+        $query = TenantReview::with(['tenant', 'lease.property', 'lease.unit', 'workflowVersion'])->orderByDesc('id');
         if (!$this->reviews->accounts($user)) {
             $roleVersions = $this->workflows->eligibleVersions($user, 'role');
             $zoneVersions = $this->workflows->eligibleVersions($user, 'zone_manager');
@@ -32,23 +34,25 @@ class TenantReviewController extends Controller
                     });
             });
         }
-        if ($request->boolean('accounts')) {
-            abort_unless($this->reviews->accounts($user), 403);
+        $accountsOnly = $request->routeIs('tenant-reviews.reconciliation') || $request->boolean('accounts');
+        if ($accountsOnly) {
+            abort_unless($this->reviews->canReconcile($user), 403);
             $query->where('accounts_pending', true);
         }
-        $items = $query->paginate(25);
-        return view('property.tenant-reviews.index', compact('items'));
+        $items = $query->paginate(25)->withQueryString();
+        return view('property.tenant-reviews.index', compact('items', 'accountsOnly'));
     }
 
     public function show(Request $request, TenantReview $review)
     {
         abort_unless($this->reviews->canView($review, $request->user()), 403);
-        $review->load(['tenant.documents', 'tenant.tenantBankDetails.bank', 'tenant.tenantNextOfKin', 'lease', 'events.actor']);
+        $review->load(['tenant.documents', 'tenant.tenantBankDetails.bank', 'tenant.tenantNextOfKin', 'lease.property', 'lease.unit', 'workflowVersion', 'events.actor']);
         $invoices = \App\Models\DebtorInvoice::where('lease_id', $review->lease_id)->get();
         $inspections = \App\Models\MoveInInspection::where('tenant_id', $review->tenant_id)->get();
         $canAct = $this->reviews->reviewer($review, $request->user());
-        $canAccounts = $review->accounts_pending && $this->reviews->accounts($request->user());
-        $canCorrect = $review->stage === 'correction' && (int) $review->prepared_by === (int) $request->user()->id;
+        $canAccounts = $review->accounts_pending && $this->reviews->canReconcile($request->user());
+        $canCorrect = $review->stage === 'correction' && (int) $review->prepared_by === (int) $request->user()->id
+            && TenantReviewAccess::permissionGranted($request->user(), 'update_tenants');
         return view('property.tenant-reviews.show', compact('review', 'canAct', 'canAccounts', 'canCorrect', 'invoices', 'inspections'));
     }
 
@@ -73,7 +77,7 @@ class TenantReviewController extends Controller
 
     public function reconcile(Request $request, TenantReview $review)
     {
-        abort_unless($this->reviews->accounts($request->user()), 403);
+        abort_unless($this->reviews->canReconcile($request->user()), 403);
         $data = $request->validate(['reason' => 'required|string|max:2000', 'revision' => 'required|integer']);
         DB::transaction(function () use ($review, $request, $data) {
             $review = TenantReview::lockForUpdate()->findOrFail($review->id);
