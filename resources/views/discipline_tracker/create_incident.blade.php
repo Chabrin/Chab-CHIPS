@@ -8,11 +8,6 @@
                     <div class="card-header card-no-border d-flex align-items-center">
                         <h4 class="mb-0">Create Incident Report - Step 1</h4>
                         <div class="ms-auto d-flex gap-2">
-                            <button type="submit" form="incidentForm" class="btn btn-primary btn-sm d-flex align-items-center" id="createButton">
-                                <span class="spinner-border spinner-border-sm me-2 d-none" id="submitSpinner"></span>
-                                <span class="material-symbols-outlined me-1" style="font-size:18px;">check_circle</span>
-                                <span>Create Case</span>
-                            </button>
                             <a href="{{ route('discipline.tracker.index') }}" class="btn btn-light btn-sm d-flex align-items-center">
                                 <span class="material-symbols-outlined">arrow_back</span>
                                 <span class="ms-1">Back to Cases</span>
@@ -186,6 +181,7 @@
                                     </div>
                                 </div>
                             </div>
+                            @include('partials.form-actions', ['form' => 'incidentForm', 'buttonId' => 'createButton', 'cancelUrl' => route('discipline.tracker.index')])
                         </form>
                     </div>
                 </div>

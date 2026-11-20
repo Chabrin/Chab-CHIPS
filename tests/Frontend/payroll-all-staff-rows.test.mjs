@@ -89,8 +89,8 @@ test('with no pay entered the tiers and the total have no amount', () => {
     assert.deepEqual(build([empty]).map((row) => row.amount), [null, null, null, null]);
 });
 
-test('an allowance is labelled as one', () => {
-    assert.equal(build([{ ...paye, type: '2' }])[0].type, 'Allowance');
+test('an earnings item is labelled Earnings', () => {
+    assert.equal(build([{ ...paye, type: '2' }])[0].type, 'Earnings');
 });
 
 test('an empty breakdown list is treated as a plain item', () => {

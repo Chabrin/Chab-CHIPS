@@ -6,6 +6,7 @@ use App\Models\Employee;
 use App\Models\EmployeeDocument;
 use App\Models\DocumentType;
 use App\Services\EmployeeUploadGuard;
+use App\Services\StaffDocumentAccess;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
@@ -68,7 +69,8 @@ class EmployeeDocumentController extends Controller
      */
     public function download(EmployeeDocument $document)
     {
-        abort_unless(auth()->user()->hasPermission('read_staff'), 403);
+        // Staff documents are for the HR role and the Directors only, as well as the usual staff permission
+        abort_unless(app(StaffDocumentAccess::class)->allows(auth()->user()), 403);
 
         if (!Storage::disk('local')->exists($document->file_path)) {
             abort(Response::HTTP_NOT_FOUND, 'The requested document does not exist.');
@@ -81,7 +83,7 @@ class EmployeeDocumentController extends Controller
      */
     public function view(EmployeeDocument $document)
     {
-        abort_unless(auth()->user()->hasPermission('read_staff'), 403);
+        abort_unless(app(StaffDocumentAccess::class)->allows(auth()->user()), 403);
 
         if (!Storage::disk('local')->exists($document->file_path)) {
             abort(Response::HTTP_NOT_FOUND, 'The requested document does not exist.');
@@ -93,19 +95,21 @@ class EmployeeDocumentController extends Controller
     }
 
     /**
-     * Delete an uploaded document
+     * Remove an uploaded document. It leaves the staff member's documents (and the contract it was attached to) but is not
+     * destroyed: the file stays on disk and the removal is recorded with who did it and when (employee_document_removals).
      */
-    public function destroy(EmployeeDocument $document)
+    public function destroy(Request $request, EmployeeDocument $document)
     {
-        abort_unless(auth()->user()->hasPermission('update_staff'), 403);
+        abort_unless(app(StaffDocumentAccess::class)->allowsChanges(auth()->user()), 403);
 
-        if (Storage::disk('local')->exists($document->file_path)) {
-            Storage::disk('local')->delete($document->file_path);
+        $document->removeKeepingHistory(auth()->id(), 'Removed');
+        $message = 'Document removed. A copy is kept in the history.';
+
+        if ($request->expectsJson()) {
+            return response()->json(['success' => true, 'message' => $message]);
         }
 
-        $document->delete();
-
-        return back()->with('success', 'Document deleted successfully.');
+        return back()->with('success', $message);
     }
 
     /**

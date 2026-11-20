@@ -111,7 +111,7 @@ class PayrollMonthlyPageTest extends TestCase
             $this->assertStringContainsString('placeholder="' . $placeholder . '" aria-label="' . $placeholder . '"', $page);
         }
         $this->assertSame(2, substr_count($page, '<button type="button" class="pm-chip is-active" data-type="" aria-pressed="true">All <span class="pm-chip-count">0</span></button>'));
-        $this->assertSame(2, substr_count($page, 'data-type="allowance" aria-pressed="false">Allowances'));
+        $this->assertSame(2, substr_count($page, 'data-type="allowance" aria-pressed="false">Earnings'));
         $this->assertSame(2, substr_count($page, 'data-type="deduction" aria-pressed="false">Deductions'));
         $this->assertSame(2, substr_count($page, 'class="pm-shown ms-auto" aria-live="polite"'));
     }

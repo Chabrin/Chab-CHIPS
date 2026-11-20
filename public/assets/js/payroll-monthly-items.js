@@ -23,7 +23,7 @@
     }
 
     function typeName(type) {
-        return typeKey(type) === 'allowance' ? 'Allowance' : 'Deduction';
+        return typeKey(type) === 'allowance' ? 'Earnings' : 'Deduction';
     }
 
     function typeBadge(type) {
@@ -229,7 +229,7 @@
     function checkSummaryHtml(summary) {
         return tile('Staff in this run', summary.staff_in_run)
             + tile('One-time items entered', summary.items)
-            + tile('One-time allowances', money(summary.one_time_allowances))
+            + tile('One-time earnings', money(summary.one_time_allowances))
             + tile('One-time deductions', money(summary.one_time_deductions));
     }
 

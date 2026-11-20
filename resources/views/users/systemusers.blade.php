@@ -49,7 +49,7 @@
                 <h5 class="modal-title" id="addUserModalLabel">Add System User</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form id="addUserForm">
+            <form id="addUserForm" autocomplete="off">
                 @csrf
                 <div class="modal-body">
                     <div class="mb-3">
@@ -65,11 +65,6 @@
                     <div class="mb-3">
                         <label for="add_email" class="form-label">Email <span class="text-danger">*</span></label>
                         <input type="email" class="form-control" id="add_email" name="email" required>
-                        <div class="invalid-feedback"></div>
-                    </div>
-                    <div class="mb-3">
-                        <label for="add_password" class="form-label">Password <span class="text-danger">*</span></label>
-                        <input type="password" class="form-control" id="add_password" name="password" required minlength="8" autocomplete="new-password">
                         <div class="invalid-feedback"></div>
                     </div>
                     <div class="mb-3">
@@ -89,6 +84,7 @@
                         </select>
                         <div class="invalid-feedback"></div>
                     </div>
+                    <p class="text-muted small mb-0">They are emailed a link to choose their own password. You will not see or set it.</p>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-light btn-sm d-flex align-items-center" data-bs-dismiss="modal">
@@ -116,7 +112,7 @@
                 <h5 class="modal-title" id="editUserModalLabel">Edit System User</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form id="editUserForm">
+            <form id="editUserForm" autocomplete="off">
                 @csrf
                 <input type="hidden" id="edit_user_id" name="user_id">
                 <div class="modal-body">
@@ -133,11 +129,6 @@
                     <div class="mb-3">
                         <label for="edit_email" class="form-label">Email <span class="text-danger">*</span></label>
                         <input type="email" class="form-control" id="edit_email" name="email" required>
-                        <div class="invalid-feedback"></div>
-                    </div>
-                    <div class="mb-3">
-                        <label for="edit_password" class="form-label">New Password <span class="text-muted small">(leave blank to keep current)</span></label>
-                        <input type="password" class="form-control" id="edit_password" name="password" minlength="8" autocomplete="new-password">
                         <div class="invalid-feedback"></div>
                     </div>
                     <div class="mb-3">
@@ -283,10 +274,19 @@
                     },
                     {
                         data: 'block',
-                        render: function(data) {
-                            return data == 0 ?
-                                '<span class="badge badge-light-success">Active</span>' :
-                                '<span class="badge badge-light-danger">Suspended</span>';
+                        render: function(data, type, row) {
+                            if (data != 0) {
+                                return '<span class="badge badge-light-danger">Suspended</span>';
+                            }
+                            // Made but never signed in: still waiting for the person to choose a password from their emailed link
+                            if (row.setup_state === 'waiting') {
+                                var note = row.setup_email_sent ? 'Link sent. The person has not set a password yet.' : 'The email with the link could not be sent. Use Resend link.';
+                                return '<span class="badge badge-light-warning" title="' + note + '">Waiting for activation</span>';
+                            }
+                            if (row.setup_state === 'expired') {
+                                return '<span class="badge badge-light-warning" title="The link expired before a password was set. Use Resend link.">Link expired</span>';
+                            }
+                            return '<span class="badge badge-light-success">Active</span>';
                         }
                     },
                     {
@@ -298,6 +298,13 @@
                             if (canUpdate) {
                                 actions += `<a href="#" class="d-flex align-items-center text-decoration-none edit-user" data-id="${row.id}" title="Edit User">
                                     <span class="material-symbols-outlined" style="font-size:18px; color:#3598db;">edit_square</span>
+                                </a>`;
+                            }
+
+                            if (canUpdate && row.block == 0 && row.setup_state !== 'none') {
+                                actions += `<a href="#" class="d-flex align-items-center text-decoration-none resend-link" data-id="${row.id}" data-name="${$('<div>').text(row.name).html()}" title="Send a new password link">
+                                    <span class="material-symbols-outlined" style="font-size:18px; color:#3598db;">forward_to_inbox</span>
+                                    <span class="ms-1">Resend link</span>
                                 </a>`;
                             }
 
@@ -401,7 +408,12 @@
                         $('#addUserModal').modal('hide');
                         form[0].reset();
                         usersTable.ajax.reload();
-                        toastr.success(response.message);
+                        // The user exists either way; a failed email gets a warning so it is not missed
+                        if (response.email_sent === false) {
+                            toastr.warning(response.message, '', { timeOut: 10000 });
+                        } else {
+                            toastr.success(response.message);
+                        }
                     }
                 },
                 error: function(xhr) {
@@ -436,7 +448,6 @@
                         $('#edit_username').val(response.user.username);
                         $('#edit_email').val(response.user.email);
                         $('#edit_role').val(response.user.role_id);
-                        $('#edit_password').val('');
 
                         // Init Select2 then pre-populate linked staff
                         const $staffSelect = $('#edit_staff_id');
@@ -506,6 +517,34 @@
                 complete: function() {
                     btn.prop('disabled', false);
                     spinner.addClass('d-none');
+                }
+            });
+        });
+
+        // Resend link: a new link goes to the person's email and the old one stops working
+        $(document).on('click', '.resend-link', function(e) {
+            e.preventDefault();
+            const link = $(this);
+            if (link.data('busy')) {
+                return;
+            }
+            if (!window.confirm('Send a new password link to ' + link.data('name') + '? The old link will stop working.')) {
+                return;
+            }
+            link.data('busy', true);
+            $.ajax({
+                url: `/users/ajax/resend-link/${link.data('id')}`,
+                method: 'POST',
+                data: { _token: '{{ csrf_token() }}' },
+                success: function(response) {
+                    toastr.success(response.message);
+                    usersTable.ajax.reload();
+                },
+                error: function(xhr) {
+                    toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to send the link');
+                },
+                complete: function() {
+                    link.data('busy', false);
                 }
             });
         });

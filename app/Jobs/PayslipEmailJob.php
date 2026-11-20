@@ -165,7 +165,8 @@ class PayslipEmailJob implements ShouldQueue
                     'element_name' => $item['element_name'],
                     'element_type' => $item['element_type'] ?? '1',
                     'payslip_position' => $item['payslip_position'] ?? 999,
-                    'amount' => $item['amount']
+                    'amount' => $item['amount'],
+                    'balance_after' => $item['balance_after'] ?? null,
                 ];
             }
 

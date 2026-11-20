@@ -10,6 +10,9 @@ use App\Models\ProratedDeductionRepeat;
 use App\Models\PayrollElement;
 use Illuminate\Http\Request;
 use App\Services\ErrorDispatcher;
+use App\Services\HelbLoans;
+use Illuminate\Contracts\Encryption\DecryptException;
+use Illuminate\Support\Facades\Storage;
 use Error;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -41,7 +44,15 @@ class DeductionsController extends Controller
         try {
             $id = \Illuminate\Support\Facades\Crypt::decrypt($encryptedId);
             $deduction = HelbDeduction::with(['staff', 'createdBy'])->findOrFail($id);
-            return view('deductions.helb_details', compact('deduction'));
+            $helb = app(HelbLoans::class);
+
+            return view('deductions.helb_details', [
+                'deduction' => $deduction,
+                'encryptedId' => $encryptedId,
+                'schedule' => $helb->schedule($deduction),
+                'events' => $deduction->events()->with('user')->orderByDesc('id')->get(),
+                'staffStatus' => $helb->staffStatus((int) $deduction->staff_id),
+            ]);
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error fetching HELB deduction details: ' . $e->getMessage());
@@ -64,13 +75,19 @@ class DeductionsController extends Controller
             // Add permission flags and computed fields
             $canUpdate = Auth::user()->isAbleTo('update_helb_loans');
             $canDelete = Auth::user()->isAbleTo('delete_helb_loans');
-            $deductions = $deductions->map(function ($deduction) use ($canUpdate, $canDelete) {
+            $helb = app(HelbLoans::class);
+            $lastTaken = HelbDeductionRepeat::selectRaw('parent_id, max(deduction_date) as last_taken')->groupBy('parent_id')->pluck('last_taken', 'parent_id');
+            $deductions = $deductions->map(function ($deduction) use ($canUpdate, $canDelete, $helb, $lastTaken) {
                 $deduction->can_update = $canUpdate;
                 $deduction->can_delete = $canDelete;
                 $deduction->staff_name = $deduction->staff ? $deduction->staff->full_names : 'N/A';
                 $deduction->staff_number = $deduction->staff ? $deduction->staff->staff_number : 'N/A';
-                $deduction->status = $deduction->cleared ? 'Cleared' : ($deduction->suspended ? 'Suspended' : 'Active');
+                $deduction->status = $deduction->status_label;
                 $deduction->encrypted_id = \Illuminate\Support\Facades\Crypt::encrypt($deduction->id);
+                // The last month it will be taken, from what is still owed and the monthly amount
+                $schedule = $helb->scheduleFrom($deduction, $lastTaken[$deduction->id] ?? null);
+                $deduction->months_left = $schedule['months_left'];
+                $deduction->end_month = $schedule['end_month'] ? \Carbon\Carbon::parse($schedule['end_month'] . '-01')->format('M Y') : null;
                 return $deduction;
             });
 
@@ -125,6 +142,7 @@ class DeductionsController extends Controller
             $deduction->cleared = 0;
             $deduction->suspended = 0;
             $deduction->save();
+            app(HelbLoans::class)->log($deduction, 'created', null, Auth::id(), 'KES ' . number_format((float) $validated['loan_balance'], 2) . ' owed, KES ' . number_format((float) $validated['monthly_deduction'], 2) . ' a month from ' . \Carbon\Carbon::parse($validated['start_deduction_date'])->format('d M Y'));
 
             return response()->json(['success' => true, 'deduction' => $deduction]);
         } catch (ValidationException $e) {
@@ -147,23 +165,25 @@ class DeductionsController extends Controller
     {
         $this->requirePermission('update_helb_loans');
         try {
+            // Pausing and closing are their own actions with their own reason (and HELB's clearance); this changes the figures only
             $validated = $request->validate([
                 'loan_balance' => 'required|numeric|min:0',
                 'monthly_deduction' => 'required|numeric|min:0',
                 'start_deduction_date' => 'required|date',
-                'cleared' => 'boolean',
-                'suspended' => 'boolean',
+                'reason' => 'nullable|string|max:1000',
             ]);
 
             $deduction = HelbDeduction::findOrFail($id);
-            $deduction->loan_balance = $validated['loan_balance'];
-            $deduction->monthly_deduction = $validated['monthly_deduction'];
-            $deduction->start_deduction_date = $validated['start_deduction_date'];
-            $deduction->cleared = $validated['cleared'] ?? 0;
-            $deduction->suspended = $validated['suspended'] ?? 0;
-            $deduction->save();
+            app(HelbLoans::class)->changeTerms(
+                $deduction,
+                (float) $validated['loan_balance'],
+                (float) $validated['monthly_deduction'],
+                $validated['start_deduction_date'],
+                $validated['reason'] ?? null,
+                Auth::id()
+            );
 
-            return response()->json(['success' => true, 'deduction' => $deduction]);
+            return response()->json(['success' => true, 'deduction' => $deduction->fresh()]);
         } catch (ValidationException $e) {
             return response()->json(['success' => false, 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
@@ -233,6 +253,90 @@ class DeductionsController extends Controller
             Log::error('Error loading staff list: ' . $e->getMessage());
             return response()->json(['error' => 'Failed to load staff list'], 500);
         }
+    }
+
+    /**
+     * What onboarding recorded about this staff member and HELB, shown while a loan is being added.
+     */
+    public function helbStaffStatus($staffId)
+    {
+        $this->requirePermission('create_helb_loans');
+        $status = app(HelbLoans::class)->staffStatus((int) $staffId);
+        abort_if($status === null, 404);
+
+        return response()->json($status);
+    }
+
+    private function helbFind(string $encryptedId): HelbDeduction
+    {
+        try {
+            $id = \Illuminate\Support\Facades\Crypt::decrypt($encryptedId);
+        } catch (DecryptException) {
+            abort(404);
+        }
+
+        return HelbDeduction::findOrFail($id);
+    }
+
+    /** Pause the deduction (for example during unpaid leave). Needs a reason. */
+    public function helbPause(Request $request, string $encryptedId)
+    {
+        $this->requirePermission('update_helb_loans');
+        $deduction = $this->helbFind($encryptedId);
+        $data = $request->validate(['reason' => 'required|string|max:1000']);
+
+        app(HelbLoans::class)->pause($deduction, $data['reason'], Auth::id());
+
+        return back()->with('success', 'The HELB deduction is paused. Nothing is taken until it is resumed.');
+    }
+
+    public function helbResume(string $encryptedId)
+    {
+        $this->requirePermission('update_helb_loans');
+        $deduction = $this->helbFind($encryptedId);
+
+        app(HelbLoans::class)->resume($deduction, Auth::id());
+
+        return back()->with('success', 'The HELB deduction is active again.');
+    }
+
+    /** Close the loan with the clearance HELB sent when it was paid in full. The PDF is required. */
+    public function helbClear(Request $request, string $encryptedId)
+    {
+        $this->requirePermission('update_helb_loans');
+        $deduction = $this->helbFind($encryptedId);
+        $data = $request->validate([
+            'clearance' => 'required|file|mimes:pdf|max:5120',
+            'note' => 'nullable|string|max:1000',
+        ], [
+            'clearance.required' => 'Choose the clearance HELB sent (a PDF).',
+            'clearance.mimes' => 'The HELB clearance must be a PDF.',
+            'clearance.max' => 'The HELB clearance is too big (the limit is 5 MB).',
+        ]);
+
+        app(HelbLoans::class)->clear($deduction, $request->file('clearance'), $data['note'] ?? null, Auth::id());
+
+        return back()->with('success', 'The loan is closed with the HELB clearance. Nothing more will be taken.');
+    }
+
+    public function helbReopen(Request $request, string $encryptedId)
+    {
+        $this->requirePermission('update_helb_loans');
+        $deduction = $this->helbFind($encryptedId);
+        $data = $request->validate(['reason' => 'required|string|max:1000']);
+
+        app(HelbLoans::class)->reopen($deduction, $data['reason'], Auth::id());
+
+        return back()->with('success', 'The loan is open again.');
+    }
+
+    public function helbClearance(string $encryptedId)
+    {
+        $this->requirePermission('read_helb_loans');
+        $deduction = $this->helbFind($encryptedId);
+        abort_unless($deduction->hasClearance() && Storage::disk(HelbLoans::DISK)->exists($deduction->clearance_path), 404);
+
+        return Storage::disk(HelbLoans::DISK)->response($deduction->clearance_path, $deduction->clearance_name ?: 'helb-clearance.pdf', ['Content-Type' => 'application/pdf']);
     }
 
     /**

@@ -97,6 +97,7 @@ class User extends Authenticatable implements LaratrustUser
         'password',
         'otpKey',
         'otep',
+        'password_setup_token',
     ];
 
     /**
@@ -112,6 +113,9 @@ class User extends Authenticatable implements LaratrustUser
         'requireReset' => 'boolean',
         'params' => 'array',
         'reset_token_expires_at' => 'datetime',
+        'password_setup_expires_at' => 'datetime',
+        'password_setup_sent_at' => 'datetime',
+        'password_setup_used_at' => 'datetime',
     ];
 
     /**

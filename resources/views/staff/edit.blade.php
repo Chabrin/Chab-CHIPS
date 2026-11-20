@@ -156,10 +156,14 @@
     .staff-edit-page #documents .row.g-3 > [class*="col-"] {
         min-width: 0;
     }
+    /* Save stays in view at the bottom of the screen while the long form is scrolled */
     .staff-edit-page .staff-form-footer {
-        position: relative;
+        position: sticky;
+        bottom: 0;
+        z-index: 20;
         clear: both;
         background: #fff;
+        padding-bottom: 12px;
     }
     @media (max-width: 575.98px) {
         .staff-edit-page #documents .staff-document-card { padding: 14px !important; }
@@ -192,11 +196,6 @@
                     <span class="material-symbols-outlined me-1" style="font-size:19px;">arrow_back</span>
                     Back to Details
                 </a>
-                <button type="submit" form="staffEditForm" class="btn btn-primary d-inline-flex align-items-center" id="updateButton">
-                    <span class="spinner-border spinner-border-sm me-2 d-none" id="submitSpinner"></span>
-                    <span class="material-symbols-outlined me-1" style="font-size:19px;">save</span>
-                    <span>Save Changes</span>
-                </button>
             </div>
         </div>
         <div class="row">
@@ -231,7 +230,7 @@
                         </div>
                         @endif
 
-                        <form action="{{ route('staff.update', $staff->id) }}" method="POST" id="staffEditForm" data-employee-id="{{ $staff->id }}" enctype="multipart/form-data" data-file-slots novalidate>
+                        <form action="{{ route('staff.update', $staff->id) }}" method="POST" id="staffEditForm" autocomplete="off" data-warn-unsaved data-employee-id="{{ $staff->id }}" enctype="multipart/form-data" data-file-slots novalidate>
                             @csrf
                             @method('PUT')
 
@@ -350,17 +349,20 @@
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
-                                        <div class="col-md-4 mb-3">
-                                            <label for="citizenship" class="form-label">Citizenship <span class="text-danger">*</span></label>
-                                            <select class="form-select @error('citizenship') is-invalid @enderror" id="citizenship" name="citizenship" data-required="true">
-                                                <option value="">Select Option</option>
-                                                <option value="RESIDENT" {{ old('citizenship', $staff->citizenship) == 'RESIDENT' ? 'selected' : '' }}>RESIDENT</option>
-                                                <option value="NO" {{ old('citizenship', $staff->citizenship) == 'NO' ? 'selected' : '' }}>NO</option>
-                                            </select>
-                                            @error('citizenship')
-                                            <div class="invalid-feedback">{{ $message }}</div>
-                                            @enderror
-                                        </div>
+                                        {{-- Country of citizenship, then Resident or Non-resident; a work permit for anyone who is not Kenyan.
+                                             Staff saved before these were asked are filled in from the old Resident / NO answer. --}}
+                                        @php
+                                            $oldCitizenship = strtoupper((string) $staff->citizenship);
+                                            $shownNationality = old('nationality', $staff->nationality ?: ($oldCitizenship === 'RESIDENT' ? 'Kenya' : ''));
+                                            $shownResidency = old('residency_status', $staff->residency_status ?: ($oldCitizenship === 'NO' ? 'NON_RESIDENT' : ($oldCitizenship === 'RESIDENT' ? 'RESIDENT' : '')));
+                                        @endphp
+                                        @include('staff.partials.citizenship-fields', [
+                                            'nationality' => $shownNationality,
+                                            'residency' => $shownResidency,
+                                            'permitNumber' => old('work_permit_number', $staff->work_permit_number),
+                                            'permitExpiry' => old('work_permit_expiry', $staff->work_permit_expiry?->format('Y-m-d')),
+                                            'requiredAttribute' => 'data-required',
+                                        ])
                                         <div class="col-md-4 mb-3">
                                             <label for="disability" class="form-label">Disability <span class="text-danger">*</span></label>
                                             <select class="form-select @error('disability') is-invalid @enderror" id="disability" name="disability" data-required="true">
@@ -584,8 +586,12 @@
                                                         {{ $doc->file_name }}
                                                     </div>
                                                     <div class="d-flex gap-1 flex-shrink-0">
+                                                        @if(($canOpenDocuments ??= app(\App\Services\StaffDocumentAccess::class)->allows(auth()->user())))
                                                         <a href="{{ route('documents.view', $doc->id) }}" target="_blank" class="btn btn-sm btn-outline-primary">View</a>
                                                         <a href="{{ route('documents.download', $doc->id) }}" class="btn btn-sm btn-outline-success">Download</a>
+                                                        @else
+                                                        <span class="text-muted small">HR only</span>
+                                                        @endif
                                                     </div>
                                                 </div>
                                                 @else
@@ -674,15 +680,27 @@
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
+                                        <div class="col-md-8 mb-3">
+                                            <label class="form-label d-block">Is this employee a HELB loan beneficiary?</label>
+                                            @php($helbNow = old('is_helb_beneficiary', is_null($staff->is_helb_beneficiary) ? '' : ($staff->is_helb_beneficiary ? 'YES' : 'NO')))
+                                            @foreach(['YES' => 'Yes', 'NO' => 'No'] as $helbValue => $helbLabel)
+                                            <div class="form-check form-check-inline">
+                                                <input class="form-check-input" type="radio" name="is_helb_beneficiary" id="helb_{{ strtolower($helbValue) }}" value="{{ $helbValue }}" {{ $helbNow === $helbValue ? 'checked' : '' }}>
+                                                <label class="form-check-label" for="helb_{{ strtolower($helbValue) }}">{{ $helbLabel }}</label>
+                                            </div>
+                                            @endforeach
+                                            @if(is_null($staff->is_helb_beneficiary))<small class="text-muted d-block">Not answered yet (this staff member was added before the question was asked).</small>@endif
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                             <div class="staff-form-footer">
-                                <div class="staff-footer-note"><span class="material-symbols-outlined">info</span> Changes are saved when you select Save Changes.</div>
+                                <div class="staff-footer-note"><span class="material-symbols-outlined">info</span> Changes are saved when you select Save.</div>
                                 <div class="d-flex gap-2 flex-wrap">
                                     <a href="{{ route('staff.show', \Illuminate\Support\Facades\Crypt::encrypt($staff->id)) }}" class="btn btn-light">Cancel</a>
                                     <button type="submit" class="btn btn-primary d-inline-flex align-items-center" id="updateButtonFooter">
-                                        <span class="material-symbols-outlined me-1" style="font-size:19px;">save</span> Save Changes
+                                        <span class="spinner-border spinner-border-sm me-2 d-none" id="submitSpinner" aria-hidden="true"></span>
+                                        <span class="form-actions-label">Save</span>
                                     </button>
                                 </div>
                             </div>
@@ -947,5 +965,7 @@ document.addEventListener('DOMContentLoaded', function () {
 </script>
 <script src="{{ asset('assets/js/staff-contact-format.js') }}?v={{ filemtime(public_path('assets/js/staff-contact-format.js')) }}"></script>
 <script src="{{ asset('assets/js/file-slot.js') }}?v={{ filemtime(public_path('assets/js/file-slot.js')) }}"></script>
+<script src="{{ asset('assets/js/staff-citizenship.js') }}?v={{ filemtime(public_path('assets/js/staff-citizenship.js')) }}"></script>
+<script src="{{ asset('assets/js/form-actions.js') }}?v={{ filemtime(public_path('assets/js/form-actions.js')) }}"></script>
 @include('staff.partials.upload-duplicate-check')
 @endsection

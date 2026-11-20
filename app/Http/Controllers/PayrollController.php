@@ -20,13 +20,17 @@ use App\Models\HelbDeduction;
 use App\Models\ProratedDeduction;
 use App\Models\ProratedDeductionRepeat;
 use App\Models\LeaveRequestDaysTaken;
+use App\Services\DeductionLimits;
 use App\Services\ErrorDispatcher;
 use App\Services\NssfCalculator;
+use App\Services\PayrollChangeFeed;
 use App\Services\PayrollPreRunCheck;
+use App\Services\ScheduledDeductions;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 
 class PayrollController extends Controller
@@ -1062,6 +1066,18 @@ class PayrollController extends Controller
             }
 
             $results = [];
+            $breaches = [];
+
+            // What changed since the last payroll is kept with the run, so the accountant sees what HR saw. It only informs,
+            // so a problem building it must never hold up the payroll.
+            $changes = null;
+            if (Schema::hasColumn('payroll_runs', 'changes_snapshot')) {
+                try {
+                    $changes = app(PayrollChangeFeed::class)->forPeriod($period);
+                } catch (\Throwable $e) {
+                    Log::warning('Payroll change list could not be built for period ' . $period->id . ': ' . $e->getMessage());
+                }
+            }
 
             // Wrap entire payroll processing in a transaction
             DB::beginTransaction();
@@ -1085,7 +1101,7 @@ class PayrollController extends Controller
                     }
 
                     $payrollData = $this->calculatePayroll(
-                        $contract->staff->full_name ?? 'Unknown',
+                        $contract->staff->full_names ?? 'Unknown',
                         $contract->basic_salary,
                         $contract->staff_id,
                         $contract->staff_number,
@@ -1106,8 +1122,32 @@ class PayrollController extends Controller
 
                     $results[] = $payrollData;
 
+                    // The law (Employment Act s.19) limits what can be taken from one person's pay: note anyone over it
+                    $overLimit = $this->deductionLimitBreach($payrollData);
+                    if ($overLimit) {
+                        $breaches[] = $overLimit;
+                    }
+
                     // Save to database (includes deduction repeats logging)
                     $this->savePayrollSummary($payrollData, $startDate, $endDate, $period->id);
+                }
+
+                // Nothing is kept when someone's deductions are over the limit, unless a person allowed to override it says why.
+                $overrideReason = null;
+                if ($breaches) {
+                    $overrideRequested = $request->boolean('override_limits');
+                    $canOverride = Auth::user()->isAbleTo('override_deduction_limits');
+                    $overrideReason = trim((string) $request->input('override_reason', ''));
+                    if (!$overrideRequested || !$canOverride || mb_strlen($overrideReason) < 5) {
+                        DB::rollBack();
+
+                        return response()->json([
+                            'success' => false,
+                            'error' => $this->limitBreachMessage($breaches, $overrideRequested, $canOverride),
+                            'limit_breaches' => $breaches,
+                            'can_override' => $canOverride,
+                        ], 422);
+                    }
                 }
 
                 $run = PayrollRun::updateOrCreate(['period_id' => $period->id], [
@@ -1119,8 +1159,15 @@ class PayrollController extends Controller
                     'approved_by' => null,
                     'approved_at' => null,
                     'return_comment' => null,
-                ]);
+                ] + ($changes ? ['changes_snapshot' => $changes] : []));
                 $run->record('processed', Auth::id());
+                if ($breaches) {
+                    $label = $period->start_date->format('F Y');
+                    $run->record('limit_override', Auth::id(), count($breaches) . ' employee(s) over the legal limit on deductions. ' . $overrideReason);
+                    foreach ($breaches as $breach) {
+                        app(ScheduledDeductions::class)->recordLimitOverride($breach, $overrideReason, Auth::id(), $label);
+                    }
+                }
 
                 // Commit transaction if all successful
                 DB::commit();
@@ -1151,6 +1198,59 @@ class PayrollController extends Controller
             Log::error('Error processing payroll: ' . $e->getMessage());
             return response()->json(['success' => false, 'error' => 'Failed to process payroll'], 500);
         }
+    }
+
+    /**
+     * Whether one person's deductions for the month go over the legal limits (all together at most two-thirds of the wages; repayment of a
+     * company loan at most half of what is left after the other deductions). Only a person with a scheduled deduction this month is
+     * measured: that is the part HR can change, and the check was not made before.
+     *
+     * @return array{staff_id: int, staff: string, staff_number: ?string, messages: string[], reduce: array, take_home: float, minimum_take_home: float, items: array}|null
+     */
+    private function deductionLimitBreach(array $payrollData): ?array
+    {
+        $scheduled = $payrollData['scheduled_deductions_info'] ?? [];
+        if (!$scheduled) {
+            return null;
+        }
+
+        $items = array_map(fn ($info) => [
+            'id' => (int) $info['parent_id'],
+            'name' => (string) $info['name'],
+            'kind' => (string) $info['kind'],
+            'amount' => (float) $info['deduction_amount'],
+        ], $scheduled);
+        $scheduledTotal = array_sum(array_column($items, 'amount'));
+        $check = DeductionLimits::check((float) $payrollData['gross_pay'], (float) $payrollData['total_deductions'] - $scheduledTotal, $items);
+        if ($check['ok']) {
+            return null;
+        }
+
+        return [
+            'staff_id' => (int) $payrollData['staff_id'],
+            'staff' => (string) $payrollData['employee_name'],
+            'staff_number' => $payrollData['staff_number'] ?? null,
+            'messages' => array_column($check['breaches'], 'message'),
+            'reduce' => $check['reduce'],
+            'take_home' => $check['take_home'],
+            'minimum_take_home' => $check['minimum_take_home'],
+            'items' => $items,
+        ];
+    }
+
+    /** What the processing screen says when it stops for the legal limit. */
+    private function limitBreachMessage(array $breaches, bool $overrideRequested, bool $canOverride): string
+    {
+        $count = count($breaches);
+        $text = $count . ' employee' . ($count === 1 ? ' has' : 's have') . ' deductions over the legal limit, so the payroll was not processed. Reduce the monthly amount of the scheduled deductions named below, then process again.';
+        if ($overrideRequested && $canOverride) {
+            return 'Write the reason for running the payroll over the legal limit (at least 5 characters).';
+        }
+        if ($overrideRequested && !$canOverride) {
+            return 'You do not have permission to run the payroll over the legal limit. ' . $text;
+        }
+
+        return $text . ($canOverride ? ' Or run it anyway with a written reason.' : '');
     }
 
     /**
@@ -1360,6 +1460,9 @@ class PayrollController extends Controller
         $helbAmount = 0.0;
         $proratedDeductionsInfo = [];
 
+        // Scheduled deductions due this period (taken after the HELB and prorated ones below)
+        $scheduledDue = app(ScheduledDeductions::class)->dueFor((int) $staffId, $periodEndDate ?? $periodStartDate);
+
         // Handle HELB Loans (Post-tax deductions)
         $helbElement = PayrollElement::where('element_key', 'helb_loans')->first();
         // A loan is due once its start date has arrived (on or before the period end). Loans imported
@@ -1380,7 +1483,11 @@ class PayrollController extends Controller
         if ($helbDeduction) {
             $helbAmount = min((float) $helbDeduction->monthly_deduction, (float) $helbDeduction->loan_balance);
             $totalDeductions += $helbAmount;
-            $payslipElements[] = $this->makePayslipEntry($helbElement, $helbAmount, 'HELB Loan', '1', 50);
+            // The payslip also says what is still owed to HELB after this month
+            $payslipElements[] = array_merge(
+                $this->makePayslipEntry($helbElement, $helbAmount, 'HELB Loan', '1', 50),
+                ['balance_after' => round((float) $helbDeduction->loan_balance - $helbAmount, 2)]
+            );
 
             $helbDeductionInfo = [
                 'parent_id'        => $helbDeduction->id,
@@ -1421,6 +1528,24 @@ class PayrollController extends Controller
             }
         }
 
+        // Scheduled deductions (post-tax): one instalment of each active one whose first month has come, never more than what is owed.
+        // They are written to the loan records when the run is approved, like the HELB and prorated repayments above.
+        $scheduledDeductionsInfo = [];
+        foreach ($scheduledDue as $due) {
+            $totalDeductions += $due['amount'];
+            $payslipElements[] = array_merge(
+                $this->makePayslipEntry(null, $due['amount'], $due['name'], '1', 60),
+                ['scheduled_deduction_id' => $due['id'], 'balance_after' => $due['balance_after']]
+            );
+            $scheduledDeductionsInfo[] = [
+                'parent_id'        => $due['id'],
+                'deduction_amount' => $due['amount'],
+                'deduction_date'   => $periodStartDate,
+                'name'             => $due['name'],
+                'kind'             => $due['kind'],
+            ];
+        }
+
         // Calculate net salary (after all deductions)
         $netSalary = $grossPay - $totalDeductions;
 
@@ -1450,6 +1575,7 @@ class PayrollController extends Controller
             'helb_loans' => $helbAmount,
             'helb_deduction_info' => $helbDeductionInfo,
             'prorated_deductions_info' => $proratedDeductionsInfo,
+            'scheduled_deductions_info' => $scheduledDeductionsInfo,
         ];
     }
 
@@ -1578,6 +1704,7 @@ class PayrollController extends Controller
             'loan_deductions' => [
                 'helb' => $payrollData['helb_deduction_info'],
                 'prorated' => $payrollData['prorated_deductions_info'],
+                'scheduled' => $payrollData['scheduled_deductions_info'],
             ],
         ]);
     }

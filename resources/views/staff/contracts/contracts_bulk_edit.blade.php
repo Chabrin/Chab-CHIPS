@@ -435,7 +435,7 @@
             + '<div class="col-3">'
             +   '<label class="form-label small">Entry Type</label>'
             +   '<select class="form-select form-select-sm el-entry-type">'
-            +   '<option value="2"' + (entryType == 2 ? ' selected' : '') + '>Allowance</option>'
+            +   '<option value="2"' + (entryType == 2 ? ' selected' : '') + '>Earnings</option>'
             +   '<option value="1"' + (entryType == 1 ? ' selected' : '') + '>Deduction</option>'
             +   '</select>'
             + '</div>'

@@ -412,9 +412,12 @@ public function positionsDropdowns(Request $request)
             $position->date_time = now();
             $position->save();
 
+            // Every position has its own system role, made now with no access (an administrator gives it menus and permissions on the Roles page)
+            app(\App\Services\PositionRoles::class)->createFor($position);
+
             return response()->json([
                 'success' => true,
-                'message' => 'Position created successfully',
+                'message' => 'Position created successfully. Its system role was made too; give it access on the Roles page.',
                 'position' => $position
             ]);
         } catch (ValidationException $e) {
@@ -467,6 +470,9 @@ public function positionsDropdowns(Request $request)
             $position->reports_to_id = $validated['reports_to_id'] ?? null;
         }
         $position->save();
+
+        // A renamed position keeps its role, shown under the new name
+        app(\App\Services\PositionRoles::class)->syncName($position);
 
         return response()->json([
             'success'  => true,

@@ -38,14 +38,9 @@ use Illuminate\Support\Facades\Crypt;
                             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                         </div>
                         @endif
-                        @if(session('generated_password'))
-                        <div class="alert alert-light-warning alert-dismissible fade show" role="alert">
-                            <strong>System login created.</strong> Temporary password:
-                            <code style="font-size:1.05em;">{{ session('generated_password') }}</code>
-                            — this will not be shown again, copy it now. The staff member will be required to change it on first login.
-                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                        </div>
-                        @endif
+                        @include('staff.partials.account-setup-notice')
+                        @include('staff.partials.helb-prompt')
+                        @include('staff.partials.role-prompt')
 
                         <!-- Summary Header -->
                         @php
@@ -85,6 +80,17 @@ use Illuminate\Support\Facades\Crypt;
                                     <strong>Phone:</strong> {{ $staff->mobile_number ?? '-' }}
                                 </p>
                             </div>
+                            {{-- A former staff member comes back on this record and keeps their staff number --}}
+                            @if((int) $staff->current_status_id === 3 && auth()->user()?->hasPermission('update_staff'))
+                            <form method="POST" action="{{ route('staff.rehire', \Illuminate\Support\Facades\Crypt::encrypt($staff->id)) }}" class="ms-auto d-flex align-items-end gap-2" onsubmit="return confirm('Rehire {{ e($staff->full_names) }}? They are made Active again and keep staff number {{ e($staff->staff_number) }}. You then add their new contract.');">
+                                @csrf
+                                <div>
+                                    <label for="rehire_hire_date" class="form-label small mb-0">New hire date</label>
+                                    <input type="date" id="rehire_hire_date" name="hire_date" class="form-control form-control-sm" value="{{ now()->toDateString() }}">
+                                </div>
+                                <button type="submit" class="btn btn-primary btn-sm">Rehire</button>
+                            </form>
+                            @endif
                         </div>
 
                         <!-- Tabs Navigation -->
@@ -150,6 +156,14 @@ use Illuminate\Support\Facades\Crypt;
                                     Leave
                                 </button>
                             </li>
+                            @if(auth()->user()?->hasPermission('read_staff'))
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="history-tab" data-bs-toggle="tab" data-bs-target="#history" type="button" role="tab">
+                                    <span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">history</span>
+                                    History
+                                </button>
+                            </li>
+                            @endif
                         </ul>
 
                         <!-- Tabs Content -->
@@ -196,7 +210,28 @@ use Illuminate\Support\Facades\Crypt;
                                                     <div class="col-5"><small class="text-muted">Passport:</small></div>
                                                     <div class="col-7"><small>{{ $staff->passport ?? '-' }}</small></div>
                                                     <div class="col-5"><small class="text-muted">Citizenship:</small></div>
-                                                    <div class="col-7"><small>{{ $staff->citizenship ?? '-' }}</small></div>
+                                                    <div class="col-7"><small>{{ $staff->nationality ?: ($staff->citizenship ?? '-') }}</small></div>
+                                                    <div class="col-5"><small class="text-muted">Residency:</small></div>
+                                                    <div class="col-7"><small>{{ \App\Services\StaffResidency::LABELS[$staff->residency_status] ?? '-' }}</small></div>
+                                                    @if($staff->work_permit_number || $staff->work_permit_expiry)
+                                                    <div class="col-5"><small class="text-muted">Work permit:</small></div>
+                                                    <div class="col-7"><small>
+                                                        {{ $staff->work_permit_number ?? '-' }}
+                                                        @if($staff->work_permit_expiry)
+                                                            , expires {{ $staff->work_permit_expiry->format('d M Y') }}
+                                                            @if($staff->work_permit_expiry->isPast())<span class="badge bg-danger">Expired</span>
+                                                            @elseif($staff->work_permit_expiry->lte(now()->addDays(60)))<span class="badge bg-warning text-dark">Expires soon</span>@endif
+                                                        @endif
+                                                    </small></div>
+                                                    @endif
+                                                    <div class="col-5"><small class="text-muted">Data notice:</small></div>
+                                                    <div class="col-7"><small>
+                                                        @if($staff->data_notice_agreed_at)
+                                                            Agreed {{ \Illuminate\Support\Carbon::parse($staff->data_notice_agreed_at)->format('d M Y') }}{{ $staff->data_notice_recorded_by ? ' (recorded by HR)' : ' (online)' }}
+                                                        @else
+                                                            <span class="text-muted">Not recorded</span>
+                                                        @endif
+                                                    </small></div>
                                                     <div class="col-5"><small class="text-muted">Marital Status:</small></div>
                                                     <div class="col-7"><small>{{ $staff->marital ?? '-' }}</small></div>
                                                     <div class="col-5"><small class="text-muted">Spouse Name:</small></div>
@@ -432,6 +467,28 @@ use Illuminate\Support\Facades\Crypt;
                                         </h6>
                                     </div>
                                     <div class="card-body py-2">
+                                        {{-- The HELB compliance certificate is mandatory: on file, waived by the HR Manager with a reason, or missing --}}
+                                        @php
+                                            $hasHelbCertificate = $staff->employeeDocuments->contains(fn ($d) => optional($d->documentType)->name === 'HELB Compliance Certificate');
+                                            $helbLoanSetUp = $staff->is_helb_beneficiary ? \App\Models\HelbDeduction::where('staff_id', $staff->id)->exists() : true;
+                                        @endphp
+                                        <div class="small mb-2">
+                                            <strong>HELB certificate:</strong>
+                                            @if($hasHelbCertificate)
+                                                <span class="badge bg-success">On file</span>
+                                            @elseif($staff->helb_certificate_exception_at)
+                                                <span class="badge bg-info text-dark">Waived</span>
+                                                {{ $staff->helb_certificate_exception_reason }}
+                                                <span class="text-muted">(HR Manager, {{ $staff->helb_certificate_exception_at->format('d M Y') }})</span>
+                                            @else
+                                                <span class="badge bg-warning text-dark">Missing</span>
+                                            @endif
+                                            &nbsp;<strong>HELB loan beneficiary:</strong>
+                                            {{ is_null($staff->is_helb_beneficiary) ? 'Not answered' : ($staff->is_helb_beneficiary ? 'Yes' : 'No') }}
+                                            @if(!$helbLoanSetUp)
+                                                <span class="badge bg-warning text-dark">No HELB deduction set up yet</span>
+                                            @endif
+                                        </div>
                                         @if($staff->employeeDocuments->count())
                                         <div class="table-responsive">
                                             <table class="table table-sm table-hover table-bordered mb-0">
@@ -465,6 +522,8 @@ use Illuminate\Support\Facades\Crypt;
                                                         <td>{{ $doc->uploader->name ?? '-' }}</td>
                                                         <td>{{ $doc->created_at ? $doc->created_at->format('d M Y') : '-' }}</td>
                                                         <td>
+                                                            {{-- Only the HR role and the Directors can open staff documents --}}
+                                                            @if(($canOpenDocuments ??= app(\App\Services\StaffDocumentAccess::class)->allows(auth()->user())))
                                                             <a href="{{ route('documents.view', $doc->id) }}" target="_blank"
                                                                class="btn btn-sm btn-outline-primary">
                                                                 <span class="material-symbols-outlined" style="font-size:14px; vertical-align:middle;">visibility</span> View
@@ -473,6 +532,9 @@ use Illuminate\Support\Facades\Crypt;
                                                                class="btn btn-sm btn-outline-success">
                                                                 <span class="material-symbols-outlined" style="font-size:14px; vertical-align:middle;">download</span> Download
                                                             </a>
+                                                            @else
+                                                            <span class="text-muted small">HR only</span>
+                                                            @endif
                                                         </td>
                                                     </tr>
                                                     @endforeach
@@ -1004,6 +1066,13 @@ use Illuminate\Support\Facades\Crypt;
                                     </table>
                                 </div>
                             </div>
+
+                            @if(auth()->user()?->hasPermission('read_staff'))
+                            {{-- Who changed what, when, and what it was before. Read only; loads when the tab is first opened. --}}
+                            <div class="tab-pane fade" id="history" role="tabpanel" aria-labelledby="history-tab">
+                                @include('staff.partials.history-panel', ['url' => route('staff.history', \Illuminate\Support\Facades\Crypt::encrypt($staff->id)), 'lazy' => true])
+                            </div>
+                            @endif
 
                         </div>
                     </div>

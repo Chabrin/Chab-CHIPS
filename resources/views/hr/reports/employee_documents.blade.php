@@ -69,8 +69,12 @@
                                         <td>{{ $doc->uploader->name ?? '-' }}</td>
                                         <td>{{ $doc->created_at ? $doc->created_at->format('d M Y H:i') : '-' }}</td>
                                         <td class="text-end">
+                                            @if(($canOpenDocuments ??= app(\App\Services\StaffDocumentAccess::class)->allows(auth()->user())))
                                             <a href="{{ route('documents.view', $doc->id) }}" target="_blank" class="btn btn-light btn-sm">View</a>
                                             <a href="{{ route('documents.download', $doc->id) }}" class="btn btn-light btn-sm">Download</a>
+                                            @else
+                                            <span class="text-muted small">HR only</span>
+                                            @endif
                                         </td>
                                     </tr>
                                     @empty

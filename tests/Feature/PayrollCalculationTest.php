@@ -84,6 +84,7 @@ class PayrollCalculationTest extends TestCase
             $t->decimal('day_fraction', 5, 2)->nullable();
             $t->decimal('pay_rate', 5, 2)->nullable();
         });
+        (require database_path('migrations/2026_11_20_100000_create_scheduled_deduction_tables.php'))->up(); // payroll now asks for the scheduled deductions due
         Schema::create('sys_helb_deductions', function (Blueprint $t) {
             $t->id();
             $t->integer('staff_id');
@@ -599,5 +600,135 @@ class PayrollCalculationTest extends TestCase
         DB::table('sys_hr_leave_requests_234_repeat')->insert(['parent_id' => $requestId, 'leave_date' => '2026-10-05', 'day_fraction' => 1, 'pay_rate' => 0]);
 
         $this->assertEquals(0, $this->calculate()['sick_leave_unpaid_days']);
+    }
+
+
+    // ── scheduled deductions (UAT A6) ───────────────────────────────────────────────────────
+
+    private function scheduledDeduction(array $attributes = []): int
+    {
+        return DB::table('sys_hr_scheduled_deductions')->insertGetId(array_merge([
+            'staff_id' => self::STAFF_ID, 'type_id' => 2, 'total_amount' => 21500, 'monthly_amount' => 2000, 'months' => 11,
+            'start_month' => '2026-10-01', 'end_month' => '2027-08-01', 'balance' => 21500, 'status' => 'active',
+            'created_at' => now(), 'updated_at' => now(),
+        ], $attributes));
+    }
+
+    public function test_an_active_scheduled_deduction_is_taken_after_tax_and_lowers_net_pay(): void
+    {
+        $without = $this->calculate();
+        $id = $this->scheduledDeduction();
+
+        $result = $this->calculate();
+
+        $this->assertEqualsWithDelta(2000, $result['total_deductions'] - $without['total_deductions'], 0.01);
+        $this->assertEqualsWithDelta(2000, $without['net_salary'] - $result['net_salary'], 0.01);
+        $this->assertEqualsWithDelta($without['paye'], $result['paye'], 0.01, 'a scheduled deduction does not change the tax');
+        $entry = $this->entries($result, 'Salary advance')[0];
+        $this->assertEquals(2000, $entry['amount']);
+        $this->assertSame($id, $entry['scheduled_deduction_id']);
+        $this->assertEquals(19500, $entry['balance_after']);
+        $this->assertCount(1, $result['scheduled_deductions_info']);
+        $this->assertSame($id, $result['scheduled_deductions_info'][0]['parent_id']);
+        $this->assertEquals(2000, $result['scheduled_deductions_info'][0]['deduction_amount']);
+        $this->assertSame('2026-10-01', $result['scheduled_deductions_info'][0]['deduction_date']);
+        $this->assertEquals(21500, DB::table('sys_hr_scheduled_deductions')->value('balance'), 'nothing is written until the run is approved');
+    }
+
+    public static function scheduledDeductionsThatAreNotTaken(): array
+    {
+        return [
+            'on hold, no signed consent form' => [['status' => 'on_hold']],
+            'paused' => [['status' => 'paused']],
+            'closed early' => [['status' => 'closed']],
+            'paid off' => [['status' => 'completed', 'balance' => 0]],
+            'nothing left owed' => [['balance' => 0]],
+            'its first month has not come' => [['start_month' => '2026-11-01']],
+        ];
+    }
+
+    #[DataProvider('scheduledDeductionsThatAreNotTaken')]
+    public function test_a_scheduled_deduction_that_is_not_running_is_not_taken(array $attributes): void
+    {
+        $baseline = $this->calculate();
+        $this->scheduledDeduction($attributes);
+
+        $result = $this->calculate();
+
+        $this->assertSame([], $this->entries($result, 'Salary advance'));
+        $this->assertSame([], $result['scheduled_deductions_info']);
+        $this->assertEqualsWithDelta($baseline['total_deductions'], $result['total_deductions'], 0.001);
+    }
+
+    public function test_a_scheduled_deduction_is_taken_in_the_month_it_starts(): void
+    {
+        $this->scheduledDeduction(['start_month' => '2026-10-01']);
+
+        $this->assertCount(1, $this->entries($this->calculate(), 'Salary advance'));
+    }
+
+    public function test_the_last_month_takes_only_what_is_left(): void
+    {
+        $this->scheduledDeduction(['balance' => 1500]);
+
+        $result = $this->calculate();
+
+        $this->assertEquals(1500, $this->entries($result, 'Salary advance')[0]['amount']);
+        $this->assertEquals(0, $this->entries($result, 'Salary advance')[0]['balance_after']);
+    }
+
+    public function test_several_scheduled_deductions_are_each_taken_and_another_persons_are_not(): void
+    {
+        $this->scheduledDeduction(['monthly_amount' => 2000]);
+        $this->scheduledDeduction(['type_id' => 1, 'monthly_amount' => 700, 'balance' => 5000]);
+        DB::table('sys_staff')->insert(['id' => 2, 'disability' => 'no']);
+        $this->scheduledDeduction(['staff_id' => 2, 'monthly_amount' => 9999]);
+
+        $result = $this->calculate();
+
+        $this->assertEquals(2000, $this->entries($result, 'Salary advance')[0]['amount']);
+        $this->assertEquals(700, $this->entries($result, 'Sacco / Akiba loan')[0]['amount']);
+        $this->assertCount(2, $result['scheduled_deductions_info']);
+    }
+
+
+    public function test_a_scheduled_deduction_leaves_the_helb_amount_on_the_contract_alone(): void
+    {
+        $this->scheduledDeduction(['type_id' => 1, 'monthly_amount' => 1500]);
+
+        $result = $this->calculate();
+
+        $this->assertEquals(self::CONTRACT_HELB_AMOUNT, $result['helb_loans']);
+        $this->assertEquals(1500, $this->entries($result, 'Sacco / Akiba loan')[0]['amount']);
+    }
+
+    // ── HELB: the payslip says what is still owed to HELB ───────────────────────────────────
+
+    public function test_the_helb_line_on_the_payslip_carries_what_is_still_owed_after_this_month(): void
+    {
+        $this->helbLoan(['loan_balance' => 5000, 'monthly_deduction' => 1500]);
+
+        $entry = $this->entries($this->calculate(), 'HELB Loan')[0];
+
+        $this->assertEquals(1500, $entry['amount']);
+        $this->assertEquals(3500, $entry['balance_after']);
+    }
+
+    public function test_the_last_helb_instalment_takes_only_what_is_left_and_leaves_nothing_owed(): void
+    {
+        $this->helbLoan(['loan_balance' => 1000, 'monthly_deduction' => 1500]);
+
+        $entry = $this->entries($this->calculate(), 'HELB Loan')[0];
+
+        $this->assertEquals(1000, $entry['amount']);
+        $this->assertEquals(0, $entry['balance_after']);
+    }
+
+    public function test_a_helb_amount_that_is_only_on_the_contract_has_no_balance_to_show(): void
+    {
+        $entry = $this->entries($this->calculate(), 'HELB Loan')[0];
+
+        $this->assertEquals(self::CONTRACT_HELB_AMOUNT, $entry['amount']);
+        $this->assertArrayNotHasKey('balance_after', $entry, 'no loan record, so nothing is tracked');
     }
 }

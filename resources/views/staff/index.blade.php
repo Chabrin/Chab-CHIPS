@@ -305,7 +305,8 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
 
                                         {{-- National ID --}}
                                         <td class="text-nowrap">
-                                            <span class="font-monospace text-secondary small">{{ $member->national_id ?? '—' }}</span>
+                                            {{-- Only the last four show in the list; the full number is on the profile --}}
+                                            <span class="font-monospace text-secondary small" @if($member->national_id) title="Last four characters. The full number is on the staff profile." @endif>{{ \App\Support\MaskedNumber::orDash($member->national_id) }}</span>
                                         </td>
 
                                         {{-- Zone Roles --}}
@@ -425,11 +426,7 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                         <input type="email" class="form-control" id="convert-user-email" name="email" required autocomplete="off">
                         <div class="invalid-feedback" id="convert-email-feedback"></div>
                     </div>
-                    <div class="mb-3">
-                        <label for="convert-user-password" class="form-label text-muted small">Password <span class="text-danger">*</span></label>
-                        <input type="password" class="form-control" id="convert-user-password" name="password" required minlength="6">
-                        <div class="invalid-feedback" id="convert-password-feedback"></div>
-                    </div>
+                    <p class="text-muted small mb-0">They are emailed a link to choose their own password. You will not see or set it.</p>
                 </div>
                 <div class="modal-footer border-top-0 pt-0">
                     <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Cancel</button>
@@ -519,9 +516,7 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
 
             function resetConvertForm() {
                 $('#convert-user-email').val('').removeClass('is-invalid is-valid');
-                $('#convert-user-password').val('').removeClass('is-invalid');
                 $('#convert-email-feedback').text('');
-                $('#convert-password-feedback').text('');
             }
 
             $(document).on('click', '.btn-convert-user', function() {
@@ -576,8 +571,13 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                     success: function(res) {
                         if (res.success) {
                             bootstrap.Modal.getInstance(document.getElementById('convertUserModal')).hide();
-                            toastr.success(res.message || 'Staff converted successfully.');
-                            setTimeout(function() { location.reload(); }, 1200);
+                            // The user exists either way; a failed email gets a warning so it is not missed
+                            if (res.email_sent === false) {
+                                toastr.warning(res.message, '', { timeOut: 10000 });
+                            } else {
+                                toastr.success(res.message || 'Staff converted successfully.');
+                            }
+                            setTimeout(function() { location.reload(); }, res.email_sent === false ? 4000 : 1200);
                         }
                     },
                     error: function(xhr) {
@@ -586,10 +586,6 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                             if (json.errors.email) {
                                 $('#convert-user-email').addClass('is-invalid');
                                 $('#convert-email-feedback').text(json.errors.email[0]);
-                            }
-                            if (json.errors.password) {
-                                $('#convert-user-password').addClass('is-invalid');
-                                $('#convert-password-feedback').text(json.errors.password[0]);
                             }
                         } else {
                             toastr.error(json.error || 'Failed to convert staff to user.');

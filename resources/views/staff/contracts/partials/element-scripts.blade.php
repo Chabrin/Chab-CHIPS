@@ -128,7 +128,7 @@ function rowTemplate(index) {
                 <label class="form-label">Entry Type</label>
                 <select class="form-select entry-type-select" name="elements[${index}][entry_type]">
                     <option value="" disabled selected>Select entry type</option>
-                    <option value="2">Allowance</option>
+                    <option value="2">Earnings</option>
                     <option value="1">Deduction</option>
                 </select>
                 <small class="text-muted">Set from the element you choose.</small>

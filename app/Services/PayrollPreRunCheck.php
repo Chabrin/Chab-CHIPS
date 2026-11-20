@@ -10,6 +10,7 @@ use App\Models\PayrollPeriod;
 use App\Models\PayrollPeriodItem;
 use App\Models\PayrollRun;
 use App\Models\PayrollSummary;
+use App\Models\ScheduledDeduction;
 use App\Models\Staff;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -120,6 +121,13 @@ class PayrollPreRunCheck
             'These staff have no current contract in this period, so the run will skip their item.',
             $items->whereNotNull('staff_id')->reject(fn ($item) => $staffIds->contains($item->staff_id))
                 ->map(fn ($item) => ['name' => $item->staff?->full_names ?? 'Unknown staff', 'detail' => ($item->element?->element_name ?? 'Item') . ' ' . number_format((float) $item->amount, 2)]));
+
+        // A deduction with no signed consent form is not taken, so say who it is for rather than let it be missed
+        $add('scheduled_on_hold', 'Scheduled deductions waiting for the signed consent form', 'warning',
+            'Nothing is taken for these until the signed form is added on Scheduled Deductions.',
+            ScheduledDeduction::with(['staff', 'type'])->where('status', ScheduledDeduction::ON_HOLD)
+                ->whereIn('staff_id', $staffIds)->whereDate('start_month', '<=', $end)->orderBy('id')->get()
+                ->map(fn ($deduction) => ['name' => $deduction->staff?->full_names ?? 'Unknown staff', 'detail' => ($deduction->type?->name ?? 'Deduction') . ' KES ' . number_format((float) $deduction->monthly_amount, 2) . ' a month']));
 
         return [
             'locked' => PayrollSummary::where('period_id', $period->id)->exists(),
@@ -281,10 +289,11 @@ class PayrollPreRunCheck
      *
      * @return array{date: Carbon, label: string}
      */
-    private function since(PayrollPeriod $period): array
+    public function since(PayrollPeriod $period): array
     {
+        // A payroll that has been paid is still the last payroll, so both finished states count
         $previous = PayrollRun::with('period')
-            ->where('status', PayrollRun::STATUS_APPROVED)
+            ->whereIn('status', [PayrollRun::STATUS_APPROVED, PayrollRun::STATUS_PAID])
             ->whereHas('period', fn ($query) => $query->whereDate('end_date', '<', $period->start_date->toDateString()))
             ->orderByDesc('processed_at')
             ->first();
@@ -315,7 +324,7 @@ class PayrollPreRunCheck
     /**
      * A recurring item change in words, for example "Sacco Loan: 1,000.00 to 1,500.00".
      */
-    private function describeElementChange(ContractChange $change): string
+    public function describeElementChange(ContractChange $change): string
     {
         $name = $change->element?->element_name ?? 'Item';
 

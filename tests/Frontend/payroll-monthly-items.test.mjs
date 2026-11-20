@@ -42,12 +42,12 @@ test('type 2 is an allowance and everything else a deduction', () => {
     assert.equal(M.typeKey(2), 'allowance');
     assert.equal(M.typeKey('1'), 'deduction');
     assert.equal(M.typeKey(''), 'deduction', 'an item whose element was deleted');
-    assert.equal(M.typeName('2'), 'Allowance');
+    assert.equal(M.typeName('2'), 'Earnings');
     assert.equal(M.typeName('1'), 'Deduction');
 });
 
 test('the type badge carries the colour class for its kind', () => {
-    assert.equal(M.typeBadge('2'), '<span class="pm-type pm-type--allowance">Allowance</span>');
+    assert.equal(M.typeBadge('2'), '<span class="pm-type pm-type--allowance">Earnings</span>');
     assert.equal(M.typeBadge('1'), '<span class="pm-type pm-type--deduction">Deduction</span>');
 });
 
@@ -313,7 +313,7 @@ test('the check tab has four summary tiles', () => {
     const html = M.checkSummaryHtml({ staff_in_run: 56, items: 3, one_time_allowances: 5000, one_time_deductions: 1234.5 });
     assert.equal((html.match(/class="pm-stat"/g) || []).length, 4);
     assert.match(html, /Staff in this run<\/p><div class="pm-stat-value">56</);
-    assert.match(html, /One-time allowances<\/p><div class="pm-stat-value">5,000.00</);
+    assert.match(html, /One-time earnings<\/p><div class="pm-stat-value">5,000.00</);
     assert.match(html, /One-time deductions<\/p><div class="pm-stat-value">1,234.50</);
 });
 

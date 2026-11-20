@@ -8,11 +8,6 @@
                     <div class="card-header card-no-border d-flex align-items-center">
                         <h4 class="mb-0">Edit Employee Termination</h4>
                         <div class="ms-auto d-flex gap-2">
-                            <button type="submit" form="terminationForm" class="btn btn-primary btn-sm d-flex align-items-center" id="editButton">
-                                <span class="spinner-border spinner-border-sm me-2 d-none" id="submitSpinner"></span>
-                                <span class="material-symbols-outlined me-1" style="font-size:18px;">check_circle</span>
-                                <span>Update Termination</span>
-                            </button>
                             <a href="{{ route('employee.termination.index') }}" class="btn btn-light btn-sm d-flex align-items-center">
                                 <span class="material-symbols-outlined">arrow_back</span>
                                 <span class="ms-1">Back to List</span>
@@ -115,6 +110,7 @@
                                 </div>
                                 <button type="button" class="btn btn-outline-primary mt-2" id="addSeveranceElementBtn">Add Severance Element</button>
                             </div>
+                            @include('partials.form-actions', ['form' => 'terminationForm', 'buttonId' => 'editButton', 'cancelUrl' => route('employee.termination.index')])
                         </form>
                     </div>
                 </div>

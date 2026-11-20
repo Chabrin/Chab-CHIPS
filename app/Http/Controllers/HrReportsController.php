@@ -244,7 +244,8 @@ class HrReportsController extends Controller
                 'no'           => $i + 1,
                 'staff_number' => $r->staff_number   ?? '-',
                 'full_names'   => $r->full_names,
-                'national_id'  => $r->national_id    ?? '-',
+                // Last four only on screen (searching still finds the full number); the export has the full number
+                'national_id'  => \App\Support\MaskedNumber::orDash($r->national_id, '-'),
                 'department'   => $r->department_name ?? '-',
                 'position'     => $r->position_name  ?? '-',
                 'mobile'       => $r->mobile_number  ?? '-',
@@ -509,7 +510,7 @@ class HrReportsController extends Controller
             return Excel::download(
                 GenericReportExport::build(
                     title:     'Payroll Register — ' . $periodLabel,
-                    headings:  ['#', 'Staff No', 'Name', 'Department', 'Basic Salary', 'Allowances', 'Gross', 'PAYE', 'NSSF', 'SHA', 'Housing Levy', 'Total Deductions', 'Net Pay'],
+                    headings:  ['#', 'Staff No', 'Name', 'Department', 'Basic Salary', 'Earnings', 'Gross', 'PAYE', 'NSSF', 'SHA', 'Housing Levy', 'Total Deductions', 'Net Pay'],
                     dataRows:  $rows,
                     meta:      ['Period: ' . $periodLabel, 'Generated: ' . now()->format('d/m/Y H:i:s')],
                     colWidths: ['A' => 5, 'B' => 13, 'C' => 26, 'D' => 20, 'E' => 14, 'F' => 13, 'G' => 13, 'H' => 12, 'I' => 12, 'J' => 12, 'K' => 14, 'L' => 16, 'M' => 13],
@@ -1680,7 +1681,8 @@ class HrReportsController extends Controller
                 'department'     => $r->department,
                 'bank_name'      => $r->bank_name,
                 'account_name'   => $r->account_name,
-                'account_number' => $r->account_number,
+                // Last four only on screen; the export has the full account number
+                'account_number' => \App\Support\MaskedNumber::orDash($r->account_number, '-'),
             ]);
             return response()->json(['success'=>true,'data'=>$data,'count'=>$data->count()]);
         } catch (\Exception $e) {

@@ -87,7 +87,15 @@ document.addEventListener('DOMContentLoaded', function () {
     function busy(value) {
         ['createButton', 'updateButton', 'updateButtonFooter'].forEach(id => {
             const button = document.getElementById(id);
-            if (button) { button.disabled = value; button.style.opacity = value ? '0.6' : '1'; }
+            if (!button) return;
+            button.disabled = value;
+            button.style.opacity = value ? '0.6' : '1';
+            // "Saving…" while it is being sent, the button's own wording again if it did not go through
+            const label = button.querySelector('.form-actions-label');
+            if (label) {
+                label.dataset.idle = label.dataset.idle || label.textContent;
+                label.textContent = value ? 'Saving…' : label.dataset.idle;
+            }
         });
         const spinner = document.getElementById('submitSpinner');
         if (spinner) spinner.classList.toggle('d-none', !value);

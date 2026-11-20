@@ -1287,6 +1287,8 @@ p, span, label, a, td, th, li, input, select, textarea, button {
     border: 1px solid var(--chabrin-border) !important;
     border-radius: 12px !important;
     background: #fbfcfb !important;
+    /* The cards also carry Bootstrap's bg-light, which this theme gives white text: file names and the notice were unreadable */
+    color: var(--chabrin-text);
     transition: border-color .2s ease,
                 background-color .2s ease,
                 transform .2s ease;

@@ -27,6 +27,7 @@ class Position extends Model
         'current_status_id',
         'reports_to_id',
         'is_active',
+        'role_id',
     ];
 
     protected $casts = [
@@ -34,6 +35,14 @@ class Position extends Model
         'basic_salary' => 'decimal:2',
         'is_active' => 'boolean',
     ];
+
+    /**
+     * The system role that goes with this position (made when the position was created).
+     */
+    public function role()
+    {
+        return $this->belongsTo(Role::class, 'role_id');
+    }
 
     /**
      * Positions that are switched on, so can be chosen for new staff and contracts.

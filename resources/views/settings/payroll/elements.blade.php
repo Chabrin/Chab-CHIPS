@@ -74,7 +74,7 @@
                             <select class="form-select" name="element_type" id="element_type" required>
                                 <option value="" disabled selected>Select type</option>
                                 <option value="1">Deduction</option>
-                                <option value="2">Allowance</option>
+                                <option value="2">Earnings</option>
                             </select>
                         </div>
                         <div class="col-lg-6 mb-3">
@@ -181,7 +181,7 @@
                         if (row.element_type == '1') {
                             return 'Deduction';
                         } else if (row.element_type == '2') {
-                            return 'Allowance';
+                            return 'Earnings';
                         }
                         return 'Unknown';
                     }

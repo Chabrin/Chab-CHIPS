@@ -105,6 +105,7 @@ class PayrollElementSettingsTest extends TestCase
             $t->decimal('day_fraction', 5, 2)->nullable();
             $t->decimal('pay_rate', 5, 2)->nullable();
         });
+        (require database_path('migrations/2026_11_20_100000_create_scheduled_deduction_tables.php'))->up(); // payroll now asks for the scheduled deductions due
         Schema::create('sys_helb_deductions', function (Blueprint $t) {
             $t->id();
             $t->integer('staff_id');

@@ -123,6 +123,23 @@ class PayrollMonthlyItemsTest extends TestCase
             $t->timestamp('approved_at')->nullable();
         });
         (require base_path('database/migrations/2026_11_04_000001_create_payroll_runs_tables.php'))->up();
+        (require base_path('database/migrations/2026_11_17_120000_add_changes_snapshot_to_payroll_runs.php'))->up();
+        // The list of what changed since the last payroll reads the audit trail and names the people who made the changes
+        Schema::create('cb_audit_logs', function (Blueprint $t) {
+            $t->id();
+            $t->string('table_name');
+            $t->unsignedBigInteger('record_id');
+            $t->string('operation');
+            $t->text('old_data')->nullable();
+            $t->text('new_data')->nullable();
+            $t->unsignedBigInteger('user_id')->nullable();
+            $t->timestamps();
+        });
+        Schema::create('josya_users', function (Blueprint $t) {
+            $t->id();
+            $t->string('name')->nullable();
+        });
+        DB::table('josya_users')->insert(['id' => 7, 'name' => 'Hana HR']);
         Schema::create('um_tax_bands', function (Blueprint $t) {
             $t->id();
             $t->decimal('range_from', 15, 2);
@@ -148,6 +165,7 @@ class PayrollMonthlyItemsTest extends TestCase
             $t->decimal('day_fraction', 5, 2)->nullable();
             $t->decimal('pay_rate', 5, 2)->nullable();
         });
+        (require database_path('migrations/2026_11_20_100000_create_scheduled_deduction_tables.php'))->up(); // payroll now asks for the scheduled deductions due
         Schema::create('sys_helb_deductions', function (Blueprint $t) {
             $t->id();
             $t->integer('staff_id');
@@ -586,6 +604,56 @@ class PayrollMonthlyItemsTest extends TestCase
         $this->assertEquals(50000, PayrollSummary::where('staff_id', self::ALICE)->value('total_earnings'));
     }
 
+    // ── what changed since the last payroll ───────────────────────────
+
+    public function test_processing_keeps_what_changed_with_the_run_for_the_accountant(): void
+    {
+        $this->actingAsHr();
+        ContractChange::create(['contract_id' => self::ALICE_CONTRACT, 'staff_id' => self::ALICE, 'field' => ContractChange::BASIC_SALARY, 'old_value' => 40000, 'new_value' => 50000, 'changed_by' => 7, 'created_at' => now()->subDay()]);
+
+        $this->postJson('/ajax/payroll/process', ['period_id' => self::PERIOD])->assertOk()->assertJson(['success' => true]);
+
+        $snapshot = PayrollRun::where('period_id', self::PERIOD)->firstOrFail()->changes_snapshot;
+        $this->assertSame(1, $snapshot['changes_total']);
+        $row = collect($snapshot['groups'])->firstWhere('key', 'contracts')['rows'][0];
+        $this->assertSame(['Alice Adams', 'Basic salary', '40,000.00 to 50,000.00', 'Hana HR'], [$row['who'], $row['what'], $row['detail'], $row['by']]);
+    }
+
+    public function test_a_problem_building_the_change_list_never_stops_a_run(): void
+    {
+        $this->mock(\App\Services\PayrollChangeFeed::class, fn ($mock) => $mock->shouldReceive('forPeriod')->andThrow(new \RuntimeException('boom')));
+        $this->actingAsHr();
+
+        $this->postJson('/ajax/payroll/process', ['period_id' => self::PERIOD])->assertOk()->assertJson(['success' => true]);
+
+        $this->assertSame(2, PayrollSummary::where('period_id', self::PERIOD)->count());
+        $this->assertNull(PayrollRun::where('period_id', self::PERIOD)->firstOrFail()->changes_snapshot);
+    }
+
+    public function test_a_run_still_processes_before_the_snapshot_column_has_been_added(): void
+    {
+        Schema::table('payroll_runs', fn (Blueprint $t) => $t->dropColumn('changes_snapshot'));
+        $this->actingAsHr();
+
+        $this->postJson('/ajax/payroll/process', ['period_id' => self::PERIOD])->assertOk()->assertJson(['success' => true]);
+
+        $this->assertSame(2, PayrollSummary::where('period_id', self::PERIOD)->count());
+    }
+
+    public function test_reprocessing_replaces_the_kept_list_with_a_fresh_one(): void
+    {
+        $this->actingAsHr();
+        $this->postJson('/ajax/payroll/process', ['period_id' => self::PERIOD])->assertOk();
+        $this->assertSame(0, PayrollRun::first()->changes_snapshot['changes_total']);
+
+        PayrollSummary::query()->delete();
+        PayrollRun::where('period_id', self::PERIOD)->update(['status' => PayrollRun::STATUS_REVERSED]);
+        ContractChange::create(['contract_id' => self::BOB_CONTRACT, 'staff_id' => self::BOB, 'field' => ContractChange::BASIC_SALARY, 'old_value' => 25000, 'new_value' => 30000, 'changed_by' => 7, 'created_at' => now()]);
+        $this->postJson('/ajax/payroll/process', ['period_id' => self::PERIOD])->assertOk();
+
+        $this->assertSame(1, PayrollRun::first()->changes_snapshot['changes_total']);
+    }
+
     public function test_items_survive_a_reversed_run_and_apply_again_on_the_next_run(): void
     {
         $this->actingAsHr();
@@ -687,5 +755,156 @@ class PayrollMonthlyItemsTest extends TestCase
 
         $this->assertSame(['basic_salary', 'element_added'], ContractChange::orderBy('id')->pluck('field')->all());
         $this->assertEquals(800, DB::table('sys_hr_employee_contracts_279_repeat')->where('parent_id', self::ALICE_CONTRACT)->value('amount'));
+    }
+
+
+    // ── the legal limit on deductions, with scheduled deductions (UAT A6) ───────────────────
+
+    private const SACCO_LOAN_TYPE = 1;
+    private const SALARY_ADVANCE_TYPE = 2;
+
+    private function scheduledFor(int $staff, int $type, float $monthly, float $balance = 50000): \App\Models\ScheduledDeduction
+    {
+        return \App\Models\ScheduledDeduction::create([
+            'staff_id' => $staff, 'type_id' => $type, 'total_amount' => $balance, 'monthly_amount' => $monthly, 'months' => 10,
+            'start_month' => '2026-10-01', 'end_month' => '2027-07-01', 'balance' => $balance, 'status' => 'active',
+        ]);
+    }
+
+    private function actingAsHrWhoCanOverride(): void
+    {
+        $this->actingWith(['read_payroll_processing', 'create_payroll_processing', 'update_contracts', 'override_deduction_limits']);
+    }
+
+    public function test_a_run_where_a_scheduled_deduction_takes_too_much_is_stopped_and_names_who_and_what_to_reduce(): void
+    {
+        $this->actingAsHr();
+        $this->scheduledFor(self::BOB, self::SACCO_LOAN_TYPE, 17000); // Bob earns 30,000: two-thirds is 20,000 and the tax and statutory items are about 3,000 more
+
+        $response = $this->postJson('/ajax/payroll/process', ['period_id' => self::PERIOD])->assertStatus(422);
+
+        $response->assertJson(['success' => false, 'can_override' => false]);
+        $breach = $response->json('limit_breaches.0');
+        $this->assertSame('Bob Brown', $breach['staff']);
+        $this->assertStringContainsString('two-thirds', $breach['messages'][0]);
+        $this->assertSame('Sacco / Akiba loan', $breach['reduce'][0]['name']);
+        $this->assertGreaterThan(0, $breach['reduce'][0]['reduce_by']);
+        $this->assertStringContainsString('Reduce the monthly amount', $response->json('error'));
+        $this->assertSame(0, PayrollSummary::count(), 'nothing is kept when the run is stopped');
+        $this->assertSame(0, PayrollRun::count());
+    }
+
+    public function test_a_scheduled_deduction_within_the_limit_is_processed_without_a_fuss(): void
+    {
+        $this->actingAsHr();
+        $this->scheduledFor(self::BOB, self::SACCO_LOAN_TYPE, 5000);
+
+        $this->postJson('/ajax/payroll/process', ['period_id' => self::PERIOD])->assertOk()->assertJson(['success' => true]);
+
+        $this->assertSame(0, PayrollRun::first()->logs()->where('action', 'limit_override')->count());
+    }
+
+    public function test_a_company_loan_is_held_to_half_of_what_is_left_even_when_the_two_thirds_rule_is_met(): void
+    {
+        $this->actingAsHr();
+        $this->scheduledFor(self::BOB, self::SALARY_ADVANCE_TYPE, 14000); // about 17,900 of deductions in all, under 20,000, but over half of the 26,000 left before the loan
+
+        $response = $this->postJson('/ajax/payroll/process', ['period_id' => self::PERIOD])->assertStatus(422);
+
+        $messages = implode(' ', $response->json('limit_breaches.0.messages'));
+        $this->assertStringContainsString('half of the wages left', $messages);
+        $this->assertStringNotContainsString('two-thirds', $messages);
+        $this->assertSame('Salary advance', $response->json('limit_breaches.0.reduce.0.name'));
+    }
+
+    public function test_the_same_amount_taken_as_a_loan_that_is_not_from_the_company_is_allowed(): void
+    {
+        $this->actingAsHr();
+        $this->scheduledFor(self::BOB, self::SACCO_LOAN_TYPE, 14000);
+
+        $this->postJson('/ajax/payroll/process', ['period_id' => self::PERIOD])->assertOk();
+    }
+
+    public function test_someone_with_no_scheduled_deduction_is_not_held_up_by_the_limit(): void
+    {
+        $this->actingAsHr();
+        $this->contractRow(self::ALICE_CONTRACT, self::SACCO, 40000); // far over the limit, but it is on the contract, not a scheduled deduction
+        $this->scheduledFor(self::BOB, self::SACCO_LOAN_TYPE, 1000);
+
+        $this->postJson('/ajax/payroll/process', ['period_id' => self::PERIOD])->assertOk()->assertJson(['success' => true]);
+    }
+
+    public function test_a_person_who_may_override_runs_it_with_a_reason_and_it_is_written_down_everywhere(): void
+    {
+        $this->actingAsHrWhoCanOverride();
+        $deduction = $this->scheduledFor(self::BOB, self::SACCO_LOAN_TYPE, 17000);
+
+        $blocked = $this->postJson('/ajax/payroll/process', ['period_id' => self::PERIOD])->assertStatus(422);
+        $this->assertTrue($blocked->json('can_override'));
+        $this->assertStringContainsString('run it anyway', $blocked->json('error'));
+
+        $this->postJson('/ajax/payroll/process', ['period_id' => self::PERIOD, 'override_limits' => 1, 'override_reason' => ''])
+            ->assertStatus(422)->assertJsonPath('can_override', true);
+        $this->assertSame(0, PayrollSummary::count());
+
+        $this->postJson('/ajax/payroll/process', ['period_id' => self::PERIOD, 'override_limits' => 1, 'override_reason' => 'Agreed in writing with the employee'])
+            ->assertOk()->assertJson(['success' => true]);
+
+        $this->assertSame(1, PayrollSummary::where('staff_id', self::BOB)->count());
+        $log = PayrollRun::first()->logs()->where('action', 'limit_override')->firstOrFail();
+        $this->assertStringContainsString('Agreed in writing with the employee', $log->comment);
+        $this->assertSame(7, (int) $log->user_id);
+        $event = $deduction->events()->where('event', 'limit_override')->firstOrFail();
+        $this->assertSame('Agreed in writing with the employee', $event->reason);
+        $this->assertStringContainsString('October 2026 payroll', $event->details);
+        $this->assertStringContainsString('two-thirds', $event->details);
+    }
+
+    public function test_asking_to_override_without_the_permission_does_not_work(): void
+    {
+        $this->actingAsHr();
+        $this->scheduledFor(self::BOB, self::SACCO_LOAN_TYPE, 17000);
+
+        $response = $this->postJson('/ajax/payroll/process', ['period_id' => self::PERIOD, 'override_limits' => 1, 'override_reason' => 'Because I say so'])->assertStatus(422);
+
+        $this->assertStringContainsString('do not have permission to run the payroll over the legal limit', $response->json('error'));
+        $this->assertSame(0, PayrollSummary::count());
+        $this->assertSame(0, PayrollRun::count());
+    }
+
+    public function test_every_person_over_the_limit_is_listed_not_only_the_first(): void
+    {
+        $this->actingAsHr();
+        $this->scheduledFor(self::BOB, self::SACCO_LOAN_TYPE, 17000);
+        $this->scheduledFor(self::ALICE, self::SACCO_LOAN_TYPE, 37000); // Alice earns 50,000
+
+        $response = $this->postJson('/ajax/payroll/process', ['period_id' => self::PERIOD])->assertStatus(422);
+
+        $this->assertEqualsCanonicalizing(['Alice Adams', 'Bob Brown'], array_column($response->json('limit_breaches'), 'staff'));
+        $this->assertStringContainsString('2 employees have', $response->json('error'));
+    }
+
+
+    public function test_the_check_warns_about_a_scheduled_deduction_still_waiting_for_the_signed_consent_form(): void
+    {
+        $this->actingAsHr();
+        $waiting = $this->scheduledFor(self::BOB, self::SACCO_LOAN_TYPE, 2500);
+        $waiting->update(['status' => 'on_hold']);
+        $this->scheduledFor(self::ALICE, self::SALARY_ADVANCE_TYPE, 1000); // active: nothing to warn about
+        $notYet = $this->scheduledFor(self::BOB, self::SACCO_LOAN_TYPE, 900);
+        $notYet->update(['status' => 'on_hold', 'start_month' => '2026-12-01']); // starts after this period
+
+        $section = $this->checkSection('scheduled_on_hold');
+
+        $this->assertSame('warning', $section['level']);
+        $this->assertSame([['name' => 'Bob Brown', 'detail' => 'Sacco / Akiba loan KES 2,500.00 a month']], $section['rows']);
+    }
+
+    public function test_the_check_has_no_scheduled_deduction_warning_when_everything_is_released(): void
+    {
+        $this->actingAsHr();
+        $this->scheduledFor(self::BOB, self::SACCO_LOAN_TYPE, 2500);
+
+        $this->assertNull($this->checkSection('scheduled_on_hold'));
     }
 }

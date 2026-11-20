@@ -131,7 +131,7 @@ class StaffOnboardingInvitationTest extends TestCase
             'national_id' => '12345678', 'marital' => 'Single', 'citizenship' => 'RESIDENT', 'disability' => 'NO',
             'mobile_number' => '0700000000', 'personal_email' => 'me@example.test',
             'bank_name' => 1, 'account_name' => 'Example Staff', 'account_number' => '001', 'pin_number' => 'A001',
-            'nhif_number' => 'SHA1', 'nssf_number' => 'NSSF1',
+            'nhif_number' => 'SHA1', 'nssf_number' => 'NSSF1', 'data_notice_agreed' => '1', 'is_helb_beneficiary' => 'NO',
             'documents' => [
                 'national_id' => UploadedFile::fake()->createWithContent('id.pdf', "%PDF-1.4
 id"),
@@ -153,6 +153,33 @@ pin"),
         $invitation = StaffOnboardingInvitation::sole();
         $this->assertSame($png, Storage::disk('local')->get($invitation->submission['signature_path']));
         $this->assertArrayHasKey('signature', $invitation->submittedFiles());
+    }
+
+    public function test_the_public_form_shows_the_data_notice_and_needs_the_box_ticked(): void
+    {
+        $this->invitation('sent');
+
+        $this->get(route('staff.onboarding.complete', str_repeat('s', 64)))
+            ->assertOk()
+            ->assertSee('How Chabrin Agencies Limited uses your personal data')
+            ->assertSee('name="data_notice_agreed"', false);
+
+        $form = $this->publicForm();
+        unset($form['data_notice_agreed']);
+        $this->post(route('staff.onboarding.submit', str_repeat('s', 64)), $form)->assertSessionHasErrors('data_notice_agreed');
+        $this->assertSame('sent', StaffOnboardingInvitation::sole()->status, 'nothing is submitted without the agreement');
+    }
+
+    public function test_ticking_the_box_keeps_the_agreement_with_its_date_and_time(): void
+    {
+        $this->travelTo(\Illuminate\Support\Carbon::parse('2026-11-18 10:15:00'));
+        $this->invitation('sent');
+
+        $this->post(route('staff.onboarding.submit', str_repeat('s', 64)), $this->publicForm())->assertOk();
+
+        $submission = StaffOnboardingInvitation::sole()->submission;
+        $this->assertSame('2026-11-18 10:15:00', $submission['data_notice_agreed_at']);
+        $this->assertArrayNotHasKey('data_notice_agreed', $submission);
     }
 
     public function test_an_uploaded_signature_image_is_saved_with_the_submission(): void
@@ -208,7 +235,7 @@ pin"),
             'mobile_number' => '0700000000', 'personal_email' => 'me@example.test', 'district' => 'Nakuru East',
             'location' => 'Milimani', 'sub_location' => 'Section 58', 'kins_names' => 'Jane Example', 'kins_relationship' => 'Sibling',
             'bank_name' => 1, 'account_name' => 'Example Staff', 'account_number' => '001', 'pin_number' => 'A001',
-            'nhif_number' => 'SHA1', 'nssf_number' => 'NSSF1',
+            'nhif_number' => 'SHA1', 'nssf_number' => 'NSSF1', 'data_notice_agreed' => '1', 'is_helb_beneficiary' => 'NO',
             'documents' => [
                 'national_id' => UploadedFile::fake()->createWithContent('id.pdf', "%PDF-1.4\nid"),
                 'kra_pin' => UploadedFile::fake()->createWithContent('pin.pdf', "%PDF-1.4\npin"),

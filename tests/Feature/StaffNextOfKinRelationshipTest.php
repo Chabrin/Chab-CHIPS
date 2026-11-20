@@ -80,7 +80,7 @@ class StaffNextOfKinRelationshipTest extends TestCase
             'national_id' => '12345678', 'marital' => 'Single', 'citizenship' => 'RESIDENT', 'disability' => 'NO',
             'mobile_number' => '0700000000', 'personal_email' => 'me@example.test',
             'bank_name' => 1, 'account_name' => 'Example Staff', 'account_number' => '001', 'pin_number' => 'A001',
-            'nhif_number' => 'SHA1', 'nssf_number' => 'NSSF1',
+            'nhif_number' => 'SHA1', 'nssf_number' => 'NSSF1', 'data_notice_agreed' => '1', 'is_helb_beneficiary' => 'NO',
             'documents' => [
                 'national_id' => UploadedFile::fake()->createWithContent('id.pdf', "%PDF-1.4\nid"),
                 'kra_pin' => UploadedFile::fake()->createWithContent('pin.pdf', "%PDF-1.4\npin"),
