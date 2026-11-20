@@ -441,9 +441,10 @@ class EmploymentCategoriesTest extends TestCase
         $this->actingAsHr();
 
         $this->assertArrayHasKey('login_email', $this->errors(['employment_type' => 'Contract']));
-        $this->assertArrayHasKey('role_id', $this->errors(['employment_type' => 'Permanent']));
+        // There is no role box: the role comes from the position, so a login needs one
+        $this->assertArrayHasKey('position_id', $this->errors(['employment_type' => 'Permanent']));
         $this->assertArrayNotHasKey('login_email', $this->errors(['employment_type' => 'Casual']));
-        $this->assertArrayNotHasKey('role_id', $this->errors(['employment_type' => 'Casual']));
+        $this->assertArrayNotHasKey('position_id', $this->errors(['employment_type' => 'Casual']));
     }
 
     public function test_the_login_rule_follows_the_setting_not_the_name(): void

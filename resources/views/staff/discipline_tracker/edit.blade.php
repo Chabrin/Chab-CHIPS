@@ -8,11 +8,6 @@
                     <div class="card-header card-no-border d-flex align-items-center">
                         <h4 class="mb-0">Edit Staff Discipline Record</h4>
                         <div class="ms-auto d-flex gap-2">
-                            <button type="submit" form="disciplineForm" class="btn btn-success btn-sm d-flex align-items-center" id="updateButton">
-                                <span class="spinner-border spinner-border-sm me-2 d-none" id="submitSpinner"></span>
-                                <span class="material-symbols-outlined me-1" style="font-size:18px;">check_circle</span>
-                                <span>Update Record</span>
-                            </button>
                             <a href="{{ route('discipline.tracker.index') }}" class="btn btn-light btn-sm d-flex align-items-center">
                                 <span class="material-symbols-outlined">arrow_back</span>
                                 <span class="ms-1">Back to List</span>
@@ -85,6 +80,7 @@
                                 <label for="description" class="form-label">Description</label>
                                 <textarea class="form-control" name="description" id="description">{{ $record->description }}</textarea>
                             </div>
+                            @include('partials.form-actions', ['form' => 'disciplineForm', 'buttonId' => 'updateButton', 'cancelUrl' => route('discipline.tracker.index')])
                         </form>
                     </div>
                 </div>

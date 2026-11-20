@@ -57,6 +57,9 @@ class PayslipsController extends Controller
                     'mobile_number'
                 ]);
 
+            // The picker only has to tell people apart: the ID shows its last four characters (searching still finds the full number)
+            $employees->each(fn ($employee) => $employee->national_id = \App\Support\MaskedNumber::tail($employee->national_id));
+
             return response()->json(['success' => true, 'employees' => $employees]);
         } catch (\Exception $e) {
             Log::error('Error searching employees: ' . $e->getMessage());
@@ -306,6 +309,8 @@ class PayslipsController extends Controller
                         'element_type'     => $item['element_type'] ?? '1',
                         'payslip_position' => $item['payslip_position'] ?? 999,
                         'amount'           => $item['amount'],
+                        // A scheduled deduction carries what is still owed after it
+                        'balance_after'    => $item['balance_after'] ?? null,
                     ];
                 }
                 // Old format: look up by element_id

@@ -10,6 +10,10 @@ Schedule::command('staff:password-reminders')
 Schedule::command('hr:check-expiring-contracts')
     ->dailyAt('08:00')->timezone('Africa/Nairobi')->withoutOverlapping();
 
+// Work permits and Alien IDs that expire soon or already have (HR Manager and Directors, in the bell)
+Schedule::command('hr:check-expiring-permits')
+    ->dailyAt('08:00')->timezone('Africa/Nairobi')->withoutOverlapping();
+
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');

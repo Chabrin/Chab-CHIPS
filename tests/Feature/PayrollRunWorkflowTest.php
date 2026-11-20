@@ -73,6 +73,7 @@ class PayrollRunWorkflowTest extends TestCase
             $t->integer('staff_id')->nullable();
             $t->integer('current_status_id')->default(5);
         });
+        (require database_path('migrations/2026_11_20_100000_create_scheduled_deduction_tables.php'))->up(); // payroll now asks for the scheduled deductions due
         Schema::create('sys_helb_deductions', function (Blueprint $t) {
             $t->id();
             $t->integer('staff_id')->nullable();
@@ -422,5 +423,84 @@ class PayrollRunWorkflowTest extends TestCase
         $this->actingAsAccountant();
 
         $this->get('/payroll/processing/' . self::PERIOD_ID . '/eft-test')->assertStatus(422);
+    }
+
+
+    // ── scheduled deductions (UAT A6) ───────────────────────────────────────────────────────
+
+    private function scheduledDeductionOnTheRun(float $balance, float $instalment, string $status = 'active'): \App\Models\ScheduledDeduction
+    {
+        $deduction = \App\Models\ScheduledDeduction::create([
+            'staff_id' => 1, 'type_id' => 2, 'total_amount' => 21500, 'monthly_amount' => 2000, 'months' => 11,
+            'start_month' => '2026-10-01', 'end_month' => '2027-08-01', 'balance' => $balance, 'status' => $status,
+        ]);
+        PayrollSummary::where('staff_id', 1)->update(['loan_deductions' => json_encode([
+            'helb' => null, 'prorated' => [],
+            'scheduled' => [['parent_id' => $deduction->id, 'deduction_amount' => $instalment, 'deduction_date' => '2026-10-01']],
+        ])]);
+
+        return $deduction;
+    }
+
+    public function test_approval_takes_the_scheduled_deduction_off_what_is_owed_once(): void
+    {
+        $this->run_(PayrollRun::STATUS_WITH_ACCOUNTANT);
+        $deduction = $this->scheduledDeductionOnTheRun(21500, 2000);
+
+        $this->actingAsAccountant();
+        $this->post_('approve')->assertOk();
+
+        $this->assertEquals(19500, $deduction->fresh()->balance);
+        $this->assertSame('active', $deduction->fresh()->status);
+        $repeat = $deduction->repeats()->firstOrFail();
+        $this->assertEquals(2000, $repeat->amount);
+        $this->assertEquals(19500, $repeat->balance);
+        $this->assertSame(self::PERIOD_ID, (int) $repeat->period_id);
+
+        $this->post_('approve')->assertStatus(422);
+        $this->assertEquals(19500, $deduction->fresh()->balance);
+        $this->assertSame(1, $deduction->repeats()->count());
+    }
+
+    public function test_the_last_instalment_marks_the_deduction_paid_off(): void
+    {
+        $this->run_(PayrollRun::STATUS_WITH_ACCOUNTANT);
+        $deduction = $this->scheduledDeductionOnTheRun(1500, 1500);
+
+        $this->actingAsAccountant();
+        $this->post_('approve')->assertOk();
+
+        $this->assertEquals(0, $deduction->fresh()->balance);
+        $this->assertSame('completed', $deduction->fresh()->status);
+        $this->assertContains('completed', $deduction->events()->pluck('event')->all());
+    }
+
+    public function test_reversing_the_run_puts_the_instalment_back_and_reopens_a_paid_off_deduction(): void
+    {
+        $this->run_(PayrollRun::STATUS_WITH_ACCOUNTANT);
+        $deduction = $this->scheduledDeductionOnTheRun(1500, 1500);
+
+        $this->actingAsAccountant();
+        $this->post_('approve')->assertOk();
+        $this->assertSame('completed', $deduction->fresh()->status);
+
+        $this->post_('reverse', ['comment' => 'Test run'])->assertOk();
+
+        $this->assertEquals(1500, $deduction->fresh()->balance);
+        $this->assertSame('active', $deduction->fresh()->status);
+        $this->assertSame(0, $deduction->repeats()->count());
+        $this->assertContains('reversed', $deduction->events()->pluck('event')->all());
+    }
+
+    public function test_a_deduction_paused_after_the_run_was_made_still_has_the_instalment_that_was_taken_posted(): void
+    {
+        $this->run_(PayrollRun::STATUS_WITH_ACCOUNTANT);
+        $deduction = $this->scheduledDeductionOnTheRun(21500, 2000, 'paused');
+
+        $this->actingAsAccountant();
+        $this->post_('approve')->assertOk();
+
+        $this->assertEquals(19500, $deduction->fresh()->balance, 'the money was taken from the pay, so the balance goes down');
+        $this->assertSame('paused', $deduction->fresh()->status);
     }
 }

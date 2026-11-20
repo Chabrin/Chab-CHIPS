@@ -193,6 +193,13 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/hr/employees/{id}', [StaffController::class, 'show'])->name('staff.show');
     Route::get('/hr/employees/{id}/edit', [StaffController::class, 'edit'])->name('staff.edit');
     Route::get('/hr/employees/{id}/signature', [StaffController::class, 'signature'])->whereNumber('id')->name('staff.signature');
+    // Rehire: a former staff member comes back on their existing record and keeps their staff number
+    Route::get('/ajax/hr/staff/former-match', [App\Http\Controllers\StaffRehireController::class, 'former'])->name('staff.former-match');
+    Route::post('/hr/employees/{id}/rehire', [App\Http\Controllers\StaffRehireController::class, 'rehire'])->name('staff.rehire');
+    // After a position change: give the staff member's login the role of the new position (only when someone says yes)
+    Route::post('/hr/employees/{id}/apply-position-role', [App\Http\Controllers\StaffPositionRoleController::class, 'apply'])->name('staff.apply-position-role');
+    // History tab of a staff profile (read only; the id is encrypted like the profile's own address)
+    Route::get('/hr/employees/{id}/history', [App\Http\Controllers\StaffHistoryController::class, 'staff'])->name('staff.history');
     Route::put('/hr/employees/{id}', [StaffController::class, 'update'])->name('staff.update');
     Route::patch('/hr/employees/{id}/status', [StaffController::class, 'updateStatus'])->name('staff.updateStatus');
     Route::post('/hr/employees/{id}/convert-user', [StaffController::class, 'convertToUser'])->name('staff.convertToUser');
@@ -211,6 +218,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::put('/hr/contracts/bulk-update', [StaffController::class, 'bulkUpdateContracts'])->name('contract.bulk.update');
     Route::put('/hr/contracts/{id}/elements', [StaffController::class, 'bulkUpdateContractElements'])->name('contract.elements.update');
     Route::get('/hr/contracts/{id}/edit', [StaffController::class, 'contractsEdit'])->name('contract.edit');
+    Route::get('/hr/contracts/{id}/history', [App\Http\Controllers\StaffHistoryController::class, 'contract'])->whereNumber('id')->name('contract.history');
     Route::put('/hr/contracts/{id}', [StaffController::class, 'contractUpdate'])->name('contract.update');
     Route::get('/ajax/hr/contracts/list', [StaffController::class, 'contractList'])->name('ajax.contract.list');
     Route::post('/hr/contracts/store', [StaffController::class, 'contractStore'])->name('contract.store');
@@ -389,6 +397,12 @@ Route::middleware('throttle:5,1')->group(function () {
     Route::post('/ajax/deductions/helb', [App\Http\Controllers\DeductionsController::class, 'helbStore'])->name('ajax.helb.store');
     Route::post('/ajax/deductions/helb/{id}', [App\Http\Controllers\DeductionsController::class, 'helbUpdate'])->name('ajax.helb.update');
     Route::delete('/ajax/deductions/helb/{id}', [App\Http\Controllers\DeductionsController::class, 'helbDestroy'])->name('ajax.helb.delete');
+    Route::get('/ajax/deductions/helb/staff/{staffId}/status', [App\Http\Controllers\DeductionsController::class, 'helbStaffStatus'])->name('ajax.helb.staff.status');
+    Route::post('/payroll/helbloans/{encryptedId}/pause', [App\Http\Controllers\DeductionsController::class, 'helbPause'])->name('deductions.helb.pause');
+    Route::post('/payroll/helbloans/{encryptedId}/resume', [App\Http\Controllers\DeductionsController::class, 'helbResume'])->name('deductions.helb.resume');
+    Route::post('/payroll/helbloans/{encryptedId}/clear', [App\Http\Controllers\DeductionsController::class, 'helbClear'])->name('deductions.helb.clear');
+    Route::post('/payroll/helbloans/{encryptedId}/reopen', [App\Http\Controllers\DeductionsController::class, 'helbReopen'])->name('deductions.helb.reopen');
+    Route::get('/payroll/helbloans/{encryptedId}/clearance', [App\Http\Controllers\DeductionsController::class, 'helbClearance'])->name('deductions.helb.clearance');
 
     // Deductions - Prorated Deductions
     Route::get('/payroll/prorated/deductions', [App\Http\Controllers\DeductionsController::class, 'proratedIndex'])->name('deductions.prorated');
@@ -398,6 +412,21 @@ Route::middleware('throttle:5,1')->group(function () {
     Route::get('/ajax/deductions/prorated/elements', [App\Http\Controllers\DeductionsController::class, 'getElementsList'])->name('ajax.prorated.elements');
     Route::post('/ajax/deductions/prorated', [App\Http\Controllers\DeductionsController::class, 'proratedStore'])->name('ajax.prorated.store');
     Route::post('/ajax/deductions/prorated/{id}', [App\Http\Controllers\DeductionsController::class, 'proratedUpdate'])->name('ajax.prorated.update');
+
+    // Deductions - Scheduled Deductions (a set amount a month until paid off, with a signed consent form)
+    Route::get('/payroll/scheduled-deductions', [App\Http\Controllers\ScheduledDeductionsController::class, 'index'])->name('scheduled-deductions.index');
+    Route::get('/payroll/scheduled-deductions/create', [App\Http\Controllers\ScheduledDeductionsController::class, 'create'])->name('scheduled-deductions.create');
+    Route::post('/payroll/scheduled-deductions/preview', [App\Http\Controllers\ScheduledDeductionsController::class, 'preview'])->name('scheduled-deductions.preview');
+    Route::post('/payroll/scheduled-deductions', [App\Http\Controllers\ScheduledDeductionsController::class, 'store'])->name('scheduled-deductions.store');
+    Route::get('/payroll/scheduled-deductions/{encryptedId}', [App\Http\Controllers\ScheduledDeductionsController::class, 'show'])->name('scheduled-deductions.show');
+    Route::post('/payroll/scheduled-deductions/{encryptedId}/consent', [App\Http\Controllers\ScheduledDeductionsController::class, 'storeConsent'])->name('scheduled-deductions.consent.store');
+    Route::get('/payroll/scheduled-deductions/{encryptedId}/consent', [App\Http\Controllers\ScheduledDeductionsController::class, 'downloadConsent'])->name('scheduled-deductions.consent.download');
+    Route::post('/payroll/scheduled-deductions/{encryptedId}/pause', [App\Http\Controllers\ScheduledDeductionsController::class, 'pause'])->name('scheduled-deductions.pause');
+    Route::post('/payroll/scheduled-deductions/{encryptedId}/resume', [App\Http\Controllers\ScheduledDeductionsController::class, 'resume'])->name('scheduled-deductions.resume');
+    Route::post('/payroll/scheduled-deductions/{encryptedId}/close', [App\Http\Controllers\ScheduledDeductionsController::class, 'close'])->name('scheduled-deductions.close');
+    Route::post('/payroll/scheduled-deductions/{encryptedId}/monthly', [App\Http\Controllers\ScheduledDeductionsController::class, 'changeMonthly'])->name('scheduled-deductions.monthly');
+    Route::post('/payroll/scheduled-deduction-types', [App\Http\Controllers\ScheduledDeductionsController::class, 'storeType'])->name('scheduled-deductions.types.store');
+    Route::post('/payroll/scheduled-deduction-types/{type}/toggle', [App\Http\Controllers\ScheduledDeductionsController::class, 'toggleType'])->name('scheduled-deductions.types.toggle');
 
     // HR Settings - Income Tax Settings
     Route::get('/hrsettings/incometax/settings', [PayrollController::class, 'incomeTaxSettingsIndex'])->name('settings.hr.incometax.settings');
@@ -416,11 +445,13 @@ Route::middleware('throttle:5,1')->group(function () {
     Route::post('/ajax/payroll/periods/{periodId}/approve', [PayrollReviewController::class, 'approve'])->whereNumber('periodId')->name('ajax.payroll.approve');
     Route::post('/ajax/payroll/periods/{periodId}/return', [PayrollReviewController::class, 'sendBack'])->whereNumber('periodId')->name('ajax.payroll.return');
     Route::post('/ajax/payroll/periods/{periodId}/reverse', [PayrollReviewController::class, 'reverse'])->whereNumber('periodId')->name('ajax.payroll.reverse');
+    Route::post('/ajax/payroll/periods/{periodId}/pay', [PayrollReviewController::class, 'markPaid'])->whereNumber('periodId')->name('ajax.payroll.pay');
 
     // Monthly payroll items: check before the run, one-time items and recurring items per staff
     Route::get('/payroll/monthly-items', [PayrollMonthlyController::class, 'index'])->name('payroll.monthly');
     Route::get('/ajax/payroll/monthly/{periodId}', [PayrollMonthlyController::class, 'data'])->whereNumber('periodId')->name('ajax.payroll.monthly.data');
     Route::get('/ajax/payroll/monthly/{periodId}/recurring', [PayrollMonthlyController::class, 'recurring'])->whereNumber('periodId')->name('ajax.payroll.monthly.recurring');
+    Route::get('/ajax/payroll/periods/{periodId}/changes', [PayrollMonthlyController::class, 'changes'])->whereNumber('periodId')->name('ajax.payroll.changes');
     Route::post('/ajax/payroll/monthly/{periodId}/items', [PayrollMonthlyController::class, 'storeItem'])->whereNumber('periodId')->name('ajax.payroll.monthly.items.store');
     Route::post('/ajax/payroll/monthly/items/{itemId}', [PayrollMonthlyController::class, 'updateItem'])->whereNumber('itemId')->name('ajax.payroll.monthly.items.update');
     Route::delete('/ajax/payroll/monthly/items/{itemId}', [PayrollMonthlyController::class, 'deleteItem'])->whereNumber('itemId')->name('ajax.payroll.monthly.items.delete');
@@ -1647,6 +1678,11 @@ Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->name
 Route::get('/reset-password/{token}', [AuthController::class, 'showResetPasswordForm'])->name('password.reset');
 Route::post('/reset-password', [AuthController::class, 'resetPassword'])->name('password.update');
 
+// New system users choose their own password from the emailed link (public page; the link is checked on the server)
+Route::get('/set-password/{token}', [App\Http\Controllers\Auth\PasswordSetupController::class, 'show'])->where('token', '[A-Za-z0-9]+')->middleware('throttle:30,1')->name('password.setup');
+Route::post('/set-password/{token}', [App\Http\Controllers\Auth\PasswordSetupController::class, 'store'])->where('token', '[A-Za-z0-9]+')->middleware('throttle:10,1')->name('password.setup.store');
+Route::post('/set-password/{token}/resend', [App\Http\Controllers\Auth\PasswordSetupController::class, 'resend'])->where('token', '[A-Za-z0-9]+')->middleware('throttle:3,1')->name('password.setup.resend');
+
 
 Route::middleware(['auth'])->group(function () {
     Route::post('/logout', [LoginController::class, 'logout'])->name('logout');
@@ -1696,6 +1732,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/users/ajax/{id}', [UsersController::class, 'getUserAjax'])->name('user.ajax.get');
     Route::post('/users/ajax/store', [UsersController::class, 'storeSystemUser'])->name('user.ajax.store');
     Route::post('/users/ajax/update/{id}', [UsersController::class, 'updateSystemUser'])->name('user.ajax.update');
+    Route::post('/users/ajax/resend-link/{id}', [UsersController::class, 'resendPasswordLink'])->whereNumber('id')->name('user.ajax.resend-link');
     Route::post('/users/ajax/suspend/{id}', [UsersController::class, 'suspendUser'])->name('user.ajax.suspend');
     Route::post('/users/ajax/activate/{id}', [UsersController::class, 'activateUser'])->name('user.ajax.activate');
 

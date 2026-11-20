@@ -7,8 +7,10 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use App\Services\ErrorDispatcher;
+use App\Services\PasswordSetupLink;
 use App\Models\User;
 use App\Models\UserStaffLink;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 
 class UsersController extends Controller
@@ -60,14 +62,30 @@ class UsersController extends Controller
     public function systemUsersAjax()
     {
         try {
-            $users = DB::table('josya_users as u')
+            $query = DB::table('josya_users as u')
                 ->leftJoin('cb_role_user as ru', 'u.id', '=', 'ru.user_id')
                 ->leftJoin('cb_roles as r', 'ru.role_id', '=', 'r.id')
                 ->leftJoin('sys_user_staff_links as usl', 'u.id', '=', 'usl.user_id')
                 ->leftJoin('sys_staff as s', 'usl.staff_id', '=', 's.id')
                 ->select('u.id', 'u.name', 'u.username', 'u.email', 'r.display_name as role_name', 'u.block',
-                         's.id as linked_staff_id', 's.full_names as linked_staff_name', 's.staff_number as linked_staff_number')
-                ->get();
+                         's.id as linked_staff_id', 's.full_names as linked_staff_name', 's.staff_number as linked_staff_number');
+
+            // Whether each user is still waiting to set their own password. The link's secret never leaves the database, only its state.
+            $hasSetupColumns = Schema::hasColumn('josya_users', 'password_setup_token');
+            if ($hasSetupColumns) {
+                $query->addSelect('u.password_setup_token', 'u.password_setup_expires_at', 'u.password_setup_sent_at', 'u.password_setup_used_at');
+            }
+
+            $users = $query->get()->map(function ($row) use ($hasSetupColumns) {
+                $row->setup_state = $hasSetupColumns
+                    ? PasswordSetupLink::state($row->password_setup_token, $row->password_setup_expires_at, $row->password_setup_used_at)
+                    : PasswordSetupLink::NONE;
+                $row->setup_email_sent = $hasSetupColumns && $row->password_setup_sent_at !== null;
+                // Only the state goes to the page, never the link's hash
+                unset($row->password_setup_token, $row->password_setup_expires_at, $row->password_setup_sent_at, $row->password_setup_used_at);
+
+                return $row;
+            });
 
             // Check permissions
             $canUpdate = auth()->user()->hasPermission('update_users');
@@ -118,16 +136,16 @@ class UsersController extends Controller
                 'name' => 'required|string|max:255',
                 'username' => 'required|string|max:100|unique:josya_users,username',
                 'email' => 'required|email|max:255|unique:josya_users,email',
-                'password' => 'required|string|min:8|max:255',
                 'role_id' => 'required|integer|exists:cb_roles,id',
                 'staff_id' => 'nullable|integer|exists:sys_staff,id|unique:sys_user_staff_links,staff_id',
             ]);
 
+            // No password is typed here: the account starts with one nobody knows and the person is emailed a link to choose their own
             $user = User::create([
                 'name' => $validated['name'],
                 'username' => $validated['username'],
                 'email' => $validated['email'],
-                'password' => $validated['password'],
+                'password' => PasswordSetupLink::unusablePassword(),
                 'block' => 0,
                 'sendEmail' => 0,
                 'registerDate' => now(),
@@ -155,7 +173,15 @@ class UsersController extends Controller
                 $user->save();
             }
 
-            return response()->json(['success' => true, 'message' => 'User created successfully']);
+            $sent = app(PasswordSetupLink::class)->send($user);
+
+            return response()->json([
+                'success' => true,
+                'email_sent' => $sent,
+                'message' => $sent
+                    ? 'User created. A link to choose a password was emailed to ' . $user->email . '.'
+                    : 'User created, but the email with the password link could not be sent. Use Resend link in the list.',
+            ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json(['success' => false, 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
@@ -174,7 +200,6 @@ class UsersController extends Controller
                 'name' => 'required|string|max:255',
                 'username' => ['required', 'string', 'max:100', Rule::unique('josya_users', 'username')->ignore($user->id)],
                 'email' => ['required', 'email', 'max:255', Rule::unique('josya_users', 'email')->ignore($user->id)],
-                'password' => 'nullable|string|min:8|max:255',
                 'role_id' => 'required|integer|exists:cb_roles,id',
                 'staff_id' => [
                     'nullable', 'integer', 'exists:sys_staff,id',
@@ -182,13 +207,13 @@ class UsersController extends Controller
                 ],
             ]);
 
+            // Nobody types a password for someone else, so there is no password here. A person who is still waiting to set one and
+            // whose email address is corrected gets a new link at the new address (the old link stops working).
+            $emailChanged = strcasecmp((string) $user->email, $validated['email']) !== 0;
+            $waitingBefore = app(PasswordSetupLink::class)->stateOf($user) !== PasswordSetupLink::NONE;
             $user->name = $validated['name'];
             $user->username = $validated['username'];
             $user->email = $validated['email'];
-            if (!empty($validated['password'])) {
-                $user->password = $validated['password'];
-                $user->requireReset = true;
-            }
             $user->save();
 
             DB::table('cb_role_user')->where('user_id', $id)->delete();
@@ -209,7 +234,14 @@ class UsersController extends Controller
             }
             $user->save();
 
-            return response()->json(['success' => true, 'message' => 'User updated successfully']);
+            $message = 'User updated successfully';
+            if ($emailChanged && $waitingBefore) {
+                $message .= app(PasswordSetupLink::class)->send($user->fresh())
+                    ? '. A new password link was emailed to ' . $user->email . '.'
+                    : '. The new password link could not be emailed; use Resend link in the list.';
+            }
+
+            return response()->json(['success' => true, 'message' => $message]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json(['success' => false, 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
@@ -217,6 +249,31 @@ class UsersController extends Controller
             Log::error('Error updating system user: ' . $e->getMessage());
             return response()->json(['success' => false, 'error' => 'Failed to update user'], 500);
         }
+    }
+
+    /**
+     * Send a new "set your password" link to someone who has not yet set one (or whose link expired). The new link cancels the old
+     * one. The link goes to the person's email only: it is never shown here, so nobody can use it to set the password for them.
+     */
+    public function resendPasswordLink(PasswordSetupLink $links, $id)
+    {
+        $actor = auth()->user();
+        if (!$actor->hasPermission('update_users') && !$actor->hasPermission('create_users')) {
+            return response()->json(['success' => false, 'error' => 'You do not have permission to send password links.'], 403);
+        }
+
+        $user = User::findOrFail($id);
+        if ($user->block) {
+            return response()->json(['success' => false, 'error' => 'This user is suspended. Activate the account first.'], 422);
+        }
+        if ($links->stateOf($user) === PasswordSetupLink::NONE) {
+            return response()->json(['success' => false, 'error' => 'This user has already set a password.'], 422);
+        }
+        if (!$links->send($user)) {
+            return response()->json(['success' => false, 'error' => 'The email could not be sent. Check the email address and the mail settings, then try again.'], 502);
+        }
+
+        return response()->json(['success' => true, 'message' => 'A new link was emailed to ' . $user->email . '. The old link no longer works.']);
     }
 
     public function suspendUser(Request $request, $id)

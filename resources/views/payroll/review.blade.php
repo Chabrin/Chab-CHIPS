@@ -76,6 +76,9 @@
     .pr-warning-list li { display: flex; align-items: center; gap: .6rem; }
     .pr-warning-text { flex: 1 1 auto; min-width: 0; }
     .pr-alert-action { flex: 0 0 auto; font-size: .75rem; }
+
+    /* Confirm payment dialog: room below it so a bar fixed to the bottom of the screen (such as the debug bar in development) never covers the buttons */
+    .pr-pay-dialog { margin-top: 1rem; margin-bottom: 5rem; }
 </style>
 @endsection
 
@@ -86,16 +89,27 @@
         'with_accountant' => 'badge-light-warning',
         'returned' => 'badge-light-danger',
         'approved' => 'badge-light-success',
+        'paid' => 'badge-light-primary',
         'reversed' => 'badge-light-danger',
     ];
+    // Present once the run can be paid; older callers of this page do not send them
+    $canMarkPaid = $canMarkPaid ?? false;
+    $payment = $payment ?? null;
+    $reverseNote = $reverseNote ?? null;
+    $paidByName = $paidByName ?? null;
+    $changes = $changes ?? null;
     // How each history entry reads: its words, an icon and a colour
     $actionMeta = [
         'processed' => ['label' => 'Processed', 'icon' => 'calculate', 'tone' => 'secondary'],
         'submitted' => ['label' => 'Submitted to accountant', 'icon' => 'send', 'tone' => 'primary'],
         'approved' => ['label' => 'Approved', 'icon' => 'check_circle', 'tone' => 'success'],
+        'paid' => ['label' => 'Marked as paid', 'icon' => 'payments', 'tone' => 'success'],
+        'month_opened' => ['label' => 'Next month opened', 'icon' => 'event_available', 'tone' => 'info'],
+        'month_not_opened' => ['label' => 'Next month not opened', 'icon' => 'event_busy', 'tone' => 'warning'],
         'returned' => ['label' => 'Returned to HR', 'icon' => 'undo', 'tone' => 'warning'],
         'reversed' => ['label' => 'Reversed', 'icon' => 'restart_alt', 'tone' => 'danger'],
         'eft_test_file' => ['label' => 'Downloaded test EFT file', 'icon' => 'download', 'tone' => 'info'],
+        'limit_override' => ['label' => 'Legal limit on deductions overridden', 'icon' => 'gavel', 'tone' => 'danger'],
     ];
     $money = fn ($amount) => number_format((float) $amount, 2);
     // Plain notes from processing, then the alerts worked out from the run. Some alerts can narrow the grid to the employees they are about.
@@ -133,6 +147,9 @@
                         @if ($run->approved_by)
                             &middot; Approved by {{ $userNames[$run->approved_by] ?? 'Unknown' }}
                         @endif
+                        @if ($run->status === 'paid' && !empty($run->payment_date))
+                            &middot; Paid on {{ $run->payment_date->format('d M Y') }}{{ $paidByName ? ' (confirmed by ' . $paidByName . ')' : '' }}
+                        @endif
                     </div>
                 </div>
                 <div class="d-flex flex-wrap gap-2">
@@ -167,8 +184,13 @@
                             <span class="material-symbols-outlined pr-btn-icon">undo</span> Return to HR
                         </button>
                     @endif
+                    @if ($canMarkPaid && $payment)
+                        <button type="button" class="btn btn-primary btn-sm d-inline-flex align-items-center gap-1" id="markPaidBtn">
+                            <span class="material-symbols-outlined pr-btn-icon">payments</span> Mark as Paid
+                        </button>
+                    @endif
                     @if ($canReverseApproved)
-                        <button type="button" class="btn btn-outline-danger btn-sm d-inline-flex align-items-center gap-1 comment-action" data-action="reverse" data-title="Reverse approved payroll" data-label="Reason for reversing this approved run">
+                        <button type="button" class="btn btn-outline-danger btn-sm d-inline-flex align-items-center gap-1 comment-action" data-action="reverse" data-title="Reverse approved payroll" data-label="Reason for reversing this approved run" data-note="{{ $reverseNote }}">
                             <span class="material-symbols-outlined pr-btn-icon">restart_alt</span> Reverse
                         </button>
                     @endif
@@ -185,6 +207,30 @@
                     <div class="alert alert-warning d-flex align-items-center gap-2 py-2 px-3 mb-2 small" role="alert">
                         <span class="material-symbols-outlined pr-btn-icon">info</span>
                         <div>You processed or submitted this payroll, so another accountant must review it.</div>
+                    </div>
+                @endif
+                @if ($run->status === 'approved')
+                    <div class="alert alert-info d-flex align-items-start gap-2 py-2 px-3 mb-2 small" role="alert" id="approvedNote">
+                        <span class="material-symbols-outlined pr-btn-icon mt-1">payments</span>
+                        @if ($canMarkPaid)
+                            <div><strong>Next step:</strong> download the EFT file, pay it at the bank, then press <strong>Mark as Paid</strong>. That confirms the payment, locks this payroll and opens the next payroll month. Until then you can still reverse it if you find a mistake.</div>
+                        @elseif ($isOwnRun)
+                            <div>You processed or submitted this payroll, so another accountant must confirm the payment.</div>
+                        @else
+                            <div>Approved. The accountant confirms the bank payment next, and the next payroll month opens when they do.</div>
+                        @endif
+                    </div>
+                @endif
+                @if ($run->status === 'paid')
+                    <div class="alert alert-success d-flex align-items-start gap-2 py-2 px-3 mb-2 small" role="alert" id="paidNote">
+                        <span class="material-symbols-outlined pr-btn-icon mt-1">verified</span>
+                        <div>
+                            <strong>Paid.</strong> This payroll is locked and can no longer be reversed.
+                            @if (!empty($run->payment_reference))
+                                Bank reference: <strong>{{ $run->payment_reference }}</strong>.
+                            @endif
+                            If a mistake turns up, correct it with a one-time item in the next payroll month.
+                        </div>
                     </div>
                 @endif
                 @if ($warningCount > 0)
@@ -226,6 +272,19 @@
                 </div>
             </div>
         </div>
+
+        @if (!empty($changes))
+            {{-- What changed since the last payroll, as HR saw it when processing this run --}}
+            <div class="card mb-3" id="changesCard">
+                <div class="card-header card-no-border py-3">
+                    <h5 class="mb-0">Changes since the last payroll</h5>
+                    <div class="text-muted small mt-1">Kept from when this payroll was processed, so you can see what may explain differences from last month.</div>
+                </div>
+                <div class="card-body pt-0">
+                    @include('payroll.partials.changes-panel', ['changes' => $changes])
+                </div>
+            </div>
+        @endif
 
         <div class="card mb-3">
             <div class="card-header card-no-border d-flex align-items-center gap-2 py-3">
@@ -383,6 +442,7 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
+                    <div class="alert alert-warning small py-2 px-3 d-none" id="commentNote" role="alert"></div>
                     <label for="commentText" class="form-label" id="commentLabel"></label>
                     <textarea class="form-control" id="commentText" rows="4" maxlength="1000" required></textarea>
                 </div>
@@ -394,6 +454,96 @@
         </div>
     </div>
 </div>
+
+@if ($canMarkPaid && $payment)
+    {{-- Confirm payment: the checks the accountant should read before pressing the button. Paying is final. --}}
+    <div class="modal fade" id="payModal" tabindex="-1" aria-labelledby="payModalTitle" aria-hidden="true">
+        {{-- The whole dialog scrolls (not just its body), so Confirm payment is never pinned under something fixed to the bottom of the screen --}}
+        <div class="modal-dialog modal-lg pr-pay-dialog">
+            <div class="modal-content">
+                <form id="payForm" novalidate>
+                    <input type="hidden" id="payNetTotal" value="{{ $payment['net_total'] }}">
+                    <input type="hidden" id="payEmployees" value="{{ $payment['employees'] }}">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="payModalTitle">Confirm payment: {{ $period->start_date->format('F Y') }}</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="alert alert-warning small py-2 px-3 d-flex gap-2" role="alert">
+                            <span class="material-symbols-outlined pr-btn-icon mt-1">lock</span>
+                            <div>Marking this payroll as paid is <strong>final</strong>. It cannot be reversed afterwards, and it opens the next payroll month. Check the points below first.</div>
+                        </div>
+
+                        <ul class="list-unstyled small mb-3" id="payChecks">
+                            <li class="d-flex gap-2 mb-2">
+                                <span class="material-symbols-outlined pr-btn-icon text-success">groups</span>
+                                <div><strong>{{ number_format($payment['employees']) }} staff</strong> are in this payroll, with a total net pay of <strong>KES {{ number_format($payment['net_total'], 2) }}</strong>.</div>
+                            </li>
+                            <li class="d-flex gap-2 mb-2">
+                                <span class="material-symbols-outlined pr-btn-icon text-success">account_balance</span>
+                                <div><strong>{{ number_format($payment['payable']['count']) }} staff</strong> are in the EFT file, KES <strong>{{ number_format($payment['payable']['total'], 2) }}</strong>.</div>
+                            </li>
+                            @if ($payment['excluded']['count'] > 0)
+                                <li class="d-flex gap-2 mb-2" id="payExcluded">
+                                    <span class="material-symbols-outlined pr-btn-icon text-warning">warning</span>
+                                    <div>
+                                        <strong>{{ number_format($payment['excluded']['count']) }} staff are not in the EFT file</strong> (KES {{ number_format($payment['excluded']['total'], 2) }}). Make sure they were paid another way, or that nothing is due to them.
+                                        <ul class="mb-0 ps-3">
+                                            @foreach ($payment['excluded']['reasons'] as $reason => $count)
+                                                <li>{{ $reason }}: {{ $count }}</li>
+                                            @endforeach
+                                        </ul>
+                                        @if (!empty($payment['excluded']['people']))
+                                            <div class="text-muted">{{ implode(', ', $payment['excluded']['people']) }}{{ $payment['excluded']['count'] > count($payment['excluded']['people']) ? ' and ' . ($payment['excluded']['count'] - count($payment['excluded']['people'])) . ' more' : '' }}</div>
+                                        @endif
+                                    </div>
+                                </li>
+                            @endif
+                            @if ($payment['eft_downloaded'])
+                                <li class="d-flex gap-2 mb-2" id="payEftDone">
+                                    <span class="material-symbols-outlined pr-btn-icon text-success">download_done</span>
+                                    <div>An EFT file was downloaded by {{ $payment['eft_downloaded']['by'] }} on {{ $payment['eft_downloaded']['at'] }}.</div>
+                                </li>
+                            @else
+                                <li class="d-flex gap-2 mb-2" id="payEftMissing">
+                                    <span class="material-symbols-outlined pr-btn-icon text-warning">warning</span>
+                                    <div>No EFT file has been downloaded for this payroll. Carry on only if the payment was made some other way.</div>
+                                </li>
+                            @endif
+                        </ul>
+
+                        <div class="row g-3">
+                            <div class="col-sm-6">
+                                <label for="payDate" class="form-label">Date the money was paid <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" id="payDate" value="{{ $payment['default_date'] }}" max="{{ $payment['default_date'] }}" required>
+                            </div>
+                            <div class="col-sm-6">
+                                <label for="payReference" class="form-label">Bank reference <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="payReference" maxlength="100" placeholder="Batch or transaction number from the bank" autocomplete="off" required>
+                            </div>
+                            <div class="col-12">
+                                <label for="payNote" class="form-label">Note <span class="text-muted">(optional)</span></label>
+                                <textarea class="form-control" id="payNote" rows="2" maxlength="1000"></textarea>
+                            </div>
+                            <div class="col-12">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="payConfirm">
+                                    <label class="form-check-label" for="payConfirm">I confirm the bank has processed this payment of <strong>KES {{ number_format($payment['net_total'], 2) }}</strong> for {{ number_format($payment['employees']) }} staff. I understand this cannot be undone.</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary btn-sm d-inline-flex align-items-center gap-1" id="paySubmitBtn" disabled>
+                            <span class="material-symbols-outlined pr-btn-icon">payments</span> Confirm payment
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+@endif
 @endsection
 
 @section('scripts')
@@ -407,6 +557,7 @@
             approve: "{{ route('ajax.payroll.approve', $period->id) }}",
             return: "{{ route('ajax.payroll.return', $period->id) }}",
             reverse: "{{ route('ajax.payroll.reverse', $period->id) }}",
+            pay: "{{ route('ajax.payroll.pay', $period->id) }}",
         };
         let commentAction = null;
         let activeFilter = '';
@@ -522,8 +673,39 @@
             commentAction = $(this).data('action');
             $('#commentModalTitle').text($(this).data('title'));
             $('#commentLabel').text($(this).data('label'));
+            // A warning for the action, such as what reversing an approved run takes back
+            const note = $(this).data('note');
+            $('#commentNote').toggleClass('d-none', !note).text(note || '');
             $('#commentText').val('');
             $('#commentModal').modal('show');
+        });
+
+        // Confirm payment: the button stays off until the date, the bank reference and the tick are all there
+        function payFormReady() {
+            const ready = !!$('#payDate').val() && $('#payReference').val().trim() !== '' && $('#payConfirm').is(':checked');
+            $('#paySubmitBtn').prop('disabled', !ready);
+            return ready;
+        }
+        $('#markPaidBtn').on('click', function() {
+            $('#payReference, #payNote').val('');
+            $('#payConfirm').prop('checked', false);
+            payFormReady();
+            $('#payModal').modal('show');
+        });
+        $('#payForm').on('input change', payFormReady);
+        $('#payForm').on('submit', function(e) {
+            e.preventDefault();
+            if (!payFormReady()) {
+                return;
+            }
+            runAction('pay', {
+                payment_date: $('#payDate').val(),
+                payment_reference: $('#payReference').val().trim(),
+                payment_note: $('#payNote').val(),
+                confirmed: 1,
+                net_total: $('#payNetTotal').val(),
+                employees: $('#payEmployees').val()
+            }, $('#paySubmitBtn'));
         });
 
         $('#commentForm').on('submit', function(e) {

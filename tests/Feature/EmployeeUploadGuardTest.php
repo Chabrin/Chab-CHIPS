@@ -199,12 +199,13 @@ class EmployeeUploadGuardTest extends TestCase
             'full_names' => 'Test Staff', 'employment_type' => 'Permanent', 'email_address' => 'test.staff@chabrinagencies.co.ke',
             'national_id' => 'TEST123', 'gender' => 'Male', 'birth_date' => '2000-01-01',
             'bank_name' => 1, 'account_name' => 'Test Staff', 'account_number' => '123',
-            'pin_number' => 'TESTPIN', 'nhif_number' => 'TESTSHA', 'nssf_number' => 'TESTNSSF',
+            'pin_number' => 'TESTPIN', 'nhif_number' => 'TESTSHA', 'nssf_number' => 'TESTNSSF', 'data_notice_agreed' => '1', 'is_helb_beneficiary' => 'NO',
             'marital' => 'Single', 'citizenship' => 'Kenya', 'disability' => 'No',
-            'login_email' => 'test.login@chabrinagencies.co.ke', 'role_id' => 1,
+            'login_email' => 'test.login@chabrinagencies.co.ke', 'position_id' => 1,
             'documents' => [
                 'national_id' => $this->upload('id.pdf', "%PDF-1.4\nTest ID document"),
                 'kra_pin' => $this->upload('pin.pdf', "%PDF-1.4\nDifferent certificate"),
+                'helb' => $this->upload('helb.pdf', "%PDF-1.4\nHELB certificate"),
             ],
         ];
     }

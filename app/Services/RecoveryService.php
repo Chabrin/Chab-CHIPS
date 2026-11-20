@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Exceptions\ClientAccountException;
 use App\Models\GlAccountSetup;
 use App\Models\Recovery;
+use Carbon\Carbon;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -12,28 +13,35 @@ use Illuminate\Support\Facades\Storage;
 use LogicException;
 
 /**
- * Paid Owner: a tenant paid the landlord directly, so the money never reached the company. A field officer records it
- * as a recovery; it takes effect only when the person who holds the confirmer seat (set on the paid_owner_confirmation
- * workflow under Accounting > Approvals, a role or named users) confirms it.
+ * Recoveries of rent that was paid to the landlord but never reached the company. There are five reasons: Paid Owner
+ * (the tenant paid the landlord directly), Sat Deposit (the tenant moved out owing rent), Overpaid (the landlord was
+ * paid before the tenant paid), Absconded and Paid Vacant (the tenant left, or the unit was vacant or paid in error).
+ * A field officer records one against the tenant's invoice; it takes effect only when the person who holds the
+ * confirmer seat (set on the paid_owner_confirmation workflow under Accounting > Approvals, a role or named users)
+ * confirms it, and never the person who recorded it.
  *
- * Confirming does four things in one database transaction, so nothing is half done:
+ * Confirming does five things in one database transaction, so nothing is half done:
  *  - the tenant's invoice is paid down by the amount (cleared, status 9, or partly paid, status 8) and the tenant's
- *    ledger is credited with a PO row, as the old system did;
- *  - the client's ledger is debited under billing code 0007 (PAID OWNERS); the next return takes that debit as a
- *    deduction, which nets the rent line the invoice still produces, so the landlord is not paid twice;
+ *    ledger is credited, as the old system did: mode PO for Paid Owner, mode REC for the other reasons;
+ *  - the tenant gets a receipt: one row in the receipts table (sys_pm_tenants_payments_allocated) numbered with the
+ *    recovery reference, as the old system did. No payment row is made, because no money came in;
+ *  - the client's ledger is debited: code 0007 (PAID OWNERS) for Paid Owner, code 0024 (the Rent recovery code the
+ *    returns already take) for the others; the next return takes that debit as a deduction, which nets the rent line
+ *    the invoice still produces, so the landlord is not paid twice;
  *  - when GL posting is on, Dr Clients Account / Cr Tenants Account (no bank is involved);
  *  - the recovery is marked Approved and posted.
  *
- * The invoice must never be closed with the recovery code 37 (Paid Owner): returns only read invoices in statuses
- * 1, 8 and 9, so a 37 invoice would drop out of the return while the debit is still taken, and the landlord would be
- * docked twice. It is paid down like any other payment, and the PO ledger row and the recovery record mark it.
+ * The invoice must never be closed with a recovery code (34 to 37): returns only read invoices in statuses 1, 8 and 9,
+ * so such an invoice would drop out of the return while the debit is still taken, and the landlord would be docked
+ * twice. It is paid down like any other payment, and the ledger row and the recovery record mark it.
+ *
+ * Commission is not touched. The old system never reversed it for any of the five reasons (997 of 1,028 returns with
+ * Absconded or Paid Vacant lines took the full commission), so a reversal would be a new rule that is not built.
  */
-class PaidOwnerService
+class RecoveryService
 {
     const WORKFLOW_NAME = 'paid_owner_confirmation';
-    const TYPE_WORKFLOW_STATUS = 37; // the Paid Owner row of sys_set_transactions_types
-    const LEDGER_CODE = '0007'; // PAID OWNERS, already on the return deduction list
-    const TRANSACTION_TYPE_CODE = '2032'; // item_code of the Paid Owner transaction type
+    const PAID_OWNER_CODE = '2032'; // item_code of the Paid Owner transaction type
     const PENDING = 1;
     const CONFIRMED = 5;
     const REJECTED = 41;
@@ -43,7 +51,28 @@ class PaidOwnerService
     const REFERENCE_PREFIX = 'REC';
     const REFERENCE_LOCK_KEY = 7340012; // next to the voucher sequence's key, a different lock
 
+    /**
+     * The five reasons, keyed by the item_code of their row in sys_set_transactions_types. ledger_code is the billing code
+     * of the client ledger debit, ledger_mode the payment mode of the tenant ledger credit and of the receipt (the old
+     * system used PO for Paid Owner and REC, a recovery receipt, for the rest), and proof_required whether a PDF proof
+     * must be attached before it can be confirmed.
+     */
+    const REASONS = [
+        '2029' => ['key' => 'paid_vacant', 'label' => 'Paid Vacant', 'ledger_code' => '0024', 'ledger_mode' => 'REC', 'proof_required' => false, 'placeholder' => 'The landlord was paid for a unit that was vacant, or paid in error, for...'],
+        '2030' => ['key' => 'sat_deposit', 'label' => 'Sat Deposit', 'ledger_code' => '0024', 'ledger_mode' => 'REC', 'proof_required' => false, 'placeholder' => 'The tenant moved out owing rent for...'],
+        '2031' => ['key' => 'absconded', 'label' => 'Absconded', 'ledger_code' => '0024', 'ledger_mode' => 'REC', 'proof_required' => false, 'placeholder' => 'The tenant left without notice owing rent for...'],
+        '2032' => ['key' => 'paid_owner', 'label' => 'Paid Owner', 'ledger_code' => '0007', 'ledger_mode' => 'PO', 'proof_required' => true, 'placeholder' => 'The tenant paid the owner directly for...'],
+        '2079' => ['key' => 'overpaid', 'label' => 'Overpaid', 'ledger_code' => '0024', 'ledger_mode' => 'REC', 'proof_required' => false, 'placeholder' => 'The landlord was paid before the tenant paid, for...'],
+    ];
+
     protected GlJournalPoster $gl;
+
+    /**
+     * The reasons that exist as transaction types, keyed by type id, read once per instance.
+     *
+     * @var array<int, array>|null
+     */
+    protected ?array $reasonTypes = null;
 
     /**
      * @param GlJournalPoster $gl
@@ -86,12 +115,66 @@ class PaidOwnerService
     }
 
     /**
-     * The id of the Paid Owner transaction type.
+     * The five reasons that exist as transaction types, keyed by type id. Each carries its registry entry plus type_id,
+     * type_name and commission ('Yes' or 'No', the commissionable flag of the transaction type).
+     *
+     * @return array<int, array>
      */
-    public function typeId(): ?int {
-        $id = DB::table('sys_set_transactions_types')->where('workflow_status_id', self::TYPE_WORKFLOW_STATUS)->value('id');
+    public function reasonTypes(): array {
+        if ($this->reasonTypes !== null) {
+            return $this->reasonTypes;
+        }
 
-        return $id ? (int) $id : null;
+        $this->reasonTypes = [];
+
+        $rows = DB::table('sys_set_transactions_types')->whereIn('item_code', array_keys(self::REASONS))->get(['id', 'type_name', 'item_code', 'is_commissionable']);
+
+        foreach ($rows as $row) {
+            $this->reasonTypes[(int) $row->id] = self::REASONS[(string) $row->item_code] + [
+                'item_code' => (string) $row->item_code,
+                'type_id' => (int) $row->id,
+                'type_name' => $row->type_name,
+                'commission' => $row->is_commissionable === 'Yes' ? 'Yes' : 'No',
+            ];
+        }
+
+        return $this->reasonTypes;
+    }
+
+    /**
+     * The ids of the transaction types that are one of the five reasons.
+     *
+     * @return int[]
+     */
+    public function reasonTypeIds(): array {
+        return array_keys($this->reasonTypes());
+    }
+
+    /**
+     * The reason a transaction type stands for, or null when it is not one of the five.
+     *
+     * @param int $typeId
+     */
+    public function reasonOfType(int $typeId): ?array {
+        return $this->reasonTypes()[$typeId] ?? null;
+    }
+
+    /**
+     * The reason of a recovery, or null when its type is not one of the five (it then follows the old approve and post flow).
+     *
+     * @param Recovery $recovery
+     */
+    public function reasonOf(Recovery $recovery): ?array {
+        return $this->reasonOfType((int) $recovery->type_id);
+    }
+
+    /**
+     * Whether a recovery is one of the five reasons, confirmed on the Recovery page.
+     *
+     * @param Recovery $recovery
+     */
+    public function isInvoiceRecovery(Recovery $recovery): bool {
+        return $this->reasonOf($recovery) !== null;
     }
 
     /**
@@ -100,9 +183,30 @@ class PaidOwnerService
      * @param Recovery $recovery
      */
     public function isPaidOwner(Recovery $recovery): bool {
-        $typeId = $this->typeId();
+        return ($this->reasonOf($recovery)['item_code'] ?? null) === self::PAID_OWNER_CODE;
+    }
 
-        return $typeId !== null && (int) $recovery->type_id === $typeId;
+    /**
+     * What the recovery form needs to know about each reason, keyed by type id, as the script reads it.
+     *
+     * @return array<int, array{label: string, commission: string, commission_note: string, proof_required: bool, placeholder: string}>
+     */
+    public function reasonOptions(): array {
+        $options = [];
+
+        foreach ($this->reasonTypes() as $typeId => $reason) {
+            $options[$typeId] = [
+                'label' => $reason['label'],
+                'commission' => $reason['commission'],
+                'commission_note' => $reason['commission'] === 'Yes'
+                    ? 'Set by the reason: commission is kept on this rent.'
+                    : 'Set by the reason. The commission is still worked out on the rent as before; reversing it is not switched on.',
+                'proof_required' => $reason['proof_required'],
+                'placeholder' => $reason['placeholder'],
+            ];
+        }
+
+        return $options;
     }
 
     /**
@@ -246,22 +350,32 @@ class PaidOwnerService
 
     /**
      * A paid-owner recovery needs its proof document (a PDF): one must be attached now or already be on the record.
-     * Throws a ClientAccountException whose message is safe to show. Other recovery types do not need one.
+     * Throws a ClientAccountException whose message is safe to show. The other reasons do not need one (they may attach one).
      *
      * @param array $data the form data, with type_id
      * @param Recovery|null $existing the recovery being edited, null when it is new
      * @param UploadedFile|null $file the file sent with the form
      */
     public function assertProofGiven(array $data, ?Recovery $existing, ?UploadedFile $file): void {
-        $typeId = $this->typeId();
+        $reason = $this->reasonOfType((int) ($data['type_id'] ?? 0));
 
-        if ($typeId === null || (int) ($data['type_id'] ?? 0) !== $typeId) {
+        if ($reason === null || !$reason['proof_required']) {
             return;
         }
 
         if (!$file && !($existing && $existing->proof_path)) {
             throw new ClientAccountException('Attach the proof document (a PDF of the landlord\'s signed acknowledgement or receipt).');
         }
+    }
+
+    /**
+     * The commissionable flag a recovery gets from its reason ('Yes' or 'No', from the transaction type), or null when the
+     * type is not one of the five and the person chooses it on the form.
+     *
+     * @param int $typeId
+     */
+    public function commissionFlag(int $typeId): ?string {
+        return $this->reasonOfType($typeId)['commission'] ?? null;
     }
 
     /**
@@ -322,20 +436,20 @@ class PaidOwnerService
      * @param int $userId
      */
     public function refusal(Recovery $recovery, int $userId): ?string {
-        if (!$this->isPaidOwner($recovery)) {
-            return 'This is not a paid-owner recovery.';
+        if (!$this->isInvoiceRecovery($recovery)) {
+            return 'This recovery is not confirmed here: it is approved on the Property Confirmations page.';
         }
         if ((int) $recovery->current_status_id !== self::PENDING) {
-            return 'This paid-owner recovery is no longer waiting for confirmation.';
+            return 'This recovery is no longer waiting for confirmation.';
         }
         if (!$this->confirmerSeats()['users'] && !$this->confirmerSeats()['roles']) {
-            return 'No one is set to confirm paid-owner recoveries. Add the confirmer under Accounting > Approvals (paid_owner_confirmation).';
+            return 'No one is set to confirm recoveries. Add the confirmer under Accounting > Approvals (paid_owner_confirmation).';
         }
         if (!$this->canConfirm($userId)) {
-            return 'Only ' . $this->confirmerLabel() . ' can confirm a paid-owner recovery.';
+            return 'Only ' . $this->confirmerLabel() . ' can confirm a recovery.';
         }
         if ((int) $recovery->created_by === $userId) {
-            return 'You recorded this paid-owner recovery, so someone else must confirm it.';
+            return 'You recorded this recovery, so someone else must confirm it.';
         }
 
         return null;
@@ -370,9 +484,9 @@ class PaidOwnerService
     }
 
     /**
-     * Check a paid-owner record before it is saved: it must name a tenant invoice of that tenant, unit and property that
-     * is still open, and the amount must fit the balance after the other paid-owner recoveries still waiting on it.
-     * Throws a ClientAccountException whose message is safe to show.
+     * Check a recovery of one of the five reasons before it is saved: it must name a tenant invoice of that tenant, unit
+     * and property that is still open, and the amount must fit the balance after the other recoveries still waiting on
+     * that invoice. Throws a ClientAccountException whose message is safe to show.
      *
      * @param array $data type_id, client_id, property_id, unit_id, tenant_id, offset_invoice_id, amount
      * @param int|null $ignoreRecoveryId the recovery being edited, left out of the waiting total
@@ -380,7 +494,7 @@ class PaidOwnerService
     public function assertRecordable(array $data, ?int $ignoreRecoveryId = null): void {
         foreach (['tenant_id' => 'tenant', 'unit_id' => 'unit', 'offset_invoice_id' => 'invoice'] as $key => $label) {
             if (empty($data[$key])) {
-                throw new ClientAccountException('A paid-owner recovery needs the ' . $label . ' that was paid.');
+                throw new ClientAccountException('A recovery needs the ' . $label . ' it settles.');
             }
         }
 
@@ -405,24 +519,24 @@ class PaidOwnerService
 
         $waiting = (float) DB::table('sys_pm_recoveries')
             ->where('offset_invoice_id', $invoice->id)
-            ->where('type_id', $data['type_id'])
+            ->whereIn('type_id', $this->reasonTypeIds())
             ->where('current_status_id', self::PENDING)
             ->when($ignoreRecoveryId, fn ($query) => $query->where('id', '!=', $ignoreRecoveryId))
             ->sum('amount');
         $available = round($this->openBalance($invoice) - $waiting, 2);
 
         if ($amount > $available + 0.005) {
-            throw new ClientAccountException('The amount (' . number_format($amount, 2) . ') is more than what is left to pay on the invoice (' . number_format(max($available, 0), 2) . ', after other paid-owner recoveries waiting for confirmation).');
+            throw new ClientAccountException('The amount (' . number_format($amount, 2) . ') is more than what is left to pay on the invoice (' . number_format(max($available, 0), 2) . ', after other recoveries waiting for confirmation).');
         }
     }
 
     /**
-     * Confirm a paid-owner recovery: pay the invoice down, credit the tenant ledger, debit the client ledger, post the GL
-     * journal when it is on, and mark the recovery Approved and posted. All or nothing.
+     * Confirm a recovery: pay the invoice down, credit the tenant ledger, give the tenant a receipt, debit the client
+     * ledger, post the GL journal when it is on, and mark the recovery Approved and posted. All or nothing.
      *
      * @param Recovery $recovery
      * @param int $userId the confirmer
-     * @return array{invoice_status: int, invoice_balance: float, amount: float}
+     * @return array{invoice_status: int, invoice_balance: float, amount: float, receipt: string}
      */
     public function confirm(Recovery $recovery, int $userId): array {
         return DB::transaction(function () use ($recovery, $userId) {
@@ -432,7 +546,9 @@ class PaidOwnerService
                 throw new ClientAccountException($message);
             }
 
-            if (!$locked->proof_path) {
+            $reason = $this->reasonOf($locked);
+
+            if ($reason['proof_required'] && !$locked->proof_path) {
                 throw new ClientAccountException('This paid-owner recovery has no proof document. It must be attached before it can be confirmed.');
             }
 
@@ -441,7 +557,7 @@ class PaidOwnerService
             $balance = $invoice ? $this->openBalance($invoice) : 0.0;
 
             if (!$invoice || !in_array((int) $invoice->current_status_id, [1, self::INVOICE_PARTIAL], true)) {
-                throw new ClientAccountException('The invoice is no longer open, so this paid-owner recovery cannot be confirmed.');
+                throw new ClientAccountException('The invoice is no longer open, so this recovery cannot be confirmed.');
             }
             if ($amount > $balance + 0.005) {
                 throw new ClientAccountException('The amount (' . number_format($amount, 2) . ') is now more than what is left to pay on the invoice (' . number_format($balance, 2) . ').');
@@ -455,9 +571,10 @@ class PaidOwnerService
                 'current_status_id' => $status,
             ]);
 
-            $this->creditTenantLedger($locked, $invoice, $amount);
-            $this->debitClientLedger($locked, $invoice, $amount, $userId);
-            $this->postGl($locked, $invoice, $amount, $userId);
+            $this->creditTenantLedger($locked, $invoice, $amount, $reason);
+            $this->recordReceipt($locked, $invoice, $amount, $reason);
+            $this->debitClientLedger($locked, $invoice, $amount, $userId, $reason);
+            $this->postGl($locked, $invoice, $amount, $userId, $reason);
 
             $locked->current_status_id = self::CONFIRMED;
             $locked->actioned_by = $userId;
@@ -465,14 +582,14 @@ class PaidOwnerService
             $locked->posted_to_landlord_at = now();
             $locked->save();
 
-            Log::info('PaidOwnerService: paid-owner recovery confirmed', ['recovery_id' => $locked->id, 'invoice_id' => $invoice->id, 'amount' => $amount, 'by' => $userId]);
+            Log::info('RecoveryService: recovery confirmed', ['recovery_id' => $locked->id, 'reason' => $reason['key'], 'invoice_id' => $invoice->id, 'amount' => $amount, 'by' => $userId]);
 
-            return ['invoice_status' => $status, 'invoice_balance' => $newBalance, 'amount' => $amount];
+            return ['invoice_status' => $status, 'invoice_balance' => $newBalance, 'amount' => $amount, 'receipt' => (string) $locked->ref_number];
         });
     }
 
     /**
-     * Reject a paid-owner recovery. Nothing is posted.
+     * Reject a recovery. Nothing is posted.
      *
      * @param Recovery $recovery
      * @param int $userId the person rejecting
@@ -501,13 +618,16 @@ class PaidOwnerService
     }
 
     /**
-     * Credit the tenant's ledger with the amount paid to the owner, one PO row like the old system, tied to the invoice.
+     * Credit the tenant's ledger with the recovered amount, one row like the old system (mode PO for Paid Owner, REC for
+     * the other reasons), tied to the invoice. The ledger's receipt column is numeric, so the receipt (the recovery
+     * reference) goes in entry_ref and on the receipts row.
      *
      * @param Recovery $recovery
      * @param object $invoice the invoice row
      * @param float $amount
+     * @param array $reason the recovery's reason
      */
-    protected function creditTenantLedger(Recovery $recovery, object $invoice, float $amount): void {
+    protected function creditTenantLedger(Recovery $recovery, object $invoice, float $amount, array $reason): void {
         $item = InvoiceBillingService::itemName($invoice);
 
         DB::table('sys_pm_tenants_accounts_trans')->insert([
@@ -518,7 +638,7 @@ class PaidOwnerService
             'debit_amount' => 0,
             'credit_amount' => $amount,
             'receipt_number' => null,
-            'payment_mode' => 'PO',
+            'payment_mode' => $reason['ledger_mode'],
             'entry_ref' => mb_substr((string) $recovery->ref_number, 0, 100),
             'entry_by' => (string) $recovery->created_by,
             'invoice_number' => $invoice->reference_number,
@@ -539,15 +659,61 @@ class PaidOwnerService
     }
 
     /**
-     * Debit the client's ledger under code 0007 (PAID OWNERS). It is left unrecovered: the next return takes it as a
-     * deduction and flags it recovered when the return is finally approved.
+     * Give the tenant a receipt for the recovery: one row in the receipts table the tenant's Payments tab and the Allocated
+     * Payments export read, numbered with the recovery reference, in the shape the old system used (payment mode PO or REC,
+     * recovery receipts flagged is_recovery). No payment row is made: no money came in, so nothing reaches the payments,
+     * bank or cash reports.
+     *
+     * @param Recovery $recovery
+     * @param object $invoice the invoice row
+     * @param float $amount
+     * @param array $reason the recovery's reason
+     */
+    protected function recordReceipt(Recovery $recovery, object $invoice, float $amount, array $reason): void {
+        $item = InvoiceBillingService::itemName($invoice);
+        $date = $recovery->recovery_date ? Carbon::parse($recovery->recovery_date) : now();
+        $isRecoveryReceipt = $reason['ledger_mode'] === 'REC' ? 1 : 0;
+
+        DB::table('sys_pm_tenants_payments_allocated')->insert([
+            'date_time' => now(),
+            'payment_date' => $date,
+            'receipt_number' => mb_substr((string) $recovery->ref_number, 0, 50),
+            'amount' => $amount,
+            'narration' => mb_substr((string) ($invoice->narration ?: $item), 0, 255),
+            'pay_for' => $item,
+            'payment_month' => $date->month,
+            'payment_year' => $date->year,
+            'payment_mode' => $reason['ledger_mode'],
+            'reference_number' => mb_substr((string) $recovery->ref_number, 0, 100),
+            'entry_ref' => mb_strtoupper($reason['label']),
+            'trans_amount' => 0,
+            'is_recovery' => $isRecoveryReceipt,
+            'is_in_account' => $isRecoveryReceipt,
+            'property_id' => $invoice->property_id,
+            'client_id' => $recovery->client_id,
+            'unit_id' => $invoice->unit_id,
+            'tenant_id' => $invoice->tenant_id,
+            'zone_id' => $invoice->zone_id,
+            'field_officer_id' => $invoice->field_officer_id,
+            'zone_supervisor_id' => $invoice->zone_supervisor_id,
+            'zone_manager_id' => $invoice->zone_manager_id,
+            'current_status_id' => 1,
+        ]);
+    }
+
+    /**
+     * Debit the client's ledger: code 0007 (PAID OWNERS) for Paid Owner, code 0024 (Rent recovery) for the other reasons,
+     * both already taken by the returns. The reason leads the particulars, so the return line reads like the old
+     * ones (SAT DEPOSIT, ABSCONDED). It is left unrecovered: the next return takes it as a deduction and flags it
+     * recovered when the return is finally approved.
      *
      * @param Recovery $recovery
      * @param object $invoice the invoice row
      * @param float $amount
      * @param int $userId the confirmer
+     * @param array $reason the recovery's reason
      */
-    protected function debitClientLedger(Recovery $recovery, object $invoice, float $amount, int $userId): void {
+    protected function debitClientLedger(Recovery $recovery, object $invoice, float $amount, int $userId, array $reason): void {
         $clientId = $this->landlordOf((int) $recovery->property_id) ?: (int) $recovery->client_id;
         $codes = DB::table('sys_pm_clients as c')
             ->crossJoin('sys_pm_properties as p')
@@ -557,12 +723,12 @@ class PaidOwnerService
             ->first();
 
         if (!$codes) {
-            throw new ClientAccountException('The client or property of paid-owner recovery ' . $recovery->ref_number . ' could not be found.');
+            throw new ClientAccountException('The client or property of recovery ' . $recovery->ref_number . ' could not be found.');
         }
 
         $tenant = (string) DB::table('sys_pm_clients')->where('id', $invoice->tenant_id)->value('names');
         $unit = (string) DB::table('sys_pm_units')->where('id', $invoice->unit_id)->value('unit_code');
-        $particulars = 'Paid owner ' . $recovery->ref_number . ' - ' . trim($tenant . ' ' . $unit . ' ' . $invoice->narration);
+        $particulars = mb_strtoupper($reason['label']) . ' ' . $recovery->ref_number . ' - ' . trim($tenant . ' ' . $unit . ' ' . $invoice->narration);
         $user = DB::table('josya_users')->where('id', $userId)->value('name');
 
         DB::table('cb_landlord_account')->insert([
@@ -572,8 +738,8 @@ class PaidOwnerService
             'landlord_name' => $codes->landlord_name,
             'property_code' => $codes->property_code,
             'transaction_number' => mb_substr((string) $recovery->ref_number, 0, 50),
-            'entry_type_code' => self::LEDGER_CODE,
-            'entry_description' => 'PAID OWNER',
+            'entry_type_code' => $reason['ledger_code'],
+            'entry_description' => mb_strtoupper($reason['label']),
             'entry_particulars' => mb_substr($particulars, 0, 200),
             'entry_date' => now(),
             'debit_amount' => $amount,
@@ -597,13 +763,14 @@ class PaidOwnerService
      * @param object $invoice the invoice row
      * @param float $amount
      * @param int $userId the confirmer
+     * @param array $reason the recovery's reason
      */
-    protected function postGl(Recovery $recovery, object $invoice, float $amount, int $userId): void {
+    protected function postGl(Recovery $recovery, object $invoice, float $amount, int $userId, array $reason): void {
         if (!$this->glEnabled()) {
             return;
         }
 
-        $details = 'recovery_id:' . $recovery->id . ':paid_owner';
+        $details = 'recovery_id:' . $recovery->id . ':' . $reason['key'];
 
         if ($this->gl->exists($details)) {
             return;
@@ -614,19 +781,19 @@ class PaidOwnerService
         $tenants = $setup->tenants_account_id ?? null;
 
         if (!$clients || !$tenants) {
-            throw new ClientAccountException('The GL setup is missing the Clients Account or the Tenants Account, so the paid-owner recovery cannot be posted.');
+            throw new ClientAccountException('The GL setup is missing the Clients Account or the Tenants Account, so the recovery cannot be posted.');
         }
 
         $this->gl->journal(
             (string) $recovery->ref_number,
-            'Paid owner - ' . $invoice->reference_number,
+            $reason['label'] . ' - ' . $invoice->reference_number,
             $details,
             [
                 ['account_id' => (int) $clients, 'type' => 'Debit', 'amount' => $amount],
                 ['account_id' => (int) $tenants, 'type' => 'Credit', 'amount' => $amount],
             ],
             $userId,
-            self::TRANSACTION_TYPE_CODE
+            $reason['item_code']
         );
     }
 }

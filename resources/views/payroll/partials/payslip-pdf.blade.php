@@ -83,7 +83,8 @@
 
     $deductions = collect();
     foreach ($elements->where('element_type', '1')->filter(fn($e) => $e['amount'] > 0) as $e)
-        $deductions->push(['name' => $e['element_name'], 'amount' => $e['amount']]);
+        // A scheduled deduction (loan, advance...) also says what is still owed after this month
+        $deductions->push(['name' => $e['element_name'], 'amount' => $e['amount'], 'note' => isset($e['balance_after']) ? ((float) $e['balance_after'] > 0 ? 'Balance: ' . number_format((float) $e['balance_after'], 2) : 'Balance: 0.00 (fully paid)') : null]);
     if (($payroll->akiba_sacco_loan        ?? 0) > 0) $deductions->push(['name' => 'Akiba Sacco Loan',        'amount' => $payroll->akiba_sacco_loan]);
     if (($payroll->akiba_share_contribution ?? 0) > 0) $deductions->push(['name' => 'Akiba Share Contribution','amount' => $payroll->akiba_share_contribution]);
     if (($payroll->social_welfare           ?? 0) > 0) $deductions->push(['name' => 'Social Welfare',          'amount' => $payroll->social_welfare]);
@@ -170,7 +171,7 @@
                 <td>&nbsp;</td><td>&nbsp;</td>
             @endif
             @if ($deductions->has($i))
-                <td>{{ $deductions[$i]['name'] }}</td>
+                <td>{{ $deductions[$i]['name'] }}@if (!empty($deductions[$i]['note']))<br><span style="font-size:8px;color:#555;">{{ $deductions[$i]['note'] }}</span>@endif</td>
                 <td class="amt">{{ number_format($deductions[$i]['amount'], 2) }}</td>
             @else
                 <td>&nbsp;</td><td>&nbsp;</td>

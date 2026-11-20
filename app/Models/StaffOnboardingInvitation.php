@@ -14,6 +14,7 @@ class StaffOnboardingInvitation extends Model
         'contract' => 'Signed Employment Contract',
         'cv' => 'Curriculum Vitae (CV)',
         'academic' => 'Academic Certificates & Transcripts',
+        'helb' => 'HELB Compliance Certificate',
     ];
 
     protected $fillable = [

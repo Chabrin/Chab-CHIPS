@@ -5,7 +5,7 @@ namespace App\Http\Controllers;
 use App\Exceptions\ClientAccountException;
 use App\Models\Recovery;
 use App\Models\TransactionType;
-use App\Services\PaidOwnerService;
+use App\Services\RecoveryService;
 use Illuminate\Http\Request;
 use App\Services\ErrorDispatcher;
 use Illuminate\Support\Facades\DB;
@@ -16,20 +16,91 @@ use Illuminate\Support\Facades\Storage;
 
 class RecoveryController extends Controller
 {
-    protected PaidOwnerService $paidOwner;
+    protected RecoveryService $recoveries;
 
     /**
-     * Inject the paid-owner service.
+     * Inject the recovery service.
      */
-    public function __construct(PaidOwnerService $paidOwner) {
-        $this->paidOwner = $paidOwner;
+    public function __construct(RecoveryService $recoveries) {
+        $this->recoveries = $recoveries;
     }
 
     /**
-     * The transaction types a recovery can be recorded as: the ones the form always offered plus Paid Owner.
+     * The transaction types a recovery can be recorded as: the ones the form always offered plus the five reasons (Paid
+     * Owner, Sat Deposit, Overpaid, Absconded, Paid Vacant).
      */
     protected function transactionTypes() {
-        return TransactionType::whereIn('workflow_status_id', [1, PaidOwnerService::TYPE_WORKFLOW_STATUS])->orderBy('type_name')->get();
+        return TransactionType::where(fn ($query) => $query->where('workflow_status_id', 1)->orWhereIn('id', $this->recoveries->reasonTypeIds()))->orderBy('type_name')->get();
+    }
+
+    /**
+     * Why the signed-in user may not record or change a recovery against a property, or null when they may. A user limited
+     * to a zone can only use the properties of that zone, as when generating returns.
+     *
+     * @param int|null $propertyId
+     */
+    protected function propertyRefusal(?int $propertyId): ?string {
+        if (\App\Models\Client::zoneAccessState() === null) {
+            return null;
+        }
+
+        if (!$propertyId || !\App\Models\Property::whereKey($propertyId)->exists()) {
+            return 'That property is not in your zone, so you cannot record a recovery against it.';
+        }
+
+        return null;
+    }
+
+    /**
+     * Why the signed-in user may not edit a recovery, or null when they may. A recovery of one of the five reasons can only
+     * be changed by the person who recorded it: otherwise someone who holds the confirmer seat could rewrite another
+     * person's recovery and confirm it alone, which would defeat the rule that the maker never confirms.
+     *
+     * @param Recovery $recovery
+     */
+    protected function editRefusal(Recovery $recovery): ?string {
+        if ($this->recoveries->isInvoiceRecovery($recovery) && (int) $recovery->created_by !== (int) Auth::id()) {
+            return 'Only the person who recorded this recovery can change it.';
+        }
+
+        return null;
+    }
+
+    /**
+     * The checks every save of a recovery makes after the form is validated: the property must be one the user may use,
+     * a recovery of one of the five reasons cannot be dated in the future (its date sets the dates of the tenant's receipt
+     * and ledger credit), and the commissionable flag is set (see withCommission).
+     *
+     * @param array $validated the validated form data
+     */
+    protected function checkRecovery(array $validated): array {
+        if ($message = $this->propertyRefusal((int) $validated['property_id'])) {
+            throw new ClientAccountException($message);
+        }
+
+        if ($this->recoveries->reasonOfType((int) $validated['type_id']) && \Carbon\Carbon::parse($validated['recovery_date'])->gt(today())) {
+            throw \Illuminate\Validation\ValidationException::withMessages(['recovery_date' => 'The recovery date cannot be in the future.']);
+        }
+
+        return $this->withCommission($validated);
+    }
+
+    /**
+     * Set the recovery's commissionable flag: for the five reasons it comes from the reason, for any other type the person
+     * chooses it on the form.
+     *
+     * @param array $validated the validated form data, with type_id
+     */
+    protected function withCommission(array $validated): array {
+        $flag = $this->recoveries->commissionFlag((int) $validated['type_id']);
+
+        if ($flag === null && empty($validated['commisionable'])) {
+            throw \Illuminate\Validation\ValidationException::withMessages(['commisionable' => 'Choose whether it is commissionable.']);
+        }
+
+        $validated['commisionable'] = $flag ?? $validated['commisionable'];
+
+        return $validated;
     }
 
     /**
@@ -52,15 +123,14 @@ class RecoveryController extends Controller
     public function list(Request $request)
     {
         try {
-            $paidOwnerTypeId = $this->paidOwner->typeId();
             $userId = (int) Auth::id();
-            $userHoldsSeat = $this->paidOwner->canConfirm($userId);
+            $userHoldsSeat = $this->recoveries->canConfirm($userId);
 
             $recoveries = Recovery::with(['client', 'property', 'zone', 'createdBy', 'transactionType'])
                 ->orderBy('recovery_date', 'desc')
                 ->get()
-                ->map(function ($recovery) use ($paidOwnerTypeId, $userId, $userHoldsSeat) {
-                    $isPaidOwner = $paidOwnerTypeId !== null && (int) $recovery->type_id === $paidOwnerTypeId;
+                ->map(function ($recovery) use ($userId, $userHoldsSeat) {
+                    $isInvoiceRecovery = $this->recoveries->isInvoiceRecovery($recovery);
                     $statusId = (int) $recovery->current_status_id;
 
                     return [
@@ -77,8 +147,8 @@ class RecoveryController extends Controller
                         'created_by' => $recovery->createdBy->name ?? '-',
                         'narration' => $recovery->narration ?? '-',
                         'status_id' => $statusId,
-                        'status' => $this->statusLabel($statusId, $isPaidOwner),
-                        'can_confirm' => $isPaidOwner && $statusId === PaidOwnerService::PENDING && $userHoldsSeat && (int) $recovery->created_by !== $userId,
+                        'status' => $this->statusLabel($statusId, $isInvoiceRecovery),
+                        'can_confirm' => $isInvoiceRecovery && $statusId === RecoveryService::PENDING && $userHoldsSeat && (int) $recovery->created_by !== $userId,
                     ];
                 });
 
@@ -98,12 +168,12 @@ class RecoveryController extends Controller
         try {
             
             $transaction_types = $this->transactionTypes();
-            $paidOwnerTypeId = $this->paidOwner->typeId();
+            $reasonOptions = $this->recoveries->reasonOptions();
 
             // After a failed save the form comes back with the client the user had picked
             $oldClient = old('client_id') ? \App\Models\Client::find(old('client_id')) : null;
 
-            return view('property.properties.recovery.create', compact('transaction_types', 'paidOwnerTypeId', 'oldClient'));
+            return view('property.properties.recovery.create', compact('transaction_types', 'reasonOptions', 'oldClient'));
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading recovery create form: ' . $e->getMessage());
@@ -131,29 +201,30 @@ class RecoveryController extends Controller
                 'tenant_id' => 'nullable|exists:sys_pm_clients,id',
                 'lease_id' => 'nullable|exists:sys_pm_lease_agreements,id',
                 'offset_invoice_id' => 'nullable|exists:sys_pm_debtors_invoices,id',
-                'commisionable' => 'required|in:Yes,No',
+                'commisionable' => 'nullable|in:Yes,No',
                 'proof_reference' => 'nullable|string|max:100',
                 'proof_file' => 'nullable|file|mimes:pdf|mimetypes:application/pdf|max:10240',
             ]);
             $proofFile = $request->file('proof_file');
             unset($validated['proof_file']);
 
-            if ((int) $validated['type_id'] === $this->paidOwner->typeId()) {
-                $this->paidOwner->assertRecordable($validated);
+            $validated = $this->checkRecovery($validated);
+            if ($this->recoveries->reasonOfType((int) $validated['type_id'])) {
+                $this->recoveries->assertRecordable($validated);
             }
-            $this->paidOwner->assertProofGiven($validated, null, $proofFile);
+            $this->recoveries->assertProofGiven($validated, null, $proofFile);
 
             // The reference is made here, inside the open transaction, under the sequence lock
             $recovery = Recovery::create(array_merge($validated, [
-                'ref_number' => $this->paidOwner->nextReference(),
+                'ref_number' => $this->recoveries->nextReference(),
                 'date_time' => now(),
                 'created_by' => Auth::id(),
                 'zone_id' => DB::table('sys_pm_properties')->where('id', $validated['property_id'])->value('zone_id'),
-                'current_status_id' => PaidOwnerService::PENDING, // Pending — awaiting confirmation
+                'current_status_id' => RecoveryService::PENDING, // Pending — awaiting confirmation
             ]));
 
             if ($proofFile) {
-                $storedProof = $this->paidOwner->attachProof($recovery, $proofFile, (int) Auth::id());
+                $storedProof = $this->recoveries->attachProof($recovery, $proofFile, (int) Auth::id());
             }
 
             DB::commit();
@@ -199,17 +270,18 @@ class RecoveryController extends Controller
                 'createdBy'
             ])->findOrFail($id);
 
-            $isPaidOwner = $this->paidOwner->isPaidOwner($recovery);
-            $refusal = $isPaidOwner ? $this->paidOwner->refusal($recovery, (int) Auth::id()) : 'Not a paid-owner recovery.';
-            $confirmer = $isPaidOwner ? $this->paidOwner->confirmerLabel() : null;
-            $statusLabel = $this->statusLabel((int) $recovery->current_status_id, $isPaidOwner);
+            $reason = $this->recoveries->reasonOf($recovery);
+            $isInvoiceRecovery = $reason !== null;
+            $refusal = $isInvoiceRecovery ? $this->recoveries->refusal($recovery, (int) Auth::id()) : 'This recovery is approved on the Property Confirmations page.';
+            $confirmer = $isInvoiceRecovery ? $this->recoveries->confirmerLabel() : null;
+            $statusLabel = $this->statusLabel((int) $recovery->current_status_id, $isInvoiceRecovery);
             $invoice = $recovery->offset_invoice_id ? DB::table('sys_pm_debtors_invoices')->where('id', $recovery->offset_invoice_id)->first() : null;
             $actionedBy = $recovery->actioned_by ? DB::table('josya_users')->where('id', $recovery->actioned_by)->value('name') : null;
 
-            $canViewProof = $recovery->proof_path && $this->paidOwner->canViewProof($recovery, (int) Auth::id(), (bool) Auth::user()->isAbleTo('read_recoveries'));
+            $canViewProof = $recovery->proof_path && $this->recoveries->canViewProof($recovery, (int) Auth::id(), (bool) Auth::user()->isAbleTo('read_recoveries'));
             $proofBy = $recovery->proof_uploaded_by ? DB::table('josya_users')->where('id', $recovery->proof_uploaded_by)->value('name') : null;
 
-            return view('property.properties.recovery.details', compact('recovery', 'isPaidOwner', 'refusal', 'confirmer', 'statusLabel', 'invoice', 'actionedBy', 'canViewProof', 'proofBy'));
+            return view('property.properties.recovery.details', compact('recovery', 'reason', 'isInvoiceRecovery', 'refusal', 'confirmer', 'statusLabel', 'invoice', 'actionedBy', 'canViewProof', 'proofBy'));
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading recovery details: ' . $e->getMessage());
@@ -231,14 +303,17 @@ class RecoveryController extends Controller
                 'zone'
             ])->findOrFail($id);
 
-            if ((int) $recovery->current_status_id !== PaidOwnerService::PENDING) {
+            if ((int) $recovery->current_status_id !== RecoveryService::PENDING) {
                 return redirect()->route('property.recoveries.show', $encryptedId)->with('error', 'Only a recovery that is still Pending can be edited.');
+            }
+            if ($message = $this->editRefusal($recovery)) {
+                return redirect()->route('property.recoveries.show', $encryptedId)->with('error', $message);
             }
 
             $transaction_types = $this->transactionTypes();
-            $paidOwnerTypeId = $this->paidOwner->typeId();
+            $reasonOptions = $this->recoveries->reasonOptions();
 
-            return view('property.properties.recovery.edit', compact('recovery', 'transaction_types', 'paidOwnerTypeId'));
+            return view('property.properties.recovery.edit', compact('recovery', 'transaction_types', 'reasonOptions'));
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading recovery edit form: ' . $e->getMessage());
@@ -254,10 +329,13 @@ class RecoveryController extends Controller
         DB::beginTransaction();
         try {
             $id = Crypt::decrypt($encryptedId);
-            $recovery = Recovery::findOrFail($id);
+            $recovery = Recovery::whereKey($id)->lockForUpdate()->firstOrFail(); // locked, so a confirm cannot slip in while it is edited
 
-            if ((int) $recovery->current_status_id !== PaidOwnerService::PENDING) {
+            if ((int) $recovery->current_status_id !== RecoveryService::PENDING) {
                 throw new ClientAccountException('Only a recovery that is still Pending can be edited.');
+            }
+            if ($message = $this->editRefusal($recovery)) {
+                throw new ClientAccountException($message);
             }
 
             $validated = $request->validate([
@@ -272,24 +350,25 @@ class RecoveryController extends Controller
                 'tenant_id' => 'nullable|exists:sys_pm_clients,id',
                 'lease_id' => 'nullable|exists:sys_pm_lease_agreements,id',
                 'offset_invoice_id' => 'nullable|exists:sys_pm_debtors_invoices,id',
-                'commisionable' => 'required|in:Yes,No',
+                'commisionable' => 'nullable|in:Yes,No',
                 'proof_reference' => 'nullable|string|max:100',
                 'proof_file' => 'nullable|file|mimes:pdf|mimetypes:application/pdf|max:10240',
             ]);
             $proofFile = $request->file('proof_file');
             unset($validated['proof_file']);
 
-            if ((int) $validated['type_id'] === $this->paidOwner->typeId()) {
-                $this->paidOwner->assertRecordable($validated, $recovery->id);
+            $validated = $this->checkRecovery($validated);
+            if ($this->recoveries->reasonOfType((int) $validated['type_id'])) {
+                $this->recoveries->assertRecordable($validated, $recovery->id);
             }
-            $this->paidOwner->assertProofGiven($validated, $recovery, $proofFile);
+            $this->recoveries->assertProofGiven($validated, $recovery, $proofFile);
 
             $recovery->update(array_merge($validated, [
                 'zone_id' => DB::table('sys_pm_properties')->where('id', $validated['property_id'])->value('zone_id'),
             ]));
 
             if ($proofFile) {
-                $this->paidOwner->attachProof($recovery, $proofFile, (int) Auth::id());
+                $this->recoveries->attachProof($recovery, $proofFile, (int) Auth::id());
             }
 
             DB::commit();
@@ -318,13 +397,13 @@ class RecoveryController extends Controller
         }
     }
     /**
-     * The label of a recovery's status. A paid-owner recovery that is Approved reads Confirmed.
+     * The label of a recovery's status. A recovery of one of the five reasons that is Approved reads Confirmed.
      */
-    protected function statusLabel(int $statusId, bool $isPaidOwner): string {
+    protected function statusLabel(int $statusId, bool $isInvoiceRecovery): string {
         return match ($statusId) {
-            PaidOwnerService::PENDING => $isPaidOwner ? 'Pending confirmation' : 'Pending',
-            PaidOwnerService::CONFIRMED => $isPaidOwner ? 'Confirmed' : 'Approved',
-            PaidOwnerService::REJECTED => 'Rejected',
+            RecoveryService::PENDING => $isInvoiceRecovery ? 'Pending confirmation' : 'Pending',
+            RecoveryService::CONFIRMED => $isInvoiceRecovery ? 'Confirmed' : 'Approved',
+            RecoveryService::REJECTED => 'Rejected',
             default => 'Status ' . $statusId,
         };
     }
@@ -337,7 +416,7 @@ class RecoveryController extends Controller
             ->where('unit_id', $unitId)
             ->when($request->filled('tenant_id'), fn ($query) => $query->where('tenant_id', (int) $request->input('tenant_id')))
             ->where('debtor_type_id', '2')
-            ->whereIn('current_status_id', [1, PaidOwnerService::INVOICE_PARTIAL])
+            ->whereIn('current_status_id', [1, RecoveryService::INVOICE_PARTIAL])
             ->whereRaw('COALESCE(current_balance, total_amount) > 0')
             ->orderByDesc('date_due')
             ->limit(100)
@@ -347,7 +426,7 @@ class RecoveryController extends Controller
                 'invoice_number' => $invoice->reference_number,
                 'narration' => $invoice->narration,
                 'amount' => (float) $invoice->total_amount,
-                'outstanding_amount' => $this->paidOwner->openBalance($invoice),
+                'outstanding_amount' => $this->recoveries->openBalance($invoice),
             ]);
 
         return response()->json(['invoices' => $invoices]);
@@ -366,7 +445,7 @@ class RecoveryController extends Controller
         return response()->json([
             'invoice_number' => $invoice->reference_number,
             'amount' => (float) $invoice->total_amount,
-            'outstanding_amount' => $this->paidOwner->openBalance($invoice),
+            'outstanding_amount' => $this->recoveries->openBalance($invoice),
             'invoice_date' => $invoice->date_due,
         ]);
     }
@@ -381,39 +460,39 @@ class RecoveryController extends Controller
             return response()->json(['valid' => false, 'error' => 'Invoice not found'], 404);
         }
 
-        $outstanding = $this->paidOwner->openBalance($invoice);
+        $outstanding = $this->recoveries->openBalance($invoice);
 
         return response()->json(['valid' => round((float) $request->input('amount'), 2) <= $outstanding + 0.005, 'outstanding' => $outstanding]);
     }
 
     /**
-     * Confirm a paid-owner recovery (AJAX): the tenant's invoice is paid down, the tenant ledger credited, the client
-     * ledger debited and the GL posted, all or nothing.
+     * Confirm a recovery (AJAX): the tenant's invoice is paid down, the tenant ledger credited, the tenant given a receipt,
+     * the client ledger debited and the GL posted, all or nothing.
      */
     public function confirm($encryptedId) {
         try {
             $recovery = Recovery::findOrFail(Crypt::decrypt($encryptedId));
-            $result = $this->paidOwner->confirm($recovery, (int) Auth::id());
+            $result = $this->recoveries->confirm($recovery, (int) Auth::id());
 
-            return response()->json(['success' => true, 'message' => 'Confirmed. The invoice now has ' . number_format($result['invoice_balance'], 2) . ' left to pay, the client ledger is debited ' . number_format($result['amount'], 2) . ' and the next return will deduct it.']);
+            return response()->json(['success' => true, 'message' => 'Confirmed. The invoice now has ' . number_format($result['invoice_balance'], 2) . ' left to pay, the tenant has receipt ' . $result['receipt'] . ', the client ledger is debited ' . number_format($result['amount'], 2) . ' and the next return will deduct it.']);
         } catch (ClientAccountException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
-            Log::error('Error confirming paid-owner recovery: ' . $e->getMessage());
+            Log::error('Error confirming recovery: ' . $e->getMessage());
 
             return response()->json(['success' => false, 'message' => 'Failed to confirm the recovery'], 500);
         }
     }
 
     /**
-     * Reject a paid-owner recovery with a reason (AJAX). Nothing is posted.
+     * Reject a recovery with a reason (AJAX). Nothing is posted.
      */
     public function reject(Request $request, $encryptedId) {
         try {
             $validated = $request->validate(['reason' => 'required|string|max:500']);
             $recovery = Recovery::findOrFail(Crypt::decrypt($encryptedId));
-            $this->paidOwner->reject($recovery, (int) Auth::id(), $validated['reason']);
+            $this->recoveries->reject($recovery, (int) Auth::id(), $validated['reason']);
 
             return response()->json(['success' => true, 'message' => 'Rejected.']);
         } catch (\Illuminate\Validation\ValidationException $e) {
@@ -422,28 +501,28 @@ class RecoveryController extends Controller
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
-            Log::error('Error rejecting paid-owner recovery: ' . $e->getMessage());
+            Log::error('Error rejecting recovery: ' . $e->getMessage());
 
             return response()->json(['success' => false, 'message' => 'Failed to reject the recovery'], 500);
         }
     }
     /**
-     * Who confirms paid-owner recoveries now, the roles that can be chosen, and whether this user may change it (AJAX).
+     * Who confirms recoveries now, the roles that can be chosen, and whether this user may change it (AJAX).
      */
     public function confirmerSetting() {
-        $seats = $this->paidOwner->confirmerSeats();
+        $seats = $this->recoveries->confirmerSeats();
 
         return response()->json([
-            'label' => $this->paidOwner->confirmerLabel(),
+            'label' => $this->recoveries->confirmerLabel(),
             'role_id' => $seats['roles'][0] ?? null,
             'has_named_users' => !empty($seats['users']),
-            'roles' => $this->paidOwner->confirmerRoleOptions(),
+            'roles' => $this->recoveries->confirmerRoleOptions(),
             'can_change' => (bool) Auth::user()->isAbleTo('update_recoveries'),
         ]);
     }
 
     /**
-     * Choose the role that confirms paid-owner recoveries (AJAX). Needs update_recoveries.
+     * Choose the role that confirms recoveries (AJAX). Needs update_recoveries.
      */
     public function saveConfirmer(Request $request) {
         if (!Auth::user()->isAbleTo('update_recoveries')) {
@@ -452,16 +531,16 @@ class RecoveryController extends Controller
 
         try {
             $validated = $request->validate(['role_id' => 'required|integer']);
-            $this->paidOwner->setConfirmerRole((int) $validated['role_id'], (int) Auth::id());
+            $this->recoveries->setConfirmerRole((int) $validated['role_id'], (int) Auth::id());
 
-            return response()->json(['success' => true, 'message' => 'Saved. Paid-owner recoveries are now confirmed by ' . $this->paidOwner->confirmerLabel() . '.']);
+            return response()->json(['success' => true, 'message' => 'Saved. Recoveries are now confirmed by ' . $this->recoveries->confirmerLabel() . '.']);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json(['success' => false, 'message' => 'Choose a role.'], 422);
         } catch (ClientAccountException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
-            Log::error('Error saving the paid-owner confirmer: ' . $e->getMessage());
+            Log::error('Error saving the recovery confirmer: ' . $e->getMessage());
 
             return response()->json(['success' => false, 'message' => 'Failed to save the setting'], 500);
         }
@@ -546,7 +625,7 @@ class RecoveryController extends Controller
             abort(404);
         }
 
-        abort_unless($this->paidOwner->canViewProof($recovery, (int) Auth::id(), (bool) Auth::user()->isAbleTo('read_recoveries')), 403);
+        abort_unless($this->recoveries->canViewProof($recovery, (int) Auth::id(), (bool) Auth::user()->isAbleTo('read_recoveries')), 403);
         abort_unless($recovery->proof_path && Storage::disk('local')->exists($recovery->proof_path), 404);
 
         return Storage::disk('local')->response(

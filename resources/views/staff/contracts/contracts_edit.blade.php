@@ -8,11 +8,6 @@
                     <div class="card-header card-no-border d-flex align-items-center">
                         <h4 class="mb-0">Staff Contracts</h4>
                         <div class="ms-auto d-flex gap-2">
-                            <button type="submit" form="staffContractCreateForm" class="btn btn-primary btn-sm d-flex align-items-center" id="createButton">
-                                <span class="spinner-border spinner-border-sm me-2 d-none" id="submitSpinner"></span>
-                                <span class="material-symbols-outlined me-1" style="font-size:18px;">check_circle</span>
-                                <span>Update Conract</span>
-                            </button>
                             <a href="{{ route('contract.index') }}" class="btn btn-light btn-sm d-flex align-items-center">
                                 <span class="material-symbols-outlined">arrow_back</span>
                                 <span class="ms-1">Back to List</span>
@@ -34,7 +29,7 @@
                         @endif
 
 
-                        <form action="{{ route('contract.update', ['id' => $contract->id]) }}" method="POST" id="staffContractCreateForm" enctype="multipart/form-data" data-file-slots>
+                        <form action="{{ route('contract.update', ['id' => $contract->id]) }}" method="POST" id="staffContractCreateForm" autocomplete="off" enctype="multipart/form-data" data-file-slots>
                             @csrf
                             @method('PUT')
                         
@@ -63,25 +58,18 @@
                                     <input type="number" class="form-control" name="basic_salary" id="basic_salary" min="0" step="0.01" value="{{ $contract->basic_salary }}">
                                 </div>
                                 <div class="mb-3 col-12">
-                                    <label for="signed_contract" class="form-label">Signed Contract (PDF)</label>
-                                    @if($contract->signedDocument)
-                                    <div class="mb-1">
-                                        <a href="{{ route('documents.view', $contract->signedDocument->id) }}" target="_blank">{{ $contract->signedDocument->file_name }}</a>
-                                        <span class="text-muted small">- uploading a new file replaces it</span>
-                                    </div>
-                                    @endif
-                                    @if($staffCopy)
-                                    <div id="signed_contract_on_file" class="mb-1">
-                                        <span class="text-success">Already on file from when the staff member was added: <a href="{{ route('documents.view', $staffCopy->id) }}" target="_blank">{{ $staffCopy->file_name }}</a></span>
-                                        <span class="text-muted small">- attached to this contract when you save</span>
-                                        <button type="button" class="btn btn-link btn-sm p-0 ms-2" id="signed_contract_replace">Upload a different file</button>
-                                    </div>
-                                    @endif
-                                    <input type="file" class="form-control @error('signed_contract') is-invalid @enderror" name="signed_contract" id="signed_contract" accept=".pdf,application/pdf" @if($staffCopy) disabled @endif>
-                                    <small class="text-muted">Upload the physically signed contract as a PDF (max 5MB). It is optional.</small>
-                                    @error('signed_contract')
-                                    <div class="invalid-feedback">{{ $message }}</div>
-                                    @enderror
+                                    @php
+                                        // The contract's own signed PDF, or else the one saved with the staff record (attached when this form is saved)
+                                        $onRecord = $contract->signedDocument ?: ($staffCopy ?? null);
+                                        $signedDocument = $onRecord ? [
+                                            'id' => $onRecord->id,
+                                            'name' => $onRecord->file_name,
+                                            'uploaded' => $onRecord->created_at?->format('d M Y'),
+                                            'by' => $onRecord->uploaded_by ? \App\Models\User::whereKey($onRecord->uploaded_by)->value('name') : null,
+                                            'attachedOnSave' => !$contract->signedDocument,
+                                        ] : null;
+                                    @endphp
+                                    @include('staff.contracts.partials.signed-contract', ['document' => $signedDocument, 'optional' => true])
                                 </div>
                             </div>
                             @include('staff.contracts.partials.all-staff-table')
@@ -120,7 +108,7 @@
                                                 <label class="form-label">Entry Type</label>
                                                 <select class="form-select entry-type-select" name="elements[{{ $i }}][entry_type]" required>
                                                     <option value="" disabled>Select entry type</option>
-                                                    <option value="2" {{ $element->entry_type_id == 2 ? 'selected' : '' }}>Allowance</option>
+                                                    <option value="2" {{ $element->entry_type_id == 2 ? 'selected' : '' }}>Earnings</option>
                                                     <option value="1" {{ $element->entry_type_id == 1 ? 'selected' : '' }}>Deduction</option>
                                                 </select>
                                             </div>
@@ -137,7 +125,16 @@
                                 </div>
                                 <button type="button" class="btn btn-success" id="addElementRow">Add Element</button>
                             </div>
+                            @include('partials.form-actions', ['form' => 'staffContractCreateForm', 'buttonId' => 'createButton', 'cancelUrl' => route('contract.index')])
                         </form>
+
+                        {{-- Who changed what on this contract, when, and what it was before. Read only. --}}
+                        @if(auth()->user()?->hasPermission('read_contracts') || auth()->user()?->hasPermission('read_staff'))
+                        <div class="mt-4 pt-3 border-top">
+                            <h5 class="mb-2">History</h5>
+                            @include('staff.partials.history-panel', ['url' => route('contract.history', $contract->id), 'lazy' => false])
+                        </div>
+                        @endif
                     </div>
                 </div>
             </div>
@@ -149,6 +146,7 @@
 <script src="{{ asset('assets/js/contract-exclusions.js') }}?v={{ filemtime(public_path('assets/js/contract-exclusions.js')) }}"></script>
 <script src="{{ asset('assets/js/contract-period.js') }}?v={{ filemtime(public_path('assets/js/contract-period.js')) }}"></script>
 <script src="{{ asset('assets/js/file-slot.js') }}?v={{ filemtime(public_path('assets/js/file-slot.js')) }}"></script>
+<script src="{{ asset('assets/js/signed-contract.js') }}?v={{ filemtime(public_path('assets/js/signed-contract.js')) }}"></script>
 <script>
     $(document).ready(function() {
 
@@ -163,10 +161,10 @@
             }
         });
 
-        // Choose a different file instead of the one already on record
-        $('#signed_contract_replace').on('click', function() {
-            $('#signed_contract').prop('disabled', false);
-            $('#signed_contract_on_file').addClass('d-none');
+        // The signed contract on record: View and Remove, and the upload button only once it is removed
+        window.SignedContract.attach(document, {
+            token: '{{ csrf_token() }}',
+            notify: function(kind, text) { toastr[kind](text); }
         });
 
         $.ajax({

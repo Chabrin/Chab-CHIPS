@@ -16,12 +16,15 @@ use App\Models\Staff;
 use App\Models\TaxBand;
 use App\Models\User;
 use App\Services\ErrorDispatcher;
+use App\Services\PayrollMonthOpener;
+use App\Services\ScheduledDeductions;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Maatwebsite\Excel\Facades\Excel;
 
 class PayrollReviewController extends Controller
@@ -70,7 +73,14 @@ class PayrollReviewController extends Controller
             'canDecide' => $canApprove && $run->status === PayrollRun::STATUS_WITH_ACCOUNTANT && !$this->isOwnRun($run),
             'isOwnRun' => $canApprove && $this->isOwnRun($run),
             'canReverseApproved' => $canApprove && $run->status === PayrollRun::STATUS_APPROVED,
-            'canDownloadEft' => $canApprove && $run->status === PayrollRun::STATUS_APPROVED,
+            'canDownloadEft' => $canApprove && in_array($run->status, [PayrollRun::STATUS_APPROVED, PayrollRun::STATUS_PAID], true),
+            // Paying is the accountant's call, and never the person who processed or submitted the run
+            'canMarkPaid' => $canApprove && $run->status === PayrollRun::STATUS_APPROVED && !$this->isOwnRun($run),
+            'payment' => $run->status === PayrollRun::STATUS_APPROVED ? $this->paymentSummary($run) : null,
+            'reverseNote' => $run->status === PayrollRun::STATUS_APPROVED ? $this->reverseNote($run) : null,
+            'paidByName' => $run->paid_by ? User::whereKey($run->paid_by)->value('name') : null,
+            // What changed since the last payroll, as it stood when HR processed this run (none for runs from before this was kept)
+            'changes' => $run->changes_snapshot,
         ]);
     }
 
@@ -171,11 +181,20 @@ class PayrollReviewController extends Controller
         $validated = $request->validate(['comment' => 'required|string|max:1000']);
 
         return $this->transition($periodId, function (PayrollRun $run) use ($validated) {
+            // Money has gone out once a run is paid, so nothing undoes it from here. Mistakes are corrected in the next month.
+            if ($run->status === PayrollRun::STATUS_PAID) {
+                throw new \DomainException('This payroll has been marked as paid, so it can no longer be reversed. Correct any mistake with a one-time item in the next payroll month.');
+            }
+
             $wasApproved = $run->status === PayrollRun::STATUS_APPROVED;
             $this->requirePayrollPermission($wasApproved ? 'approve_payroll_processing' : 'create_payroll_processing');
             $this->requireStatus($run, [PayrollRun::STATUS_DRAFT, PayrollRun::STATUS_RETURNED, PayrollRun::STATUS_APPROVED], 'A run with the accountant must be returned before it can be reversed.');
 
             if ($wasApproved) {
+                // Loan balances roll forward month by month, so an earlier month cannot be taken back under a later one.
+                if ($this->laterMonthHasResults($run)) {
+                    throw new \DomainException('Payroll for a later month has already been processed. Reverse that month first.');
+                }
                 $this->rollBackLoanDeductions($run);
             }
             PayrollSummary::where('period_id', $run->period_id)->delete();
@@ -190,8 +209,177 @@ class PayrollReviewController extends Controller
             ]);
             $run->record('reversed', Auth::id(), $validated['comment']);
 
+            // The people who prepared an approved run are told it was taken back, and why
+            if ($wasApproved) {
+                $label = $run->period?->start_date?->format('F Y') ?? 'a payroll month';
+                foreach (array_unique(array_filter([$run->processed_by, $run->submitted_by])) as $userId) {
+                    if ((int) $userId !== (int) Auth::id()) {
+                        $this->notifyUser($run, (int) $userId, 'Approved payroll reversed', "The approved payroll for {$label} was reversed: {$validated['comment']} Payslips were withdrawn and the month can be processed again.");
+                    }
+                }
+            }
+
             return 'Payroll reversed. The period can now be processed again.';
         });
+    }
+
+    /**
+     * The accountant confirms the bank has paid this approved run. That locks the run for good and opens the next payroll
+     * month for everyone who works on payroll.
+     */
+    public function markPaid(Request $request, $periodId)
+    {
+        $this->requirePayrollPermission('approve_payroll_processing');
+
+        $validated = $request->validate([
+            'payment_date' => 'required|date_format:Y-m-d|before_or_equal:today',
+            'payment_reference' => 'required|string|max:100',
+            'payment_note' => 'nullable|string|max:1000',
+            'confirmed' => 'accepted',
+            'net_total' => 'required|numeric',
+            'employees' => 'required|integer',
+        ], [
+            'confirmed.accepted' => 'Tick the box to confirm the bank has processed this payment.',
+            'payment_date.before_or_equal' => 'The payment date cannot be in the future.',
+            'payment_reference.required' => 'Enter the bank reference for this payment.',
+        ]);
+
+        return $this->transition($periodId, function (PayrollRun $run) use ($validated) {
+            $this->requireStatus($run, [PayrollRun::STATUS_APPROVED], $run->status === PayrollRun::STATUS_PAID
+                ? 'This payroll has already been marked as paid.'
+                : 'Only an approved payroll run can be marked as paid.');
+            $this->rejectOwnRun($run);
+
+            // What the accountant confirmed on screen must still be what is in the run, in case it was reversed and re-run meanwhile
+            $totals = $this->runTotals((int) $run->period_id);
+            if ((int) $validated['employees'] !== (int) $totals->employees || abs((float) $validated['net_total'] - (float) $totals->net_pay) > 0.005) {
+                throw new \DomainException('This payroll has changed since you opened the page. Reload it and check the totals again before confirming payment.');
+            }
+
+            $run->update([
+                'status' => PayrollRun::STATUS_PAID,
+                'paid_by' => Auth::id(),
+                'paid_at' => now(),
+                'payment_date' => $validated['payment_date'],
+                'payment_reference' => $validated['payment_reference'],
+                'payment_note' => $validated['payment_note'] ?? null,
+            ]);
+            $detail = 'Paid on ' . \Carbon\Carbon::parse($validated['payment_date'])->format('d M Y') . '. Bank reference: ' . $validated['payment_reference'] . '.'
+                . (filled($validated['payment_note'] ?? null) ? ' ' . $validated['payment_note'] : '');
+            $run->record('paid', Auth::id(), $detail);
+
+            $period = PayrollPeriod::findOrFail($run->period_id);
+            $paidLabel = $period->start_date->format('F Y');
+            [$opened, $failed] = $this->openNextMonth($run, $period);
+
+            $paidBy = Auth::user()->name;
+            if ($opened) {
+                $range = \Carbon\Carbon::parse($opened['start'])->format('d M Y') . ' to ' . \Carbon\Carbon::parse($opened['end'])->format('d M Y');
+                $this->notifyPayrollTeam($run, 'New payroll month open', "{$paidLabel} payroll was marked as paid by {$paidBy}. {$opened['label']} payroll is now open ({$range}) and can be processed.", route('payroll.processing'));
+
+                return "{$paidLabel} payroll marked as paid. {$opened['label']} payroll is now open.";
+            }
+
+            if ($failed) {
+                $this->notifyPayrollTeam($run, 'Payroll marked as paid', "{$paidLabel} payroll was marked as paid by {$paidBy}. The next month could not be opened automatically, so please add it on the Payroll Calendar.", route('settings.hr.payroll.calendar'));
+
+                return "{$paidLabel} payroll marked as paid. The next month could not be opened automatically, so add it on the Payroll Calendar.";
+            }
+
+            $this->notifyPayrollTeam($run, 'Payroll marked as paid', "{$paidLabel} payroll was marked as paid by {$paidBy}.", route('payroll.review', $run->period_id));
+
+            return "{$paidLabel} payroll marked as paid.";
+        });
+    }
+
+    /**
+     * Open the month after a paid one. The payment is already confirmed, so a failure here must not undo it: it is logged and
+     * HR is told to add the month on the Payroll Calendar.
+     *
+     * @return array{0: array{label: string, start: string, end: string}|null, 1: bool} the month that was opened (null when none was needed) and whether opening failed
+     */
+    private function openNextMonth(PayrollRun $run, PayrollPeriod $period): array
+    {
+        try {
+            $opened = app(PayrollMonthOpener::class)->openAfter($period, Auth::id());
+        } catch (\Throwable $e) {
+            Log::error('Could not open the next payroll month after period ' . $period->id . ': ' . $e->getMessage());
+            $run->record('month_not_opened', Auth::id(), 'The next payroll month could not be opened automatically. Add it on the Payroll Calendar.');
+
+            return [null, true];
+        }
+
+        if ($opened) {
+            $run->record('month_opened', Auth::id(), "{$opened['label']} payroll is open: {$opened['start']} to {$opened['end']}.");
+        }
+
+        return [$opened, false];
+    }
+
+    /**
+     * Whether any later payroll month already has results. Used to stop an earlier month being reversed underneath it.
+     */
+    private function laterMonthHasResults(PayrollRun $run): bool
+    {
+        $start = $run->period?->start_date;
+        if (!$start) {
+            return false;
+        }
+
+        return PayrollSummary::whereIn('period_id', PayrollPeriod::where('start_date', '>', $start->toDateString())->select('id'))->exists();
+    }
+
+    /**
+     * Everything the accountant should see before confirming payment: what the run adds up to, who is and is not in the
+     * EFT file, and whether a file was downloaded.
+     */
+    private function paymentSummary(PayrollRun $run): array
+    {
+        $payable = ['count' => 0, 'total' => 0.0];
+        $excluded = ['count' => 0, 'total' => 0.0, 'reasons' => [], 'people' => []];
+
+        foreach (PayrollSummary::with('staff.bank')->where('period_id', $run->period_id)->get() as $summary) {
+            $reason = $this->eftExclusionReason($summary);
+            if (!$reason) {
+                $payable['count']++;
+                $payable['total'] += (float) $summary->net_pay;
+                continue;
+            }
+            $excluded['count']++;
+            $excluded['total'] += (float) $summary->net_pay;
+            $excluded['reasons'][$reason] = ($excluded['reasons'][$reason] ?? 0) + 1;
+            if (count($excluded['people']) < 8) {
+                $excluded['people'][] = ($summary->staff?->full_names ?? 'Staff #' . $summary->staff_id) . ' (' . $reason . ')';
+            }
+        }
+
+        $totals = $this->runTotals((int) $run->period_id);
+        $download = $run->logs->firstWhere('action', 'eft_test_file');
+
+        return [
+            'employees' => (int) $totals->employees,
+            'net_total' => round((float) $totals->net_pay, 2),
+            'payable' => ['count' => $payable['count'], 'total' => round($payable['total'], 2)],
+            'excluded' => ['count' => $excluded['count'], 'total' => round($excluded['total'], 2), 'reasons' => $excluded['reasons'], 'people' => $excluded['people']],
+            'eft_downloaded' => $download ? ['by' => $download->user?->name ?? 'Unknown', 'at' => $download->created_at?->format('d M Y, H:i')] : null,
+            'default_date' => now()->toDateString(),
+        ];
+    }
+
+    /**
+     * What the Reverse dialog should warn about: the payslips being withdrawn and, when an EFT file was already downloaded,
+     * who took it and when, because a reversal cannot recall a file the bank may have processed.
+     */
+    private function reverseNote(PayrollRun $run): string
+    {
+        $count = PayrollSummary::where('period_id', $run->period_id)->count();
+        $note = "Payslips for {$count} staff will be withdrawn, loan balances put back and the month opened again for processing.";
+        $download = $run->logs->firstWhere('action', 'eft_test_file');
+        if ($download) {
+            $note .= ' An EFT file was downloaded by ' . ($download->user?->name ?? 'someone') . ' on ' . $download->created_at?->format('d M Y, H:i') . '. Make sure the bank has not processed it before you reverse.';
+        }
+
+        return $note;
     }
 
     /** Excel copy of the per-employee list, available at any stage of the run. */
@@ -235,7 +423,7 @@ class PayrollReviewController extends Controller
 
         $period = PayrollPeriod::findOrFail($periodId);
         $run = PayrollRun::where('period_id', $period->id)->firstOrFail();
-        abort_unless($run->status === PayrollRun::STATUS_APPROVED, 422, 'Only an approved payroll run can produce an EFT file.');
+        abort_unless(in_array($run->status, [PayrollRun::STATUS_APPROVED, PayrollRun::STATUS_PAID], true), 422, 'Only an approved payroll run can produce an EFT file.');
 
         $summaries = PayrollSummary::with('staff.bank')->where('period_id', $period->id)->get();
         $reference = 'PAY-' . $period->start_date->format('Ym');
@@ -575,6 +763,10 @@ class PayrollReviewController extends Controller
                     $loan->save();
                 }
             }
+
+            foreach ($deductions['scheduled'] ?? [] as $info) {
+                app(ScheduledDeductions::class)->recordTaken((int) $info['parent_id'], (float) $info['deduction_amount'], $run->period_id, $info['deduction_date']);
+            }
         }
     }
 
@@ -596,6 +788,10 @@ class PayrollReviewController extends Controller
             foreach ($deductions['prorated'] ?? [] as $info) {
                 ProratedDeductionRepeat::where('parent_id', $info['parent_id'])->where('period_id', $run->period_id)->delete();
                 ProratedDeduction::where('id', $info['parent_id'])->update(['cleared' => 0]);
+            }
+
+            foreach ($deductions['scheduled'] ?? [] as $info) {
+                app(ScheduledDeductions::class)->reverseTaken((int) $info['parent_id'], $run->period_id);
             }
         }
     }
@@ -626,7 +822,7 @@ class PayrollReviewController extends Controller
     /**
      * Create an in-app notification for one user that links to the run's review page.
      */
-    private function notifyUser(PayrollRun $run, ?int $userId, string $title, string $message): void
+    private function notifyUser(PayrollRun $run, ?int $userId, string $title, string $message, ?string $url = null): void
     {
         if (!$userId) {
             return;
@@ -639,7 +835,47 @@ class PayrollReviewController extends Controller
             'data' => json_encode(['period_id' => $run->period_id]),
             'title' => $title,
             'message' => $message,
-            'action_url' => route('payroll.review', $run->period_id),
+            'action_url' => $url ?? route('payroll.review', $run->period_id),
         ]);
+    }
+
+    /**
+     * Tell everyone who works on this payroll, in the app only: whoever processed, submitted and approved the run, plus
+     * everyone who can process or approve payroll. The person who made the change is not told about their own action.
+     */
+    private function notifyPayrollTeam(PayrollRun $run, string $title, string $message, ?string $url = null): void
+    {
+        $people = collect([$run->processed_by, $run->submitted_by, $run->approved_by])
+            ->merge($this->usersWithPermissions(['create_payroll_processing', 'approve_payroll_processing']))
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->reject(fn ($id) => $id === (int) Auth::id());
+
+        foreach ($people as $userId) {
+            $this->notifyUser($run, $userId, $title, $message, $url);
+        }
+    }
+
+    /**
+     * The ids of users who hold any of the permissions, through a role or directly.
+     *
+     * @param  array<int, string>  $names
+     * @return array<int, int>
+     */
+    private function usersWithPermissions(array $names): array
+    {
+        $permissionIds = DB::table('cb_permissions')->whereIn('name', $names)->pluck('id');
+        if ($permissionIds->isEmpty()) {
+            return [];
+        }
+
+        $roleIds = DB::table('cb_permission_role')->whereIn('permission_id', $permissionIds)->pluck('role_id');
+        $userIds = DB::table('cb_role_user')->whereIn('role_id', $roleIds)->pluck('user_id');
+        if (Schema::hasTable('cb_permission_user')) {
+            $userIds = $userIds->merge(DB::table('cb_permission_user')->whereIn('permission_id', $permissionIds)->pluck('user_id'));
+        }
+
+        return $userIds->map(fn ($id) => (int) $id)->unique()->values()->all();
     }
 }

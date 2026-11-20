@@ -72,7 +72,7 @@ class PayrollElement extends Model
     {
         return match ($this->element_type) {
             '1' => 'Deduction',
-            '2' => 'Allowance',
+            '2' => 'Earnings',
             default => 'Unknown'
         };
     }

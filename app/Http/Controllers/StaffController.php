@@ -23,6 +23,10 @@ use App\Services\EmployeeContractReport;
 use App\Services\ContractPeriod;
 use App\Services\StaffEmailSuggestion;
 use App\Services\StaffNumbers;
+use App\Services\PasswordSetupLink;
+use App\Services\PositionRoles;
+use App\Services\StaffDocumentAccess;
+use App\Services\StaffResidency;
 use App\Models\User;
 use App\Models\Contract;
 use App\Models\ContractChange;
@@ -83,9 +87,18 @@ class StaffController extends Controller
         'documents.contract' => 'signed employment contract',
         'documents.cv' => 'CV',
         'documents.academic' => 'academic certificates',
+        'documents.helb' => 'HELB compliance certificate',
+        'nationality' => 'country of citizenship',
+        'residency_status' => 'residency',
+        'work_permit_number' => 'work permit or Alien ID number',
+        'work_permit_expiry' => 'work permit expiry date',
+        'passport' => 'passport number',
+        'is_helb_beneficiary' => 'HELB beneficiary answer',
+        'helb_exception_reason' => 'reason for the exception',
     ];
 
     private const UPLOAD_MESSAGES = [
+        'documents.helb.required' => 'The HELB compliance certificate is required. Upload it, or ask the HR Manager to record an exception with a reason.',
         'photo.uploaded' => 'The :attribute could not be received. Check the upload limit shown beside the field and choose a smaller file.',
         'documents.*.uploaded' => 'The :attribute could not be received. Check the upload limit shown beside the field and choose a smaller file.',
     ];
@@ -96,6 +109,7 @@ class StaffController extends Controller
         'contract'    => 'Signed Employment Contract',
         'cv'          => 'Curriculum Vitae (CV)',
         'academic'    => 'Academic Certificates & Transcripts',
+        'helb'        => 'HELB Compliance Certificate',
     ];
     /**
      * Display staff list page
@@ -165,9 +179,9 @@ class StaffController extends Controller
         }
 
         try {
+            // No password is taken: the new user is emailed a link to choose their own
             $validated = $request->validate([
                 'email' => 'required|email|max:255|unique:josya_users,email',
-                'password' => 'required|string|min:6|max:255',
             ]);
 
             $id = Crypt::decrypt($encryptedId);
@@ -182,12 +196,12 @@ class StaffController extends Controller
 
             $username = $this->buildUniqueUsername($validated['email'], $staff);
 
-            DB::transaction(function () use ($staff, $validated, $username) {
+            $user = DB::transaction(function () use ($staff, $validated, $username) {
                 $user = User::create([
                     'name' => $staff->full_names,
                     'username' => $username,
                     'email' => $validated['email'],
-                    'password' => $validated['password'],
+                    'password' => PasswordSetupLink::unusablePassword(),
                     'block' => 0,
                     'sendEmail' => 0,
                     'registerDate' => now(),
@@ -203,12 +217,19 @@ class StaffController extends Controller
                     'user_id' => $user->id,
                     'staff_id' => $staff->id,
                 ]);
+
+                return $user;
             });
 
+            $sent = app(PasswordSetupLink::class)->send($user);
+            $message = $sent
+                ? 'Staff converted to a system user. A link to choose a password was emailed to ' . $user->email . '.'
+                : 'Staff converted to a system user, but the email with the password link could not be sent. Open System Users and use Resend link.';
+
             if ($request->wantsJson()) {
-                return response()->json(['success' => true, 'message' => 'Staff converted to system user successfully.']);
+                return response()->json(['success' => true, 'message' => $message, 'email_sent' => $sent]);
             }
-            return redirect()->route('staff.index')->with('success', 'Staff converted to system user successfully.');
+            return redirect()->route('staff.index')->with($sent ? 'success' : 'error', $message);
         } catch (ValidationException $e) {
             if ($request->wantsJson()) {
                 return response()->json(['success' => false, 'errors' => $e->errors()], 422);
@@ -455,7 +476,7 @@ class StaffController extends Controller
         $departments = Department::orderBy('department_name')->get();
         $banks = Bank::orderBy('bank_name')->get();
         // Only positions that are switched on are offered for a new staff member
-        $positions = Position::active()->orderBy('position_name')->get();
+        $positions = Position::active()->with('role')->orderBy('position_name')->get();
         $zones = Zone::orderBy('zone_name')->get();
         $zoneAreas = ZoneArea::orderBy('area_name')->get();
         $roles = Role::orderBy('display_name')->get();
@@ -605,6 +626,20 @@ class StaffController extends Controller
             $carriedFiles = array_filter($submittedFiles, fn ($file, $field) => !$request->hasFile($field), ARRAY_FILTER_USE_BOTH);
             $requiredUpload = fn (string $field) => isset($carriedFiles[$field]) ? 'nullable' : 'required';
 
+            // The HELB compliance certificate is mandatory. The only way round it is an exception recorded by the HR Manager, with a written reason.
+            $helbException = $request->boolean('helb_exception');
+            if ($helbException && !app(StaffDocumentAccess::class)->canWaiveHelbCertificate(auth()->user())) {
+                throw ValidationException::withMessages(['helb_exception' => ['Only the HR Manager can record an exception to the HELB compliance certificate.']]);
+            }
+
+            // Someone who worked here before is rehired on their existing record (same staff number), not added a second time
+            $former = $request->filled('national_id')
+                ? Staff::where('national_id', trim((string) $request->input('national_id')))->where('current_status_id', 3)->first(['full_names', 'staff_number'])
+                : null;
+            if ($former) {
+                throw ValidationException::withMessages(['national_id' => ["This ID number belongs to {$former->full_names} (staff number {$former->staff_number}), who worked here before. Open their record and use Rehire, so they keep their staff number."]]);
+            }
+
             // Mobile number with its country code, emails in the company format
             $contact = app(StaffContactInput::class)->prepare($request);
 
@@ -612,7 +647,11 @@ class StaffController extends Controller
             $withoutLogin = EmploymentCategory::codesWithoutLogin();
             $loginRule = $withoutLogin ? 'required_unless:employment_type,' . implode(',', $withoutLogin) : 'required';
 
-            $validated = $request->validate($this->signatureRules() + [
+            // Citizenship and residency: the country first, then Resident or Non-resident. A form that does not send them (an older one) means Kenya.
+            $request->merge(app(StaffResidency::class)->defaults($request->all()));
+            $residencyRules = app(StaffResidency::class)->rules($request->input('nationality'));
+
+            $validated = $request->validate($this->signatureRules() + $residencyRules + [
                 'full_names' => 'required|string|max:255',
                 'employment_type' => ['required', 'string', Rule::in(EmploymentCategory::activeCodes())],
                 'mobile_number' => array_merge(['nullable', 'string', 'max:255'], $contact['mobile_number'] ?? []),
@@ -623,7 +662,8 @@ class StaffController extends Controller
                 'address' => 'nullable|string',
                 'passport' => 'nullable|string|max:255',
                 'department_id' => 'nullable|integer',
-                'position_id' => 'nullable|integer',
+                // A staff member who gets a login needs a position: their system role comes from it, there is no role box
+                'position_id' => $loginRule . '|nullable|integer',
                 'hire_date' => 'nullable|date',
                 'zone_id' => 'nullable|integer',
                 'managed_zone_ids' => 'nullable|array',
@@ -647,8 +687,16 @@ class StaffController extends Controller
                 'citizenship' => 'required|string',
                 'personal_email' => 'nullable|email|max:255',
                 'disability' => 'required|string',
+                // The data protection notice: already agreed by the staff member in their onboarding link, or HR records that they agreed
+                'data_notice_agreed' => ($onboarding && !empty($onboarding->submission['data_notice_agreed_at'])) ? 'nullable' : 'accepted',
+                // The day the staff member agreed (today unless they agreed earlier, for example on a paper copy); not in the future
+                'data_notice_date' => 'nullable|date|before_or_equal:today',
+                'is_helb_beneficiary' => 'required|in:YES,NO',
+                'helb_exception' => 'nullable|boolean',
+                'helb_exception_reason' => $helbException ? 'required|string|min:10|max:1000' : 'nullable|string|max:1000',
                 'photo' => 'nullable|image|mimes:jpg,jpeg,png|max:2048',
                 'documents' => 'nullable|array',
+                'documents.helb' => (isset($carriedFiles['documents.helb']) || $helbException ? 'nullable' : 'required') . '|file|mimes:pdf,png,jpg,jpeg|max:5120',
                 'documents.national_id' => $requiredUpload('documents.national_id') . '|file|mimes:pdf,png,jpg,jpeg|max:5120',
                 'documents.kra_pin'     => $requiredUpload('documents.kra_pin') . '|file|mimes:pdf,png,jpg,jpeg|max:5120',
                 'documents.contract'    => 'nullable|file|mimes:pdf|max:5120',
@@ -657,9 +705,7 @@ class StaffController extends Controller
                 'onboarding_invitation_id' => 'nullable|integer',
                 // Login details are needed unless the category's staff get no system login (casual workers)
                 'login_email' => array_merge([$loginRule, 'nullable', 'email', 'max:255'], $contact['login_email'] ?? []),
-                'role_id' => $loginRule . '|nullable|integer|exists:cb_roles,id',
-                'password' => 'nullable|string|min:8|max:255',
-            ], self::UPLOAD_MESSAGES, self::STATUTORY_ATTRIBUTES);
+            ], self::UPLOAD_MESSAGES + ['position_id.required' => 'Choose a position: the staff member\'s system role comes from it.'], self::STATUTORY_ATTRIBUTES);
 
             $this->validateStaffUploads($request, null, $carriedFiles, $onboarding?->id);
             $skipsLogin = in_array($validated['employment_type'], $withoutLogin, true);
@@ -669,12 +715,20 @@ class StaffController extends Controller
             unset($validated['managed_zone_ids'], $validated['supervised_zone_ids']);
             $this->assertNoOverlappingZoneRoles($managedZoneIds, $supervisedZoneIds);
 
-            // Uploaded files and the system-login fields are handled separately below, not mass-assigned to the staff record
+            // Uploaded files and the system-login fields are handled separately below, not mass-assigned to the staff record.
+            // No password is taken here: the new user is emailed a link to choose their own.
             $userValidated = [
                 'email' => $validated['login_email'] ?? null,
-                'role_id' => $validated['role_id'] ?? null,
-                'password' => $validated['password'] ?? null,
+                'role_id' => null,
             ];
+            // The system role always comes from the position (the form has no role box, and a role it sent is ignored)
+            if (!$skipsLogin) {
+                $position = Position::find($validated['position_id']);
+                if (!$position) {
+                    throw ValidationException::withMessages(['position_id' => ['Choose a position: the staff member\'s system role comes from it.']]);
+                }
+                $userValidated['role_id'] = app(PositionRoles::class)->roleFor($position)->id;
+            }
             unset($validated['photo'], $validated['documents'], $validated['login_email'], $validated['role_id'], $validated['password'], $validated['onboarding_invitation_id'], $validated['draft_id'], $validated['signature_file'], $validated['signature_data']);
 
             $validated = $this->applyPositionDepartment($validated);
@@ -687,14 +741,9 @@ class StaffController extends Controller
                 $validated['spouse_name'] = strtoupper($validated['spouse_name']);
             }
 
-            // Permanent and Temporary staff get a system login. A random password is generated when left blank.
-            $generatedPassword = null;
+            // Permanent and Temporary staff get a system login. It starts with a password nobody knows and the person is emailed a
+            // link to choose their own once the staff member is saved.
             if (!$skipsLogin) {
-                if (empty($userValidated['password'])) {
-                    $generatedPassword = Str::password(12);
-                    $userValidated['password'] = $generatedPassword;
-                }
-
                 if (User::where('email', $userValidated['email'])->exists()) {
                     throw ValidationException::withMessages([
                         'login_email' => ['This email is already registered as a system user login.'],
@@ -702,8 +751,26 @@ class StaffController extends Controller
                 }
             }
 
+            // Agreement to the data protection notice, with its date: the staff member's own (from their onboarding link), or HR's record of it
+            $onboardingAgreedAt = $onboarding ? ($onboarding->submission['data_notice_agreed_at'] ?? null) : null;
+            // HR's record: the date given (today by default; an earlier day is the start of that day), and HR's name
+            $agreedOn = !empty($validated['data_notice_date']) ? \Illuminate\Support\Carbon::parse($validated['data_notice_date']) : null;
+            $agreement = $onboardingAgreedAt
+                ? ['at' => \Illuminate\Support\Carbon::parse($onboardingAgreedAt), 'by' => null]
+                : ['at' => ($agreedOn && !$agreedOn->isToday()) ? $agreedOn->startOfDay() : now(), 'by' => auth()->id()];
+            unset($validated['data_notice_agreed'], $validated['data_notice_date']);
+            // The old citizenship column keeps its Resident / NO answer, so anything that reads it is unchanged
+            $validated['citizenship'] = StaffResidency::legacyCitizenship($validated['residency_status']);
+
+            // Whether they are a HELB loan beneficiary, and the exception (who allowed it, when, why) when the certificate is not on file
+            $validated['is_helb_beneficiary'] = $validated['is_helb_beneficiary'] === 'YES';
+            $helbExceptionData = $helbException && !isset($carriedFiles['documents.helb']) && !$request->hasFile('documents.helb')
+                ? ['helb_certificate_exception_reason' => $validated['helb_exception_reason'], 'helb_certificate_exception_by' => auth()->id(), 'helb_certificate_exception_at' => now()]
+                : [];
+            unset($validated['helb_exception'], $validated['helb_exception_reason']);
+
             // The number is chosen under the lock that also hands numbers to drafts, and the lock is kept until the staff member is saved
-            $staff = StaffNumbers::locked(fn () => DB::transaction(function () use ($request, $validated, $managedZoneIds, $supervisedZoneIds, $userValidated, $generatedPassword, $skipsLogin, $onboarding, $carriedFiles, $onboardingSignature, $draft) {
+            [$staff, $newUser] = StaffNumbers::locked(fn () => DB::transaction(function () use ($request, $validated, $managedZoneIds, $supervisedZoneIds, $userValidated, $skipsLogin, $onboarding, $carriedFiles, $onboardingSignature, $draft, $agreement, $helbExceptionData) {
                 // Lock the submission so a double submit cannot create two staff records from it
                 if ($onboarding) $this->reviewedOnboarding($onboarding->id, true);
 
@@ -715,6 +782,11 @@ class StaffController extends Controller
                 $staff->staff_number = StaffNumbers::numberForNewStaff($validated['employment_type'], $draft);
                 $staff->uid = uniqid('staff_', true);
                 $staff->current_status_id = 1;
+                $staff->data_notice_agreed_at = $agreement['at'];
+                $staff->data_notice_recorded_by = $agreement['by'];
+                foreach ($helbExceptionData as $column => $value) {
+                    $staff->{$column} = $value;
+                }
                 $staff->save();
 
                 // Save the profile photo
@@ -747,6 +819,7 @@ class StaffController extends Controller
                 $this->syncZoneRoles($staff, $managedZoneIds, $supervisedZoneIds);
 
                 // Only create a system user when the category gets a login
+                $user = null;
                 if (!$skipsLogin) {
                     $username = $this->buildUniqueUsername($userValidated['email'], $staff);
 
@@ -754,7 +827,7 @@ class StaffController extends Controller
                         'name' => $staff->full_names,
                         'username' => $username,
                         'email' => $userValidated['email'],
-                        'password' => $userValidated['password'],
+                        'password' => PasswordSetupLink::unusablePassword(),
                         'block' => 0,
                         'sendEmail' => 0,
                         'registerDate' => now(),
@@ -763,7 +836,7 @@ class StaffController extends Controller
                         'resetCount' => 0,
                         'otpKey' => '',
                         'otep' => '',
-                        'requireReset' => $generatedPassword ? 1 : 0,
+                        'requireReset' => 0,
                         'staff_id' => $staff->id,
                     ]);
 
@@ -778,7 +851,7 @@ class StaffController extends Controller
                     ]);
                 }
 
-                return $staff;
+                return [$staff, $user];
             }));
 
             if ($onboarding) {
@@ -805,8 +878,14 @@ class StaffController extends Controller
                 $redirect = redirect()->route('staff.show', Crypt::encrypt($staff->id))
                     ->with('success', 'Staff member created successfully. They have no contract yet, so a contract still needs to be added.');
             }
-            if ($generatedPassword) {
-                $redirect->with('generated_password', $generatedPassword);
+            // The staff member is saved; now the new login's owner is emailed their link. A failed email never undoes the save:
+            // the page says so, and Resend link on System Users sends it again.
+            if ($newUser) {
+                $redirect->with('account_setup', ['sent' => app(PasswordSetupLink::class)->send($newUser), 'email' => $newUser->email]);
+            }
+            // A HELB loan beneficiary needs a deduction set up and a declaration to HELB: say so on the next page
+            if ($staff->is_helb_beneficiary) {
+                $redirect->with('helb_prompt', ['name' => $staff->full_names]);
             }
             if ($request->expectsJson()) {
                 return response()->json(['redirect_url' => $redirect->getTargetUrl()]);
@@ -979,10 +1058,13 @@ class StaffController extends Controller
             && hash('sha256', Storage::disk('local')->get($document->file_path)) === hash_file('sha256', $file->getRealPath());
     }
 
-    private function discardDocuments($documents): void {
+    /**
+     * Take documents out of use (a signed contract that a newer file replaces). They leave the contract and the staff member's
+     * documents but are kept in the removal history, file included, so nothing is lost and the removal is on record.
+     */
+    private function discardDocuments($documents, string $reason = 'Replaced by a newer file'): void {
         foreach ($documents as $document) {
-            Storage::disk('local')->delete($document->file_path);
-            $document->delete();
+            $document->removeKeepingHistory(auth()->id(), $reason);
         }
     }
 
@@ -1032,9 +1114,9 @@ private function syncStaffFiles(Request $request, Staff $staff): array
         }
 
         if ($typeId && ($hasNewFile || in_array($key, $remove, true))) {
+            // The old document is kept in the removal history, file included, so it is not queued for deleting
             foreach ($existing->get($typeId, collect()) as $current) {
-                $obsolete[] = ['local', $current->file_path];
-                $current->delete();
+                $current->removeKeepingHistory(auth()->id(), $hasNewFile ? 'Replaced by a newer file' : 'Removed');
             }
         }
 
@@ -1126,7 +1208,10 @@ private function syncStaffFiles(Request $request, Staff $staff): array
         // Only a mobile number or email HR has changed is held to the company format, so older records can still be saved
         $contact = app(StaffContactInput::class)->prepare($request, Staff::find($id));
 
-        $validated = $request->validate($this->signatureRules() + [
+        $request->merge(app(StaffResidency::class)->defaults($request->all()));
+        $residencyRules = app(StaffResidency::class)->rules($request->input('nationality'), (int) $id, false);
+
+        $validated = $request->validate($this->signatureRules() + $residencyRules + [
             'remove_signature' => 'nullable|boolean',
             'staff_number' => 'required|string|max:255|unique:sys_staff,staff_number,' . $id,
             'full_names' => 'required|string|max:255',
@@ -1169,6 +1254,8 @@ private function syncStaffFiles(Request $request, Staff $staff): array
             'documents.contract'    => 'nullable|file|mimes:pdf|max:5120',
             'documents.cv'          => 'nullable|file|mimes:pdf,doc,docx|max:5120',
             'documents.academic'    => 'nullable|file|mimes:pdf,png,jpg,jpeg|max:5120',
+            'documents.helb'        => 'nullable|file|mimes:pdf,png,jpg,jpeg|max:5120',
+            'is_helb_beneficiary'   => 'nullable|in:YES,NO',
             'remove_documents'      => 'nullable|array',
             'remove_documents.*'    => 'in:' . implode(',', array_keys(self::DOCUMENT_MAP)),
         ], self::UPLOAD_MESSAGES, self::STATUTORY_ATTRIBUTES);
@@ -1184,6 +1271,14 @@ private function syncStaffFiles(Request $request, Staff $staff): array
         unset($validated['photo'], $validated['documents'], $validated['remove_documents'], $validated['signature_file'], $validated['signature_data'], $validated['remove_signature']);
 
         $validated = $this->applyPositionDepartment($validated);
+        $validated['citizenship'] = StaffResidency::legacyCitizenship($validated['residency_status']);
+
+        // The HELB beneficiary answer is only changed when the form sends one
+        if (isset($validated['is_helb_beneficiary'])) {
+            $validated['is_helb_beneficiary'] = $validated['is_helb_beneficiary'] === 'YES';
+        } else {
+            unset($validated['is_helb_beneficiary']);
+        }
 
         $staff = Staff::findOrFail($id);
 
@@ -1196,6 +1291,7 @@ private function syncStaffFiles(Request $request, Staff $staff): array
         }
 
         $obsoleteFiles = [];
+        $oldPositionId = $staff->position_id;
         DB::transaction(function () use ($request, $staff, $validated, $managedZoneIds, $supervisedZoneIds, &$obsoleteFiles) {
             $staff->update($validated);
             $this->syncZoneRoles($staff, $managedZoneIds, $supervisedZoneIds);
@@ -1214,6 +1310,10 @@ private function syncStaffFiles(Request $request, Staff $staff): array
         }
 
         $redirect = redirect()->route('staff.show', Crypt::encrypt($staff->id))->with('success', 'Staff member updated successfully');
+        // A new position has its own system role: ask whether their login should follow it (nothing changes unless someone says yes)
+        if ($offer = StaffPositionRoleController::offerFor($staff->fresh(), $oldPositionId)) {
+            $redirect->with('role_prompt', $offer);
+        }
         if ($request->expectsJson()) {
             return response()->json(['redirect_url' => $redirect->getTargetUrl()]);
         }
@@ -1300,10 +1400,16 @@ private function syncStaffFiles(Request $request, Staff $staff): array
     {
         // Staff whose signed contract was uploaded with the staff record, so the form can show it instead of asking again
         $typeId = DocumentType::where('name', 'Signed Employment Contract')->value('id');
-        $staffSignedContracts = $typeId
-            ? EmployeeDocument::where('document_type_id', $typeId)->whereNull('contract_id')->orderBy('id')->get(['id', 'employee_id', 'file_name'])
-                ->mapWithKeys(fn ($document) => [$document->employee_id => ['id' => $document->id, 'name' => $document->file_name]])
+        $onFile = $typeId
+            ? EmployeeDocument::where('document_type_id', $typeId)->whereNull('contract_id')->orderBy('id')->get(['id', 'employee_id', 'file_name', 'created_at', 'uploaded_by'])
             : collect();
+        $uploaders = User::whereIn('id', $onFile->pluck('uploaded_by')->filter()->unique())->pluck('name', 'id');
+        $staffSignedContracts = $onFile->mapWithKeys(fn ($document) => [$document->employee_id => [
+            'id' => $document->id,
+            'name' => $document->file_name,
+            'uploaded' => $document->created_at?->format('d M Y'),
+            'by' => $uploaders[$document->uploaded_by] ?? null,
+        ]]);
 
         return view('staff.contracts.contracts_create', compact('staffSignedContracts'));
     }

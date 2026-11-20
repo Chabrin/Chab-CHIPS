@@ -6,20 +6,22 @@ use App\Exceptions\ClientAccountException;
 use App\Http\Controllers\RecoveryController;
 use App\Models\Recovery;
 use App\Services\GlJournalPoster;
-use App\Services\PaidOwnerService;
+use App\Services\RecoveryService;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Schema;
 use Mockery;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 /**
- * A tenant pays the landlord directly (Paid Owner). The field officer records it, the confirmer role confirms it, and
- * confirming pays the invoice down, credits the tenant ledger and debits the client ledger, all or nothing.
+ * The five recovery reasons: Paid Owner (a tenant pays the landlord directly), Sat Deposit, Overpaid, Absconded and Paid
+ * Vacant. The field officer records one, the confirmer role confirms it, and confirming pays the invoice down, credits the
+ * tenant ledger, gives the tenant a receipt and debits the client ledger, all or nothing.
  */
-class PaidOwnerServiceTest extends TestCase
+class RecoveryServiceTest extends TestCase
 {
     const CREATOR = 11;
     const CONFIRMER = 10;
@@ -34,6 +36,43 @@ class PaidOwnerServiceTest extends TestCase
             $table->increments('id');
             $table->string('type_name')->nullable();
             $table->integer('workflow_status_id')->nullable();
+            $table->string('item_code')->nullable();
+            $table->string('is_commissionable')->nullable();
+        });
+        Schema::create('sys_pm_tenants_payments_allocated', function ($table) {
+            $table->increments('id');
+            $table->dateTime('date_time')->nullable();
+            $table->dateTime('payment_date')->nullable();
+            $table->string('batch_id')->nullable();
+            $table->string('entry_id')->nullable();
+            $table->string('receipt_number', 50)->nullable();
+            $table->decimal('amount', 19, 4)->default(0);
+            $table->string('narration')->nullable();
+            $table->string('pay_for')->nullable();
+            $table->integer('payment_month')->nullable();
+            $table->integer('payment_year')->nullable();
+            $table->string('payment_mode')->nullable();
+            $table->string('payment_channel')->nullable();
+            $table->string('security_code')->nullable();
+            $table->string('reference_number')->nullable();
+            $table->string('entry_ref')->nullable();
+            $table->decimal('trans_amount', 19, 4)->default(0);
+            $table->string('trans_type')->nullable();
+            $table->string('trans_remarks')->nullable();
+            $table->string('trans_part')->nullable();
+            $table->integer('receipt_month')->nullable();
+            $table->integer('receipt_year')->nullable();
+            $table->integer('is_recovery')->default(0);
+            $table->integer('is_in_account')->default(0);
+            $table->integer('property_id')->nullable();
+            $table->integer('client_id')->nullable();
+            $table->integer('unit_id')->nullable();
+            $table->integer('tenant_id')->nullable();
+            $table->integer('zone_id')->nullable();
+            $table->integer('field_officer_id')->nullable();
+            $table->integer('zone_supervisor_id')->nullable();
+            $table->integer('zone_manager_id')->nullable();
+            $table->integer('current_status_id')->default(1);
         });
         Schema::create('approval_workflows', function ($table) {
             $table->increments('id');
@@ -68,6 +107,16 @@ class PaidOwnerServiceTest extends TestCase
             $table->increments('id');
             $table->string('name');
             $table->string('display_name')->nullable();
+            $table->boolean('is_global')->default(false);
+        });
+        Schema::create('sys_user_staff_links', function ($table) {
+            $table->integer('user_id');
+            $table->integer('staff_id');
+        });
+        Schema::create('sys_set_zones', function ($table) {
+            $table->increments('id');
+            $table->integer('zone_manager_id')->nullable();
+            $table->integer('zone_supervisor_id')->nullable();
         });
         Schema::create('cb_role_user', function ($table) {
             $table->integer('role_id');
@@ -89,6 +138,10 @@ class PaidOwnerServiceTest extends TestCase
             $table->integer('client_id')->nullable();
             $table->integer('zone_id')->nullable();
             $table->string('reference_number')->nullable();
+            $table->integer('active')->default(1);
+            $table->integer('field_officer_id')->nullable();
+            $table->integer('zone_manager_id')->nullable();
+            $table->integer('zone_supervisor_id')->nullable();
         });
         Schema::create('sys_pm_service_agreements', function ($table) {
             $table->increments('id');
@@ -219,10 +272,18 @@ class PaidOwnerServiceTest extends TestCase
             $table->integer('tenants_account_id')->nullable();
         });
 
-        DB::table('sys_set_transactions_types')->insert(['id' => 34, 'type_name' => 'Paid Owner', 'workflow_status_id' => 37]);
+        DB::table('sys_set_transactions_types')->insert([
+            ['id' => 31, 'type_name' => 'Paid Vacant', 'workflow_status_id' => 34, 'item_code' => '2029', 'is_commissionable' => 'No'],
+            ['id' => 32, 'type_name' => 'Sat Deposit', 'workflow_status_id' => 35, 'item_code' => '2030', 'is_commissionable' => 'Yes'],
+            ['id' => 33, 'type_name' => 'Absconded', 'workflow_status_id' => 36, 'item_code' => '2031', 'is_commissionable' => 'No'],
+            ['id' => 34, 'type_name' => 'Paid Owner', 'workflow_status_id' => 37, 'item_code' => '2032', 'is_commissionable' => 'Yes'],
+            ['id' => 84, 'type_name' => 'Overpaid', 'workflow_status_id' => 1, 'item_code' => '2079', 'is_commissionable' => 'Yes'],
+            ['id' => 49, 'type_name' => 'Printing & Office Stationery', 'workflow_status_id' => 1, 'item_code' => '2046', 'is_commissionable' => 'No'],
+        ]);
         DB::table('approval_workflows')->insert(['id' => 1, 'workflow_name' => 'paid_owner_confirmation']);
         DB::table('workflow_approvers')->insert(['workflow_id' => 1, 'position_type' => 'role', 'role_id' => self::ROLE]);
-        DB::table('cb_roles')->insert(['id' => self::ROLE, 'name' => 'auditor', 'display_name' => 'Auditor']);
+        DB::table('cb_roles')->insert([['id' => self::ROLE, 'name' => 'auditor', 'display_name' => 'Auditor', 'is_global' => false], ['id' => 80, 'name' => 'director', 'display_name' => 'Director', 'is_global' => true]]);
+        DB::table('cb_role_user')->insert(['role_id' => 80, 'user_id' => self::CREATOR]); // the recorder sees every zone unless a test says otherwise
         DB::table('cb_role_user')->insert(['role_id' => self::ROLE, 'user_id' => self::CONFIRMER]);
         DB::table('josya_users')->insert([['id' => self::CREATOR, 'name' => 'Field Officer'], ['id' => self::CONFIRMER, 'name' => 'Auditor One'], ['id' => self::OUTSIDER, 'name' => 'Someone Else']]);
         DB::table('sys_pm_clients')->insert([['id' => 100, 'names' => 'Landlord', 'reference_number' => 'LAN-00100'], ['id' => 200, 'names' => 'Tenant', 'reference_number' => 'TEN-00200']]);
@@ -239,9 +300,9 @@ class PaidOwnerServiceTest extends TestCase
     /**
      * The service with a GL poster that must not be called unless a test says so.
      */
-    protected function service(?GlJournalPoster $gl = null): PaidOwnerService
+    protected function service(?GlJournalPoster $gl = null): RecoveryService
     {
-        return new PaidOwnerService($gl ?? Mockery::mock(GlJournalPoster::class));
+        return new RecoveryService($gl ?? Mockery::mock(GlJournalPoster::class));
     }
 
     /**
@@ -485,12 +546,346 @@ class PaidOwnerServiceTest extends TestCase
         $this->service()->confirm($recovery, self::CONFIRMER);
     }
 
+    public static function reasons(): array
+    {
+        return [
+            'Paid Vacant' => [31, '0024', 'REC', 1, 'PAID VACANT', 'paid_vacant', '2029'],
+            'Sat Deposit' => [32, '0024', 'REC', 1, 'SAT DEPOSIT', 'sat_deposit', '2030'],
+            'Absconded' => [33, '0024', 'REC', 1, 'ABSCONDED', 'absconded', '2031'],
+            'Paid Owner' => [34, '0007', 'PO', 0, 'PAID OWNER', 'paid_owner', '2032'],
+            'Overpaid' => [84, '0024', 'REC', 1, 'OVERPAID', 'overpaid', '2079'],
+        ];
+    }
+
+    #[DataProvider('reasons')]
+    public function test_every_reason_settles_the_invoice_credits_the_tenant_gives_a_receipt_and_debits_the_client(int $typeId, string $code, string $mode, int $isRecovery, string $label): void
+    {
+        $recovery = $this->recovery(4000, ['type_id' => $typeId, 'ref_number' => 'REC-2026-00007', 'proof_path' => $typeId === 34 ? 'recovery_proofs/1/proof.pdf' : null]);
+
+        $result = $this->service()->confirm($recovery, self::CONFIRMER);
+
+        $this->assertSame('REC-2026-00007', $result['receipt']);
+        $this->assertEquals(6000.0, (float) $this->invoice()->current_balance);
+        $this->assertSame(8, (int) $this->invoice()->current_status_id);
+
+        // the tenant's ledger: one credit in the reason's mode, tied to the invoice, the reference in entry_ref
+        $credit = DB::table('sys_pm_tenants_accounts_trans')->first();
+        $this->assertSame($mode, $credit->payment_mode);
+        $this->assertEquals(4000.0, (float) $credit->credit_amount);
+        $this->assertSame(500, (int) $credit->invoice_id);
+        $this->assertSame('REC-2026-00007', $credit->entry_ref);
+
+        // the tenant's receipt, in the old system's shape: the recovery reference, mode PO or REC, recoveries flagged
+        $this->assertSame(1, DB::table('sys_pm_tenants_payments_allocated')->count());
+        $receipt = DB::table('sys_pm_tenants_payments_allocated')->first();
+        $this->assertSame('REC-2026-00007', $receipt->receipt_number);
+        $this->assertSame('REC-2026-00007', $receipt->reference_number);
+        $this->assertSame($mode, $receipt->payment_mode);
+        $this->assertSame($label, $receipt->entry_ref);
+        $this->assertSame($isRecovery, (int) $receipt->is_recovery);
+        $this->assertEquals(4000.0, (float) $receipt->amount);
+        $this->assertSame('RENT FOR July 2026', $receipt->narration);
+        $this->assertSame(200, (int) $receipt->tenant_id);
+        $this->assertSame(400, (int) $receipt->unit_id);
+        $this->assertSame(300, (int) $receipt->property_id);
+        $this->assertSame(7, (int) $receipt->payment_month);
+        $this->assertSame(2026, (int) $receipt->payment_year);
+
+        // the client's ledger: code 0007 for Paid Owner, 0024 (Rent recovery) for the rest, the reason leading the particulars
+        $debit = DB::table('cb_landlord_account')->first();
+        $this->assertSame($code, $debit->entry_type_code);
+        $this->assertSame($label, $debit->entry_description);
+        $this->assertStringStartsWith($label . ' REC-2026-00007', $debit->entry_particulars);
+        $this->assertEquals(4000.0, (float) $debit->debit_amount);
+        $this->assertSame(0, (int) $debit->is_recovered);
+        $this->assertNull($debit->return_code);
+        $this->assertSame(100, (int) $debit->client_id);
+
+        $this->assertSame(5, (int) $recovery->fresh()->current_status_id);
+    }
+
+    #[DataProvider('reasons')]
+    public function test_every_reason_posts_its_own_gl_journal_under_its_own_transaction_type(int $typeId, string $code, string $mode, int $isRecovery, string $label, string $key, string $itemCode): void
+    {
+        config(['accounting.post_invoice_journals' => true]);
+        $gl = Mockery::mock(GlJournalPoster::class);
+        $gl->shouldReceive('exists')->once()->andReturn(false);
+        $gl->shouldReceive('journal')->once()->withArgs(function ($reference, $narration, $details, $lines, $userId, $type) use ($key, $itemCode) {
+            return $details === 'recovery_id:1:' . $key && $type === $itemCode && $lines[0]['type'] === 'Debit' && $lines[1]['type'] === 'Credit';
+        })->andReturn(99);
+
+        $this->service($gl)->confirm($this->recovery(4000, ['type_id' => $typeId, 'proof_path' => $typeId === 34 ? 'recovery_proofs/1/proof.pdf' : null]), self::CONFIRMER);
+
+        $this->assertSame(1, DB::table('cb_landlord_account')->count());
+    }
+
+    public function test_only_paid_owner_needs_a_proof_document(): void
+    {
+        $service = $this->service();
+
+        foreach ([31, 32, 33, 84] as $typeId) {
+            $service->assertProofGiven(['type_id' => $typeId], null, null);
+        }
+
+        $this->expectException(ClientAccountException::class);
+        $service->assertProofGiven(['type_id' => 34], null, null);
+    }
+
+    public function test_the_reason_sets_the_commissionable_flag_and_other_types_leave_it_to_the_form(): void
+    {
+        $service = $this->service();
+
+        $this->assertSame('No', $service->commissionFlag(31));
+        $this->assertSame('Yes', $service->commissionFlag(32));
+        $this->assertSame('No', $service->commissionFlag(33));
+        $this->assertSame('Yes', $service->commissionFlag(34));
+        $this->assertSame('Yes', $service->commissionFlag(84));
+        $this->assertNull($service->commissionFlag(49));
+        $this->assertSame([31, 32, 33, 34, 84], $service->reasonTypeIds());
+    }
+
+    public function test_the_form_is_told_each_reasons_commission_and_whether_a_proof_is_needed(): void
+    {
+        $options = $this->service()->reasonOptions();
+
+        $this->assertSame([31, 32, 33, 34, 84], array_keys($options));
+        $this->assertTrue($options[34]['proof_required']);
+        $this->assertFalse($options[32]['proof_required']);
+        $this->assertSame('Yes', $options[32]['commission']);
+        $this->assertStringContainsString('kept', $options[32]['commission_note']);
+        $this->assertSame('No', $options[33]['commission']);
+        $this->assertStringContainsString('reversing it is not switched on', $options[33]['commission_note']);
+    }
+
+    public function test_a_confirm_of_a_reason_without_a_proof_works_but_paid_owner_still_needs_it(): void
+    {
+        $this->service()->confirm($this->recovery(4000, ['type_id' => 32, 'proof_path' => null]), self::CONFIRMER);
+        $this->assertSame(1, DB::table('sys_pm_tenants_payments_allocated')->count());
+
+        $this->expectException(ClientAccountException::class);
+        $this->expectExceptionMessage('no proof document');
+        $this->service()->confirm($this->recovery(1000, ['type_id' => 34, 'proof_path' => null, 'ref_number' => 'PO-2']), self::CONFIRMER);
+    }
+
+    public function test_recoveries_of_every_reason_waiting_on_an_invoice_count_against_its_balance(): void
+    {
+        $this->recovery(6000, ['type_id' => 32, 'ref_number' => 'SD-1', 'proof_path' => null]);
+
+        try {
+            $this->service()->assertRecordable(['type_id' => 33, 'client_id' => 100, 'property_id' => 300, 'unit_id' => 400, 'tenant_id' => 200, 'offset_invoice_id' => 500, 'amount' => 5000]);
+            $this->fail('An Absconded recovery was accepted although a waiting Sat Deposit took most of the invoice.');
+        } catch (ClientAccountException $e) {
+            $this->assertStringContainsString('4,000.00', $e->getMessage());
+        }
+
+        $this->service()->assertRecordable(['type_id' => 33, 'client_id' => 100, 'property_id' => 300, 'unit_id' => 400, 'tenant_id' => 200, 'offset_invoice_id' => 500, 'amount' => 4000]);
+        $this->assertTrue(true);
+    }
+
+    public function test_rejecting_a_reason_other_than_paid_owner_posts_no_receipt(): void
+    {
+        $recovery = $this->recovery(4000, ['type_id' => 32, 'proof_path' => null]);
+
+        $this->service()->reject($recovery, self::CONFIRMER, 'Wrong tenant');
+
+        $this->assertSame(0, DB::table('sys_pm_tenants_payments_allocated')->count());
+        $this->assertSame(0, DB::table('sys_pm_tenants_accounts_trans')->count());
+        $this->assertSame(0, DB::table('cb_landlord_account')->count());
+        $this->assertSame(41, (int) $recovery->fresh()->current_status_id);
+    }
+
+    public function test_a_failure_after_the_receipt_is_written_rolls_the_receipt_back_too(): void
+    {
+        DB::table('sys_pm_clients')->where('id', 100)->delete(); // the client debit cannot find the landlord
+
+        try {
+            $this->service()->confirm($this->recovery(4000, ['type_id' => 32, 'proof_path' => null]), self::CONFIRMER);
+            $this->fail('The confirm went through without a landlord.');
+        } catch (ClientAccountException $e) {
+            $this->assertStringContainsString('could not be found', $e->getMessage());
+        }
+
+        $this->assertSame(0, DB::table('sys_pm_tenants_payments_allocated')->count());
+        $this->assertSame(0, DB::table('sys_pm_tenants_accounts_trans')->count());
+        $this->assertEquals(10000.0, (float) $this->invoice()->current_balance);
+    }
+
+    /**
+     * Sign in as a user, for the controller calls that read the signed-in user.
+     */
+    protected function actAs(int $userId): void
+    {
+        $user = new \App\Models\User();
+        $user->id = $userId;
+        $this->be($user);
+    }
+
+    /**
+     * The form fields of a recovery against invoice 500.
+     */
+    protected function form(int $typeId, array $overrides = []): array
+    {
+        return array_merge([
+            'type_id' => $typeId, 'recovery_date' => '2026-07-20', 'amount' => 4000, 'narration' => 'Rent for July',
+            'client_id' => 100, 'property_id' => 300, 'unit_id' => 400, 'tenant_id' => 200, 'offset_invoice_id' => 500,
+        ], $overrides);
+    }
+
+    public function test_saving_a_reason_takes_the_commission_flag_from_the_reason_not_the_form(): void
+    {
+        $this->actAs(self::CREATOR);
+        $controller = new RecoveryController($this->service());
+
+        // Sat Deposit keeps commission: the flag is filled in without being posted
+        $controller->store(Request::create('/x', 'POST', $this->form(32)));
+        // Absconded is flagged No: a posted Yes is ignored
+        $controller->store(Request::create('/x', 'POST', $this->form(33, ['commisionable' => 'Yes', 'amount' => 1000])));
+
+        $saved = Recovery::orderBy('id')->get();
+        $this->assertCount(2, $saved);
+        $this->assertSame('Yes', $saved[0]->commisionable);
+        $this->assertSame('No', $saved[1]->commisionable);
+        $this->assertSame(1, (int) $saved[0]->current_status_id);
+        $this->assertStringStartsWith('REC-' . now()->year . '-', $saved[0]->ref_number);
+        $this->assertSame(self::CREATOR, (int) $saved[0]->created_by);
+    }
+
+    public function test_saving_a_reason_without_its_invoice_is_refused_and_nothing_is_saved(): void
+    {
+        $this->actAs(self::CREATOR);
+        $controller = new RecoveryController($this->service());
+
+        $response = $controller->store(Request::create('/x', 'POST', $this->form(31, ['offset_invoice_id' => null])));
+
+        $this->assertSame(0, Recovery::count());
+        $this->assertStringContainsString('needs the invoice', (string) session('error'));
+        $this->assertTrue($response->isRedirect());
+    }
+
+    public function test_saving_a_reason_is_refused_when_the_waiting_recoveries_use_up_the_invoice(): void
+    {
+        $this->actAs(self::CREATOR);
+        $controller = new RecoveryController($this->service());
+
+        $controller->store(Request::create('/x', 'POST', $this->form(32, ['amount' => 9000])));
+        $controller->store(Request::create('/x', 'POST', $this->form(33, ['amount' => 2000])));
+
+        $this->assertSame(1, Recovery::count());
+        $this->assertStringContainsString('1,000.00', (string) session('error'));
+    }
+
+    public function test_another_type_still_needs_the_commission_choice_and_no_invoice(): void
+    {
+        $this->actAs(self::CREATOR);
+        $controller = new RecoveryController($this->service());
+
+        $controller->store(Request::create('/x', 'POST', $this->form(49, ['offset_invoice_id' => null, 'unit_id' => null, 'tenant_id' => null])));
+        $this->assertSame(0, Recovery::count());
+
+        $controller->store(Request::create('/x', 'POST', $this->form(49, ['commisionable' => 'No', 'offset_invoice_id' => null, 'unit_id' => null, 'tenant_id' => null])));
+        $this->assertSame(1, Recovery::count());
+        $this->assertSame('No', Recovery::first()->commisionable);
+    }
+
+    public function test_a_user_limited_to_a_zone_cannot_record_against_a_property_outside_it(): void
+    {
+        DB::table('cb_role_user')->where('user_id', self::CREATOR)->delete(); // no global role: zone-limited, and linked to no staff record
+        $this->actAs(self::CREATOR);
+
+        (new RecoveryController($this->service()))->store(Request::create('/x', 'POST', $this->form(32)));
+
+        $this->assertSame(0, Recovery::count());
+        $this->assertStringContainsString('not in your zone', (string) session('error'));
+    }
+
+    public function test_a_zone_user_can_record_against_a_property_they_are_assigned_to(): void
+    {
+        DB::table('cb_role_user')->where('user_id', self::CREATOR)->delete();
+        DB::table('sys_user_staff_links')->insert(['user_id' => self::CREATOR, 'staff_id' => 9]);
+        DB::table('sys_pm_properties')->where('id', 300)->update(['field_officer_id' => 9]);
+        $this->actAs(self::CREATOR);
+
+        (new RecoveryController($this->service()))->store(Request::create('/x', 'POST', $this->form(32)));
+
+        $this->assertSame(1, Recovery::count());
+    }
+
+    public function test_a_reason_cannot_be_dated_in_the_future_but_another_type_can(): void
+    {
+        $this->actAs(self::CREATOR);
+        $controller = new RecoveryController($this->service());
+
+        $controller->store(Request::create('/x', 'POST', $this->form(32, ['recovery_date' => now()->addDay()->format('Y-m-d')])));
+        $this->assertSame(0, Recovery::count());
+
+        $controller->store(Request::create('/x', 'POST', $this->form(32, ['recovery_date' => now()->format('Y-m-d')])));
+        $this->assertSame(1, Recovery::count());
+
+        $controller->store(Request::create('/x', 'POST', $this->form(49, ['commisionable' => 'No', 'offset_invoice_id' => null, 'unit_id' => null, 'tenant_id' => null, 'recovery_date' => now()->addDay()->format('Y-m-d')])));
+        $this->assertSame(2, Recovery::count());
+    }
+
+    public function test_only_the_person_who_recorded_a_reason_can_edit_it_even_with_the_confirmer_seat(): void
+    {
+        $this->actAs(self::CREATOR);
+        (new RecoveryController($this->service()))->store(Request::create('/x', 'POST', $this->form(32, ['amount' => 4000])));
+        $recovery = Recovery::first();
+        $encrypted = \Illuminate\Support\Facades\Crypt::encrypt($recovery->id);
+
+        // the confirmer holds the seat and tries to rewrite the amount before confirming it alone
+        $this->actAs(self::CONFIRMER);
+        (new RecoveryController($this->service()))->update(Request::create('/x', 'PUT', $this->form(32, ['amount' => 9000])), $encrypted);
+
+        $this->assertEquals(4000.0, (float) $recovery->fresh()->amount);
+        $this->assertStringContainsString('Only the person who recorded', (string) session('error'));
+
+        $this->actAs(self::CREATOR);
+        (new RecoveryController($this->service()))->update(Request::create('/x', 'PUT', $this->form(32, ['amount' => 5000])), $encrypted);
+        $this->assertEquals(5000.0, (float) $recovery->fresh()->amount);
+    }
+
+    public function test_the_edit_page_is_refused_to_anyone_but_the_recorder(): void
+    {
+        $this->actAs(self::CREATOR);
+        (new RecoveryController($this->service()))->store(Request::create('/x', 'POST', $this->form(32)));
+        $encrypted = \Illuminate\Support\Facades\Crypt::encrypt(Recovery::first()->id);
+
+        $this->actAs(self::CONFIRMER);
+        $response = (new RecoveryController($this->service()))->edit($encrypted);
+
+        $this->assertTrue($response->isRedirect());
+        $this->assertStringContainsString('Only the person who recorded', (string) session('error'));
+    }
+
+    public function test_another_type_can_still_be_edited_by_anyone(): void
+    {
+        $recovery = $this->recovery(100, ['type_id' => 49, 'commisionable' => 'No', 'offset_invoice_id' => null, 'proof_path' => null]);
+        DB::table('cb_role_user')->insert(['role_id' => 80, 'user_id' => self::CONFIRMER]); // sees every zone
+        $this->actAs(self::CONFIRMER);
+
+        (new RecoveryController($this->service()))->update(Request::create('/x', 'PUT', $this->form(49, ['amount' => 250, 'commisionable' => 'No', 'offset_invoice_id' => null, 'unit_id' => null, 'tenant_id' => null])), \Illuminate\Support\Facades\Crypt::encrypt($recovery->id));
+
+        $this->assertEquals(250.0, (float) $recovery->fresh()->amount);
+    }
+
+    public function test_the_form_offers_the_five_reasons_with_the_types_it_always_offered(): void
+    {
+        DB::table('sys_set_transactions_types')->insert(['id' => 90, 'type_name' => 'Hidden Type', 'workflow_status_id' => 12, 'item_code' => '2999']);
+        $controller = new RecoveryController($this->service());
+        $method = new \ReflectionMethod($controller, 'transactionTypes');
+        $method->setAccessible(true);
+
+        $names = $method->invoke($controller)->pluck('type_name')->all();
+
+        $this->assertEqualsCanonicalizing(['Absconded', 'Overpaid', 'Paid Owner', 'Paid Vacant', 'Printing & Office Stationery', 'Sat Deposit'], $names);
+    }
+
     public function test_a_recovery_of_another_type_is_not_confirmed_here(): void
     {
         DB::table('sys_set_transactions_types')->insert(['id' => 4, 'type_name' => 'Client Expense', 'workflow_status_id' => 1]);
 
         $this->expectException(ClientAccountException::class);
-        $this->expectExceptionMessage('not a paid-owner recovery');
+        $this->expectExceptionMessage('approved on the Property Confirmations page');
 
         $this->service()->confirm($this->recovery(4000, ['type_id' => 4]), self::CONFIRMER);
     }

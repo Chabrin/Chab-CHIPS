@@ -6,6 +6,7 @@ use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 
@@ -148,5 +149,21 @@ class StaffPasswordPolicy
         DB::table('password_securities')->updateOrInsert(['user_id' => $user->id], [
             'password_changed_at' => now(), 'password_updated_at' => now(), 'updated_at' => now(),
         ]);
+        $this->useUpSetupLink($user);
+    }
+
+    /**
+     * Someone who sets a password another way (Forgot password, say) no longer waits for the emailed setup link, so that link is
+     * used up too: the System Users list stops showing them as waiting and the old link stops working.
+     */
+    protected function useUpSetupLink(User $user): void
+    {
+        // Passwords change rarely, so asking each time is cheap; it also keeps older databases (before the setup columns) working
+        if (!Schema::hasColumn('josya_users', 'password_setup_used_at')) {
+            return;
+        }
+        DB::table('josya_users')->where('id', $user->id)
+            ->whereNotNull('password_setup_token')->whereNull('password_setup_used_at')
+            ->update(['password_setup_used_at' => now()]);
     }
 }

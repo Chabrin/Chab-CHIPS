@@ -139,7 +139,7 @@ $carriedFrom = fn ($field) => $fromDraft($field) ? 'Saved with your draft' : 'Re
                         <div class="alert alert-warning">You need the "create users" permission to add staff, because every staff member gets a system login.</div>
                         @endif
 
-                       <form action="{{ route('staff.store') }}" method="POST" id="staffCreateForm" enctype="multipart/form-data" data-file-slots data-email-domain="{{ config('staff.email_domain') }}" novalidate
+                       <form action="{{ route('staff.store') }}" method="POST" id="staffCreateForm" autocomplete="off" enctype="multipart/form-data" data-file-slots data-email-domain="{{ config('staff.email_domain') }}" novalidate
                               data-draft-save-url="{{ route('staff.drafts.save') }}" data-drafts-url="{{ route('staff.drafts.index') }}" data-last-tab="{{ $draft?->last_tab }}" data-stages="{{ $draft ? json_encode($draft->stageStatuses()) : '' }}">
                             @csrf
                             @if($onboarding)
@@ -265,10 +265,12 @@ $carriedFrom = fn ($field) => $fromDraft($field) ? 'Saved with your draft' : 'Re
                                         </div>
                                         <div class="col-md-4 mb-3">
                                             <label for="national_id" class="form-label">National ID <span class="text-danger">*</span></label>
-                                            <input type="text" class="form-control @error('national_id') is-invalid @enderror" id="national_id" name="national_id" value="{{ $val('national_id') }}" required>
+                                            <input type="text" class="form-control @error('national_id') is-invalid @enderror" id="national_id" name="national_id" value="{{ $val('national_id') }}" data-former-url="{{ route('staff.former-match') }}" required>
                                             @error('national_id')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
+                                            {{-- Says at once if this person is already on record, or worked here before (then: Rehire, same staff number) --}}
+                                            <div id="formerMatch" class="alert d-none mt-2 mb-0 py-2 small" role="status"></div>
                                         </div>
                                         <div class="col-md-4 mb-3">
                                             <label for="passport" class="form-label">Passport Number</label>
@@ -297,17 +299,15 @@ $carriedFrom = fn ($field) => $fromDraft($field) ? 'Saved with your draft' : 'Re
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
-                                        <div class="col-md-4 mb-3">
-                                            <label for="citizenship" class="form-label">Citizenship <span class="text-danger">*</span></label>
-                                            <select class="form-select @error('citizenship') is-invalid @enderror" id="citizenship" name="citizenship" required>
-                                                <option value="">Select Option</option>
-                                                <option value="RESIDENT" {{ $val('citizenship') == 'RESIDENT' ? 'selected' : '' }}>RESIDENT</option>
-                                                <option value="NO" {{ $val('citizenship') == 'NO' ? 'selected' : '' }}>NO</option>
-                                            </select>
-                                            @error('citizenship')
-                                            <div class="invalid-feedback">{{ $message }}</div>
-                                            @enderror
-                                        </div>
+                                        {{-- Country of citizenship, then Resident or Non-resident; a work permit for anyone who is not Kenyan --}}
+                                        @php($oldCitizenship = strtoupper((string) $val('citizenship')))
+                                        @include('staff.partials.citizenship-fields', [
+                                            'nationality' => $val('nationality'),
+                                            'residency' => $val('residency_status', $oldCitizenship === 'NO' ? 'NON_RESIDENT' : ($oldCitizenship !== '' ? 'RESIDENT' : null)),
+                                            'permitNumber' => $val('work_permit_number'),
+                                            'permitExpiry' => $val('work_permit_expiry'),
+                                            'requiredAttribute' => 'required',
+                                        ])
                                         <div class="col-md-4 mb-3">
                                             <label for="disability" class="form-label">Disability <span class="text-danger">*</span></label>
                                             <select class="form-select @error('disability') is-invalid @enderror" id="disability" name="disability" required>
@@ -368,12 +368,14 @@ $carriedFrom = fn ($field) => $fromDraft($field) ? 'Saved with your draft' : 'Re
                                         </div>
 
                                         <div class="col-md-4 mb-3">
-                                            <label for="position_id" class="form-label">Position</label>
+                                            <label for="position_id" class="form-label">Position <span class="text-danger js-position-star">*</span></label>
                                             <select class="form-select @error('position_id') is-invalid @enderror" id="position_id" name="position_id" {{ $val('department_id') ? '' : 'disabled' }}>
                                                 <option value="">Select Position</option>
                                                 @foreach($positions as $position)
-                                                <option value="{{ $position->id }}" 
+                                                <option value="{{ $position->id }}"
                                                         data-department="{{ $position->department_id }}"
+                                                        data-role-id="{{ $position->role_id }}"
+                                                        data-role-name="{{ $position->role?->display_name }}"
                                                         {{ $val('position_id') == $position->id ? 'selected' : '' }}>
                                                     {{ $position->position_name }}
                                                 </option>
@@ -588,6 +590,19 @@ $carriedFrom = fn ($field) => $fromDraft($field) ? 'Saved with your draft' : 'Re
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
+                                        <div class="col-md-8 mb-3">
+                                            <label class="form-label d-block">Is this employee a HELB loan beneficiary? <span class="text-danger">*</span></label>
+                                            @foreach(['YES' => 'Yes', 'NO' => 'No'] as $helbValue => $helbLabel)
+                                            <div class="form-check form-check-inline">
+                                                <input class="form-check-input @error('is_helb_beneficiary') is-invalid @enderror" type="radio" name="is_helb_beneficiary" id="helb_{{ strtolower($helbValue) }}" value="{{ $helbValue }}" {{ $val('is_helb_beneficiary') === $helbValue ? 'checked' : '' }} required>
+                                                <label class="form-check-label" for="helb_{{ strtolower($helbValue) }}">{{ $helbLabel }}</label>
+                                            </div>
+                                            @endforeach
+                                            <small class="text-muted d-block">If yes, set up the HELB deduction after saving and declare the employee to HELB.</small>
+                                            @error('is_helb_beneficiary')
+                                            <div class="invalid-feedback d-block">{{ $message }}</div>
+                                            @enderror
+                                        </div>
                                     </div>
                                     @include('staff.partials.step-footer')
                                 </div>
@@ -656,6 +671,27 @@ $carriedFrom = fn ($field) => $fromDraft($field) ? 'Saved with your draft' : 'Re
                                                 <small class="text-muted">Degrees, diplomas, transcripts, or certifications</small>
                                             </div>
                                         </div>
+                                        <!-- HELB Compliance Certificate (mandatory) -->
+                                        <div class="col-md-6">
+                                            <div class="border rounded p-3 bg-light">
+                                                <label class="form-label fw-semibold small mb-1">HELB Compliance Certificate <span class="text-danger">*</span></label>
+                                                <input type="file" name="documents[helb]" class="form-control @error('documents.helb') is-invalid @enderror" accept=".pdf,.png,.jpg,.jpeg">
+                                                @if(isset($onboardingFiles['documents.helb']))<small class="d-block text-success">{{ $carriedFrom('documents.helb') }}: {{ $onboardingFiles['documents.helb']['name'] ?? '' }}</small>@endif
+                                                @error('documents.helb')<div class="invalid-feedback d-block">{{ $message }}</div>@enderror
+                                                <small class="text-muted d-block">Needed for everyone, including staff who never took a HELB loan. Onboarding cannot be completed without it.</small>
+                                                @if(($canWaiveHelb ??= app(\App\Services\StaffDocumentAccess::class)->canWaiveHelbCertificate(auth()->user())))
+                                                <div class="form-check mt-2">
+                                                    <input type="checkbox" class="form-check-input" id="helb_exception" name="helb_exception" value="1" {{ $val('helb_exception') ? 'checked' : '' }}>
+                                                    <label class="form-check-label small" for="helb_exception">HR Manager: allow this without the certificate</label>
+                                                </div>
+                                                <textarea name="helb_exception_reason" class="form-control form-control-sm mt-1 @error('helb_exception_reason') is-invalid @enderror" rows="2" placeholder="Written reason for the exception (required)">{{ $val('helb_exception_reason') }}</textarea>
+                                                @error('helb_exception_reason')<div class="invalid-feedback d-block">{{ $message }}</div>@enderror
+                                                @else
+                                                <small class="text-muted d-block mt-1">Only the HR Manager can record an exception, with a written reason.</small>
+                                                @endif
+                                                @error('helb_exception')<div class="invalid-feedback d-block">{{ $message }}</div>@enderror
+                                            </div>
+                                        </div>
                                         <!-- Staff signature -->
                                         <div class="col-md-6">
                                             <label class="form-label fw-semibold small mb-1">Staff Signature</label>
@@ -665,13 +701,39 @@ $carriedFrom = fn ($field) => $fromDraft($field) ? 'Saved with your draft' : 'Re
                                             ])
                                         </div>
                                     </div>
+                                    {{-- The new staff member's agreement to the data protection notice is recorded with its date --}}
+                                    <div class="mt-4" id="dataNoticeSection">
+                                        <h6 class="fw-semibold">Data protection notice</h6>
+                                        @include('staff.partials.data-notice')
+                                        @php($noticeAgreedOnline = $onboarding ? ($onboarding->submission['data_notice_agreed_at'] ?? null) : null)
+                                        @if($noticeAgreedOnline)
+                                        <p class="small text-success mb-0 mt-2">The staff member read the notice and agreed online on {{ \Illuminate\Support\Carbon::parse($noticeAgreedOnline)->format('d M Y') }}.</p>
+                                        @else
+                                        <div class="form-check mt-2">
+                                            <input type="checkbox" class="form-check-input @error('data_notice_agreed') is-invalid @enderror" id="data_notice_agreed" name="data_notice_agreed" value="1" {{ $val('data_notice_agreed') ? 'checked' : '' }} required>
+                                            <label class="form-check-label" for="data_notice_agreed">The staff member has been shown this notice and agrees. It is recorded with the date below and your name.</label>
+                                            @error('data_notice_agreed')
+                                            <div class="invalid-feedback d-block">{{ $message }}</div>
+                                            @enderror
+                                        </div>
+                                        <div class="mt-2" style="max-width: 260px;">
+                                            <label for="data_notice_date" class="form-label small mb-1">Date agreed</label>
+                                            <input type="date" class="form-control @error('data_notice_date') is-invalid @enderror" id="data_notice_date" name="data_notice_date"
+                                                   value="{{ $val('data_notice_date', now()->format('Y-m-d')) }}" max="{{ now()->format('Y-m-d') }}">
+                                            <small class="text-muted">Today, unless they agreed earlier (for example on a paper copy).</small>
+                                            @error('data_notice_date')
+                                            <div class="invalid-feedback">{{ $message }}</div>
+                                            @enderror
+                                        </div>
+                                        @endif
+                                    </div>
                                     @include('staff.partials.step-footer')
                                 </div>
 
                                 @if($canCreateUsers)
                                 <!-- System User Tab (mandatory) -->
                                 <div class="tab-pane fade" id="user" role="tabpanel" aria-labelledby="user-tab">
-                                    <p class="text-muted small">Required — a system login will be created for this staff member.</p>
+                                    <p class="text-muted small">Required: a system login will be created for this staff member.</p>
                                     <div class="row">
                                         <div class="col-md-6 mb-3">
                                             <label for="login_email" class="form-label">Login Email <span class="text-danger">*</span></label>
@@ -684,23 +746,16 @@ $carriedFrom = fn ($field) => $fromDraft($field) ? 'Saved with your draft' : 'Re
                                             @enderror
                                         </div>
                                         <div class="col-md-6 mb-3">
-                                            <label for="role_id" class="form-label">Role <span class="text-danger">*</span></label>
-                                            <select class="form-select @error('role_id') is-invalid @enderror" id="role_id" name="role_id" required>
-                                                <option value="">Select Role</option>
-                                                @foreach($roles as $role)
-                                                <option value="{{ $role->id }}" {{ $val('role_id') == $role->id ? 'selected' : '' }}>{{ $role->display_name }}</option>
-                                                @endforeach
-                                            </select>
-                                            @error('role_id')
-                                            <div class="invalid-feedback">{{ $message }}</div>
+                                            {{-- No role box: every position has its system role and the login gets it. This only shows which one. --}}
+                                            <label for="role_display" class="form-label">Role</label>
+                                            <input type="text" class="form-control" id="role_display" value="" placeholder="Choose a position under Employment Details" readonly tabindex="-1" autocomplete="off">
+                                            <small class="text-muted d-block" id="roleNote">Set by the position.</small>
+                                            @error('position_id')
+                                            <div class="text-danger small mt-1">{{ $message }}</div>
                                             @enderror
                                         </div>
-                                        <div class="col-md-6 mb-3">
-                                            <label for="password" class="form-label">Password <span class="text-muted small">(optional — leave blank to auto-generate)</span></label>
-                                            <input type="password" class="form-control @error('password') is-invalid @enderror" id="password" name="password" minlength="8" autocomplete="new-password">
-                                            @error('password')
-                                            <div class="invalid-feedback">{{ $message }}</div>
-                                            @enderror
+                                        <div class="col-12">
+                                            <p class="text-muted small mb-0">They are emailed a link to choose their own password. You will not see or set it.</p>
                                         </div>
                                     </div>
                                     @include('staff.partials.step-footer')
@@ -728,6 +783,7 @@ $carriedFrom = fn ($field) => $fromDraft($field) ? 'Saved with your draft' : 'Re
         // Reset and disable if no department is picked
         if (!departmentId) {
             $positionSelect.html('<option value="">Select Position</option>').prop('disabled', true).trigger('change');
+            if (window.PositionRole) window.PositionRole.refresh();
             return;
         }
 
@@ -748,7 +804,8 @@ $carriedFrom = fn ($field) => $fromDraft($field) ? 'Saved with your draft' : 'Re
         visibleOptions.each(function() {
             var $opt =$(this);
             var optVal = $opt.val();
-            var $newOpt =$('<option>').val(optVal).attr('data-department', $opt.attr('data-department')).text($opt.text().trim());
+            // The role goes with the position, so each rebuilt option keeps it
+            var $newOpt =$('<option>').val(optVal).attr('data-department', $opt.attr('data-department')).attr('data-role-id', $opt.attr('data-role-id') || '').attr('data-role-name', $opt.attr('data-role-name') || '').text($opt.text().trim());
             if (currentSelected && optVal == currentSelected) {
                 $newOpt.prop('selected', true);
             }
@@ -757,6 +814,7 @@ $carriedFrom = fn ($field) => $fromDraft($field) ? 'Saved with your draft' : 'Re
 
         // Let dependent UI (zone fields) re-evaluate against the rebuilt list
         $positionSelect.trigger('change');
+        if (window.PositionRole) window.PositionRole.refresh();
     }
 
     // Trigger on department dropdown change
@@ -972,7 +1030,9 @@ $carriedFrom = fn ($field) => $fromDraft($field) ? 'Saved with your draft' : 'Re
     const userTabLi = document.getElementById('user-tab')?.closest('li'); // The tab header item
     const userTabPane = document.getElementById('user'); // The tab content pane
     const loginEmailInput = document.getElementById('login_email');
-    const roleIdSelect = document.getElementById('role_id');
+    // The system role comes from the position, so a staff member who gets a login needs one
+    const positionSelectEl = document.getElementById('position_id');
+    const positionStars = document.querySelectorAll('.js-position-star');
 
     function handleEmploymentTypeChanges() {
         if (!employmentTypeSelect) return;
@@ -989,7 +1049,8 @@ $carriedFrom = fn ($field) => $fromDraft($field) ? 'Saved with your draft' : 'Re
                 userTabPane.style.display = 'none';
             }
             if (loginEmailInput) loginEmailInput.required = false;
-            if (roleIdSelect) roleIdSelect.required = false;
+            if (positionSelectEl) positionSelectEl.required = false;
+            positionStars.forEach(function (star) { star.classList.add('d-none'); });
 
             const personalTabBtn = document.getElementById('personal-tab');
             if (personalTabBtn) {
@@ -999,7 +1060,8 @@ $carriedFrom = fn ($field) => $fromDraft($field) ? 'Saved with your draft' : 'Re
             if (userTabLi) userTabLi.style.display = '';
             if (userTabPane) userTabPane.style.display = '';
             if (loginEmailInput) loginEmailInput.required = true;
-            if (roleIdSelect) roleIdSelect.required = true;
+            if (positionSelectEl) positionSelectEl.required = true;
+            positionStars.forEach(function (star) { star.classList.remove('d-none'); });
         }
 
         // 2. Fetch Category-Specific Staff Number via AJAX
@@ -1029,7 +1091,10 @@ $carriedFrom = fn ($field) => $fromDraft($field) ? 'Saved with your draft' : 'Re
 <script src="{{ asset('assets/js/staff-contact-format.js') }}?v={{ filemtime(public_path('assets/js/staff-contact-format.js')) }}"></script>
 <script src="{{ asset('assets/js/staff-form-steps.js') }}?v={{ filemtime(public_path('assets/js/staff-form-steps.js')) }}"></script>
 <script src="{{ asset('assets/js/file-slot.js') }}?v={{ filemtime(public_path('assets/js/file-slot.js')) }}"></script>
+<script src="{{ asset('assets/js/staff-citizenship.js') }}?v={{ filemtime(public_path('assets/js/staff-citizenship.js')) }}"></script>
+<script src="{{ asset('assets/js/position-role.js') }}?v={{ filemtime(public_path('assets/js/position-role.js')) }}"></script>
 <script src="{{ asset('assets/js/staff-drafts.js') }}?v={{ filemtime(public_path('assets/js/staff-drafts.js')) }}"></script>
+<script src="{{ asset('assets/js/staff-former-match.js') }}?v={{ filemtime(public_path('assets/js/staff-former-match.js')) }}"></script>
 @if (auth()->user()->hasPermission('create_staff'))
 <div class="modal fade" id="draftsModal" tabindex="-1" aria-labelledby="draftsModalTitle" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-scrollable">

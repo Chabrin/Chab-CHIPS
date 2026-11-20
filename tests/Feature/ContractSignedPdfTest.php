@@ -96,6 +96,7 @@ class ContractSignedPdfTest extends TestCase
             $t->integer('uploaded_by')->nullable();
             $t->timestamps();
         });
+        (require database_path('migrations/2026_11_18_110000_create_employee_document_removals_table.php'))->up();
 
         DB::table('document_types')->insert(['id' => self::TYPE_ID, 'name' => 'Signed Employment Contract']);
         DB::table('sys_staff')->insert([['id' => self::STAFF_ID, 'staff_number' => '019'], ['id' => self::OTHER_STAFF_ID, 'staff_number' => '020']]);
@@ -257,7 +258,8 @@ class ContractSignedPdfTest extends TestCase
         $this->update($contractId, $this->pdf('again.pdf', 'from add staff'));
 
         $this->assertNull(EmployeeDocument::find($current->id));
-        $this->assertFalse(Storage::disk('local')->exists($current->file_path));
+        $this->assertTrue(Storage::disk('local')->exists($current->file_path), 'The replaced file is kept, not destroyed');
+        $this->assertSame(1, \App\Models\EmployeeDocumentRemoval::where('original_id', $current->id)->where('reason', 'Replaced by a newer file')->count());
         $this->assertSame($contractId, (int) $staffCopy->fresh()->contract_id);
         $this->assertSame(1, EmployeeDocument::count());
     }
@@ -270,7 +272,11 @@ class ContractSignedPdfTest extends TestCase
         $this->update($contractId, $this->pdf('new.pdf', 'the replacement'));
 
         $this->assertNull(EmployeeDocument::find($old->id));
-        $this->assertFalse(Storage::disk('local')->exists($old->file_path));
+        $this->assertTrue(Storage::disk('local')->exists($old->file_path), 'The replaced file is kept, not destroyed');
+        $removal = \App\Models\EmployeeDocumentRemoval::where('original_id', $old->id)->first();
+        $this->assertNotNull($removal, 'The replacement is on record');
+        $this->assertSame($old->file_path, $removal->file_path);
+        $this->assertSame('Replaced by a newer file', $removal->reason);
         $this->assertSame('new.pdf', EmployeeDocument::where('contract_id', $contractId)->value('file_name'));
     }
 }

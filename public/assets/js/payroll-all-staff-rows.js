@@ -9,7 +9,7 @@
     function build(elements) {
         var rows = [];
         (elements || []).forEach(function (element) {
-            var type = element.type === '2' ? 'Allowance' : 'Deduction';
+            var type = element.type === '2' ? 'Earnings' : 'Deduction';
             var identity = {
                 id: element.id === undefined ? null : element.id,
                 statutory: element.statutory === true,

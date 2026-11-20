@@ -59,11 +59,25 @@ class Staff extends Model
         'citizenship',
         'personal_email',
         'disability',
+        'data_notice_agreed_at',
+        'data_notice_recorded_by',
+        'is_helb_beneficiary',
+        'helb_certificate_exception_reason',
+        'helb_certificate_exception_by',
+        'helb_certificate_exception_at',
+        'nationality',
+        'residency_status',
+        'work_permit_number',
+        'work_permit_expiry',
     ];
 
     protected $casts = [
         'birth_date' => 'date',
         'date_time' => 'datetime',
+        'data_notice_agreed_at' => 'datetime',
+        'is_helb_beneficiary' => 'boolean',
+        'helb_certificate_exception_at' => 'datetime',
+        'work_permit_expiry' => 'date',
     ];
 
     /** Canonical employment status labels for current_status_id. */

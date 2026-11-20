@@ -5,6 +5,8 @@
     <small class="text-muted js-step-note"></small>
     <small class="js-draft-note" aria-live="polite"></small>
     <div class="ms-auto">
+        {{-- Cancel is plain and sits left of the coloured buttons, as on every form. Leaving with unsaved typing asks first (staff-drafts.js). --}}
+        <a href="{{ route('staff.index') }}" class="btn btn-light me-1">Cancel</a>
         @if (auth()->user()?->hasPermission('create_staff'))
         {{-- Keeps what is filled in so far, files included, on the server. public/assets/js/staff-drafts.js sends it. --}}
         <button type="button" class="btn btn-outline-secondary me-1 js-save-draft">

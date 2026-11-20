@@ -66,7 +66,7 @@
                             <th>Name</th>
                             <th>Department</th>
                             <th class="text-end">Basic Salary</th>
-                            <th class="text-end">Allowances</th>
+                            <th class="text-end">Earnings</th>
                             <th class="text-end">Gross</th>
                             <th class="text-end">PAYE</th>
                             <th class="text-end">NSSF</th>

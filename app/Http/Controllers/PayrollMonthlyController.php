@@ -11,6 +11,7 @@ use App\Models\PayrollPeriod;
 use App\Models\PayrollPeriodItem;
 use App\Models\PayrollRun;
 use App\Models\PayrollSummary;
+use App\Services\PayrollChangeFeed;
 use App\Services\PayrollPreRunCheck;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -23,8 +24,30 @@ use Illuminate\Support\Facades\Auth;
  */
 class PayrollMonthlyController extends Controller
 {
-    public function __construct(private PayrollPreRunCheck $check)
+    public function __construct(private PayrollPreRunCheck $check, private PayrollChangeFeed $changeFeed)
     {
+    }
+
+    /**
+     * What has changed since the last payroll that could change pay, as a ready-made panel. HR sees it on the processing
+     * screen before pressing Process. It only informs.
+     */
+    public function changes(int $periodId): JsonResponse
+    {
+        $this->requirePermission('read_payroll_processing');
+        $period = PayrollPeriod::findOrFail($periodId);
+
+        if (!$period->start_date || !$period->end_date) {
+            return response()->json(['success' => false, 'error' => 'This period has no start or end date. Set both in the Payroll Calendar.'], 422);
+        }
+
+        $changes = $this->changeFeed->forPeriod($period);
+
+        return response()->json([
+            'success' => true,
+            'changes_total' => $changes['changes_total'],
+            'html' => view('payroll.partials.changes-panel', ['changes' => $changes])->render(),
+        ]);
     }
 
     /**

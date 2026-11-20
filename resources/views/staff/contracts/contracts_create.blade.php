@@ -8,11 +8,6 @@
                     <div class="card-header card-no-border d-flex align-items-center">
                         <h4 class="mb-0">Staff Contracts</h4>
                         <div class="ms-auto d-flex gap-2">
-                            <button type="submit" form="staffContractCreateForm" class="btn btn-primary btn-sm d-flex align-items-center" id="createButton">
-                                <span class="spinner-border spinner-border-sm me-2 d-none" id="submitSpinner"></span>
-                                <span class="material-symbols-outlined me-1" style="font-size:18px;">check_circle</span>
-                                <span>Save Conract</span>
-                            </button>
                             <a href="{{ route('contract.index') }}" class="btn btn-light btn-sm d-flex align-items-center">
                                 <span class="material-symbols-outlined">arrow_back</span>
                                 <span class="ms-1">Back to List</span>
@@ -21,15 +16,9 @@
                     </div>
                     <div class="card-body">
 
-                        {{-- Add Staff goes straight on to this form, so the one-time password it made is shown here as it would be on the profile --}}
-                        @if(session('generated_password'))
-                        <div class="alert alert-light-warning alert-dismissible fade show" role="alert">
-                            <strong>System login created.</strong> Temporary password:
-                            <code style="font-size:1.05em;">{{ session('generated_password') }}</code>
-                            — this will not be shown again, copy it now. The staff member will be required to change it on first login.
-                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                        </div>
-                        @endif
+                        {{-- Add Staff goes straight on to this form, so the result of the password link email is shown here as it would be on the profile --}}
+                        @include('staff.partials.account-setup-notice')
+                        @include('staff.partials.helb-prompt')
 
                         @if($errors->any())
                         <div class="alert alert-danger alert-dismissible fade show" role="alert">
@@ -44,7 +33,7 @@
                         @endif
 
 
-                        <form action="{{ route('contract.store') }}" method="POST" id="staffContractCreateForm" enctype="multipart/form-data" data-file-slots>
+                        <form action="{{ route('contract.store') }}" method="POST" id="staffContractCreateForm" autocomplete="off" enctype="multipart/form-data" data-file-slots>
                             @csrf
 
                             <h3 class="mb-3">Staff Contracts</h3>
@@ -74,16 +63,7 @@
                                     <input type="number" class="form-control" name="basic_salary" id="basic_salary" min="0" step="0.01">
                                 </div>
                                 <div class="mb-3 col-12">
-                                    <label for="signed_contract" class="form-label">Signed Contract (PDF) <span class="text-muted small">- optional</span></label>
-                                    <div id="signed_contract_on_file" class="d-none mb-1">
-                                        <span class="text-success">Already on file from when the staff member was added: <a href="#" id="signed_contract_on_file_link" target="_blank"></a></span>
-                                        <button type="button" class="btn btn-link btn-sm p-0 ms-2" id="signed_contract_replace">Upload a different file</button>
-                                    </div>
-                                    <input type="file" class="form-control @error('signed_contract') is-invalid @enderror" name="signed_contract" id="signed_contract" accept=".pdf,application/pdf">
-                                    <small class="text-muted">Upload the physically signed contract as a PDF (max 5MB). A signed contract already uploaded for the staff member is used automatically.</small>
-                                    @error('signed_contract')
-                                    <div class="invalid-feedback">{{ $message }}</div>
-                                    @enderror
+                                    @include('staff.contracts.partials.signed-contract', ['document' => null, 'optional' => true])
                                 </div>
                             </div>
 
@@ -104,7 +84,7 @@
                                             <label class="form-label">Entry Type</label>
                                             <select class="form-select entry-type-select" name="elements[0][entry_type]">
                                                 <option value="" disabled selected>Select entry type</option>
-                                                <option value="2">Allowance</option>
+                                                <option value="2">Earnings</option>
                                                 <option value="1">Deduction</option>
                                             </select>
                                         </div>
@@ -121,6 +101,7 @@
                                 <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="addElementRow"><span class="material-symbols-outlined">add</span> Add Element</button>
                             </div>
 
+                            @include('partials.form-actions', ['form' => 'staffContractCreateForm', 'buttonId' => 'createButton', 'cancelUrl' => route('contract.index')])
                         </form>
                     </div>
                 </div>
@@ -133,25 +114,24 @@
 <script src="{{ asset('assets/js/contract-exclusions.js') }}?v={{ filemtime(public_path('assets/js/contract-exclusions.js')) }}"></script>
 <script src="{{ asset('assets/js/contract-period.js') }}?v={{ filemtime(public_path('assets/js/contract-period.js')) }}"></script>
 <script src="{{ asset('assets/js/file-slot.js') }}?v={{ filemtime(public_path('assets/js/file-slot.js')) }}"></script>
+<script src="{{ asset('assets/js/signed-contract.js') }}?v={{ filemtime(public_path('assets/js/signed-contract.js')) }}"></script>
 <script>
     $(document).ready(function() {
 
-        // ── Signed contract already uploaded with the staff record ───────
+        // ── Signed contract already uploaded with the staff record: shown with View and Remove instead of an upload button ───────
         var staffSignedContracts = {{ \Illuminate\Support\Js::from($staffSignedContracts) }};
-        var replacingSignedContract = false;
+        var signedContractBox = window.SignedContract.attach(document, {
+            token: '{{ csrf_token() }}',
+            notify: function(kind, text) { toastr[kind](text); },
+            onRemoved: function() { delete staffSignedContracts[$('#staff_id').val()]; }
+        });
 
         function showSignedContractOnFile() {
             var onFile = staffSignedContracts[$('#staff_id').val()];
-            var greyedOut = !!onFile && !replacingSignedContract;
-
-            $('#signed_contract_on_file').toggleClass('d-none', !greyedOut);
             if (onFile) {
-                $('#signed_contract_on_file_link').text(onFile.name).attr('href', "{{ url('/documents') }}/" + onFile.id + '/view');
-            }
-            // A disabled file box is not sent, so the contract takes the file already on record
-            $('#signed_contract').prop('disabled', greyedOut);
-            if (greyedOut) {
-                $('#signed_contract').val('');
+                signedContractBox.show(onFile);
+            } else {
+                signedContractBox.showUpload();
             }
         }
 
@@ -163,13 +143,8 @@
         }
 
         $('#staff_id').on('change', function() {
-            replacingSignedContract = false;
             showSignedContractOnFile();
             applyStaffCategory();
-        });
-        $('#signed_contract_replace').on('click', function() {
-            replacingSignedContract = true;
-            showSignedContractOnFile();
         });
 
         // ── Staff dropdown ───────────────────────────────────────────────────

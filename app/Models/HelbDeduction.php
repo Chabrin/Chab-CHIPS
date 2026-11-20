@@ -27,6 +27,13 @@ class HelbDeduction extends Model
         'current_status_id',
         'cleared',
         'suspended',
+        'suspended_reason',
+        'suspended_at',
+        'cleared_reason',
+        'cleared_at',
+        'cleared_by',
+        'clearance_path',
+        'clearance_name',
     ];
 
     protected $casts = [
@@ -36,7 +43,25 @@ class HelbDeduction extends Model
         'monthly_deduction' => 'decimal:2',
         'cleared' => 'integer',
         'suspended' => 'integer',
+        'suspended_at' => 'datetime',
+        'cleared_at' => 'datetime',
     ];
+
+    /** Active, Paused or Cleared, as the screens show it. */
+    public function getStatusLabelAttribute(): string
+    {
+        return $this->cleared ? 'Cleared' : ($this->suspended ? 'Paused' : 'Active');
+    }
+
+    public function events()
+    {
+        return $this->hasMany(HelbDeductionEvent::class, 'deduction_id');
+    }
+
+    public function hasClearance(): bool
+    {
+        return !empty($this->clearance_path);
+    }
 
     // Relationships
     public function staff()

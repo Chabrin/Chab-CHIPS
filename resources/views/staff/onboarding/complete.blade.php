@@ -12,11 +12,11 @@ $sel = fn ($field, $value) => (string) old($field) === (string) $value ? 'select
         <div class="col-md-3"><label class="form-label">Gender</label><select name="gender" class="form-select" required><option value="">Select</option>@foreach(['Male','Female'] as $o)<option {{ $sel('gender',$o) }}>{{ $o }}</option>@endforeach</select>{!! $err('gender') !!}</div>
         <div class="col-md-3"><label class="form-label">Date of birth</label><input type="date" name="birth_date" value="{{ old('birth_date') }}" max="{{ now()->subDay()->toDateString() }}" class="form-control" required>{!! $err('birth_date') !!}</div>
         <div class="col-md-4"><label class="form-label">Birth place</label><input name="birth_place" value="{{ old('birth_place') }}" class="form-control">{!! $err('birth_place') !!}</div>
-        <div class="col-md-4"><label class="form-label">National ID</label><input name="national_id" value="{{ old('national_id') }}" class="form-control" required>{!! $err('national_id') !!}</div>
-        <div class="col-md-4"><label class="form-label">Passport (if applicable)</label><input name="passport" value="{{ old('passport') }}" class="form-control">{!! $err('passport') !!}</div>
+        <div class="col-md-4"><label class="form-label" for="national_id">National ID</label><input id="national_id" name="national_id" value="{{ old('national_id') }}" class="form-control" required>{!! $err('national_id') !!}</div>
+        <div class="col-md-4"><label class="form-label" for="passport">Passport (if applicable)</label><input id="passport" name="passport" value="{{ old('passport') }}" class="form-control">{!! $err('passport') !!}</div>
         <div class="col-md-4"><label class="form-label">Marital status</label><select name="marital" class="form-select" required><option value="">Select</option>@foreach(['Single','Married','Divorced','Widowed'] as $o)<option {{ $sel('marital',$o) }}>{{ $o }}</option>@endforeach</select>{!! $err('marital') !!}</div>
         <div class="col-md-4"><label class="form-label">Spouse name (if applicable)</label><input name="spouse_name" value="{{ old('spouse_name') }}" class="form-control">{!! $err('spouse_name') !!}</div>
-        <div class="col-md-4"><label class="form-label">Citizenship / residency</label><select name="citizenship" class="form-select" required><option value="">Select Option</option><option value="RESIDENT" {{ $sel('citizenship','RESIDENT') }}>Resident</option><option value="NO" {{ $sel('citizenship','NO') }}>Non-resident</option></select>{!! $err('citizenship') !!}</div>
+        @include('staff.partials.citizenship-fields', ['nationality' => old('nationality'), 'residency' => old('residency_status'), 'permitNumber' => old('work_permit_number'), 'permitExpiry' => old('work_permit_expiry'), 'requiredAttribute' => 'required'])
         <div class="col-md-4"><label class="form-label">Disability</label><select name="disability" class="form-select" required><option value="">Select</option>@foreach(['YES','NO'] as $o)<option {{ $sel('disability',$o) }}>{{ $o }}</option>@endforeach</select>{!! $err('disability') !!}</div>
     </div>
     <h5 class="mt-4">Contact information</h5><div class="row g-3">
@@ -48,11 +48,23 @@ $sel = fn ($field, $value) => (string) old($field) === (string) $value ? 'select
         <div class="col-md-6"><label class="form-label">CV (optional)</label><input type="file" name="documents[cv]" class="form-control" accept=".pdf,.doc,.docx">{!! $err('documents.cv') !!}</div>
         <div class="col-md-6"><label class="form-label">Academic certificates (optional)</label><input type="file" name="documents[academic]" class="form-control" accept=".pdf,.png,.jpg,.jpeg">{!! $err('documents.academic') !!}</div>
     </div>
+    <h5 class="mt-4">HELB</h5><div class="row g-3">
+        <div class="col-md-6"><label class="form-label">Do you have a HELB loan (are you a HELB beneficiary)?</label><select name="is_helb_beneficiary" class="form-select" required><option value="">Select</option>@foreach(['YES' => 'Yes', 'NO' => 'No'] as $v => $l)<option value="{{ $v }}" {{ $sel('is_helb_beneficiary', $v) }}>{{ $l }}</option>@endforeach</select>{!! $err('is_helb_beneficiary') !!}</div>
+        <div class="col-md-6"><label class="form-label">HELB compliance certificate (PDF/JPG/PNG, max 5 MB)</label><input type="file" name="documents[helb]" class="form-control" accept=".pdf,.png,.jpg,.jpeg">{!! $err('documents.helb') !!}<small class="text-muted">If you have it. HR will ask for it if not.</small></div>
+    </div>
+    <h5 class="mt-4">Data protection notice</h5>
+    @include('staff.partials.data-notice')
+    <div class="form-check mt-2">
+        <input class="form-check-input" type="checkbox" id="data_notice_agreed" name="data_notice_agreed" value="1" required>
+        <label class="form-check-label" for="data_notice_agreed">I have read the notice above and I agree.</label>
+        {!! $err('data_notice_agreed') !!}
+    </div>
     <div class="alert alert-info mt-4">Submitting this form shares your information with the company HR team to set up your employment and payroll records. Documents are stored privately. Do not use a shared device to complete it.</div>
     <button class="btn btn-primary" type="submit">Submit to HR</button></form>
 </div></div></main>
 <script src="{{ asset('assets/js/staff-contact-format.js') }}?v={{ filemtime(public_path('assets/js/staff-contact-format.js')) }}"></script>
 <script src="{{ asset('assets/js/file-slot.js') }}?v={{ filemtime(public_path('assets/js/file-slot.js')) }}"></script>
+<script src="{{ asset('assets/js/staff-citizenship.js') }}?v={{ filemtime(public_path('assets/js/staff-citizenship.js')) }}"></script>
 <script>
 // Choosing the relationship is checked here too, because a rejected form clears the files the staff member picked.
 (function () {

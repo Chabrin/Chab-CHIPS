@@ -71,12 +71,12 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h6 class="modal-title">Who confirms paid-owner recoveries</h6>
+                <h6 class="modal-title">Who confirms recoveries</h6>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
                 <p class="mb-2">Currently: <strong id="confirmer-current">...</strong></p>
-                <p class="text-muted small" id="confirmer-note">The person who recorded a paid-owner recovery can never confirm it, whatever their role.</p>
+                <p class="text-muted small" id="confirmer-note">The person who recorded a recovery can never confirm it, whatever their role.</p>
                 <div id="confirmer-form" class="d-none">
                     <label class="form-label" for="confirmer-role">Role that confirms</label>
                     <select class="form-select" id="confirmer-role"></select>
@@ -181,7 +181,7 @@
             }
         });
 
-        // "Pending confirmation": the paid-owner recoveries this user can confirm now
+        // "Pending confirmation": the recoveries this user can confirm now
         var onlyPending = false;
         $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
             if (!onlyPending) { return true; }
@@ -218,7 +218,7 @@
                 $('#confirmer-current').text('could not be loaded');
             });
         }
-        $('#confirmer-modal').on('show.bs.modal', function() { $('#confirmer-note').text('The person who recorded a paid-owner recovery can never confirm it, whatever their role.'); loadConfirmer(); });
+        $('#confirmer-modal').on('show.bs.modal', function() { $('#confirmer-note').text('The person who recorded a recovery can never confirm it, whatever their role.'); loadConfirmer(); });
         $('#confirmer-save').on('click', function() {
             var roleId = $('#confirmer-role').val();
             var message = $('#confirmer-message');

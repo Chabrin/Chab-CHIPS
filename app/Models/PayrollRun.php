@@ -11,6 +11,7 @@ class PayrollRun extends Model
     public const STATUS_WITH_ACCOUNTANT = 'with_accountant';
     public const STATUS_RETURNED = 'returned';
     public const STATUS_APPROVED = 'approved';
+    public const STATUS_PAID = 'paid';
     public const STATUS_REVERSED = 'reversed';
 
     public const STATUS_LABELS = [
@@ -18,6 +19,7 @@ class PayrollRun extends Model
         self::STATUS_WITH_ACCOUNTANT => 'With Accountant',
         self::STATUS_RETURNED => 'Returned',
         self::STATUS_APPROVED => 'Approved',
+        self::STATUS_PAID => 'Paid',
         self::STATUS_REVERSED => 'Reversed',
     ];
 
@@ -42,12 +44,21 @@ class PayrollRun extends Model
         'approved_by',
         'approved_at',
         'return_comment',
+        'paid_by',
+        'paid_at',
+        'payment_date',
+        'payment_reference',
+        'payment_note',
+        'changes_snapshot',
     ];
 
     protected $casts = [
+        'changes_snapshot' => 'array',
         'processed_at' => 'datetime',
         'submitted_at' => 'datetime',
         'approved_at' => 'datetime',
+        'paid_at' => 'datetime',
+        'payment_date' => 'date',
     ];
 
     /**

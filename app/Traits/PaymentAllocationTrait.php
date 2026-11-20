@@ -36,7 +36,10 @@ trait PaymentAllocationTrait
 
     /**
      * A-2. How much of this invoice is still outstanding?
-     * = invoice.total_amount minus the SUM of all allocation rows already written for it.
+     * = invoice.total_amount minus the SUM of all allocation rows already written for it, minus what confirmed
+     * recoveries (Paid Owner, Sat Deposit, Overpaid, Absconded, Paid Vacant) already paid off it. A recovery pays the
+     * invoice down and credits the tenant but writes no allocation row (no money came in), so without the second
+     * subtraction a later payment would be allocated against the full invoice and push its balance back up.
      * Both balances are recalculated fresh on each call so it is safe to call sequentially.
      */
     protected function calculateInvoiceBalance(int $invoiceId, float $invoiceTotalAmount): float
@@ -44,7 +47,14 @@ trait PaymentAllocationTrait
         $allocated = (float) DB::table('sys_pm_tenants_payments_invoices')
             ->where('invoice_id', $invoiceId)
             ->sum('amount_allocated');
-        return $invoiceTotalAmount - $allocated;
+
+        $recovered = (float) DB::table('sys_pm_recoveries')
+            ->where('offset_invoice_id', $invoiceId)
+            ->where('current_status_id', 5)
+            ->whereIn('type_id', DB::table('sys_set_transactions_types')->whereIn('item_code', array_keys(\App\Services\RecoveryService::REASONS))->select('id'))
+            ->sum('amount');
+
+        return $recovered > 0 ? round($invoiceTotalAmount - $allocated - $recovered, 2) : $invoiceTotalAmount - $allocated;
     }
 
     // ─────────────────────────────────────────────────────────────────────────

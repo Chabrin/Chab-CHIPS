@@ -461,6 +461,8 @@
     </script>
 
     <script src="{{ asset('assets/js/focused-navigation.js') }}?v={{ filemtime(public_path('assets/js/focused-navigation.js')) }}"></script>
+    {{-- Browser suggestions off on the HR forms (it checks the page address itself, so other modules are not touched) --}}
+    <script src="{{ asset('assets/js/no-autofill.js') }}?v={{ filemtime(public_path('assets/js/no-autofill.js')) }}"></script>
 
     @yield('scripts')
 

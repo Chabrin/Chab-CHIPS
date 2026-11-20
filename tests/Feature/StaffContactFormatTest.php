@@ -88,7 +88,7 @@ class StaffContactFormatTest extends TestCase
             'national_id' => '12345678', 'marital' => 'Single', 'citizenship' => 'RESIDENT', 'disability' => 'NO',
             'mobile_number' => '0700 000 000', 'personal_email' => 'me@example.test',
             'bank_name' => 1, 'account_name' => 'Example Staff', 'account_number' => '001', 'pin_number' => 'A001',
-            'nhif_number' => 'SHA1', 'nssf_number' => 'NSSF1',
+            'nhif_number' => 'SHA1', 'nssf_number' => 'NSSF1', 'data_notice_agreed' => '1', 'is_helb_beneficiary' => 'NO',
             'documents' => [
                 'national_id' => UploadedFile::fake()->createWithContent('id.pdf', "%PDF-1.4\nid"),
                 'kra_pin' => UploadedFile::fake()->createWithContent('pin.pdf', "%PDF-1.4\npin"),
@@ -305,6 +305,32 @@ class StaffContactFormatTest extends TestCase
         $this->assertSame(3, substr_count($page, 'placeholder="firstname.surname@example.co.ke"'));
         $this->assertSame(1, preg_match('/<script src="[^"]*assets\/js\/staff-contact-format\.js\?v=\d+"><\/script>/', $page));
         $this->assertStringContainsString('StaffContactFormat.suggestEmail', $page);
+    }
+
+    public function test_add_staff_has_no_role_box_and_each_position_carries_its_role_and_there_is_a_date_agreed_box(): void
+    {
+        $this->actingAsHr();
+        $role = new \App\Models\Role();
+        $role->display_name = 'Accountant';
+        $position = new \App\Models\Position();
+        $position->forceFill(['id' => 4, 'position_name' => 'Chief Accountant', 'role_id' => 3]);
+        $position->setRelation('role', $role);
+
+        $page = view('staff.create', [
+            'departments' => collect(), 'banks' => collect(), 'positions' => collect([$position]), 'zones' => collect(),
+            'zoneAreas' => collect(), 'roles' => collect(), 'nextStaffNumber' => 'E-001',
+            'onboarding' => null, 'prefill' => [], 'onboardingFiles' => [],
+            'categories' => \App\Models\EmploymentCategory::active()->ordered()->get(), 'defaultCategory' => 'Permanent',
+        ])->render();
+
+        $this->assertStringNotContainsString('name="role_id"', $page, 'no role to choose: it comes from the position');
+        $this->assertStringContainsString('id="role_display"', $page);
+        $this->assertMatchesRegularExpression('/<option value="4"[^>]*data-role-id="3"[^>]*data-role-name="Accountant"/s', $page);
+        $this->assertStringContainsString('js-position-star', $page, 'the position is marked required for staff who get a login');
+        // The data protection notice: its own dark text, and the day it was agreed (today unless they agreed earlier), not in the future
+        $this->assertStringContainsString('id="dataNotice" style="background:#f8f9fa;color:#24352c;"', $page);
+        $this->assertStringContainsString('name="data_notice_date"', $page);
+        $this->assertStringContainsString('value="' . now()->format('Y-m-d') . '" max="' . now()->format('Y-m-d') . '"', $page);
     }
 
     public function test_edit_staff_shows_the_number_and_email_formats(): void

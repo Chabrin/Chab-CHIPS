@@ -32,6 +32,16 @@
                         </div>
                     </div>
                     <div class="card-body">
+                        {{-- <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+                            <label for="helbStatusFilter" class="form-label mb-0">Show</label>
+                            <select id="helbStatusFilter" class="form-select form-select-sm" style="width:auto; min-width:14rem;">
+                                <option value="open" selected>Open (active and paused)</option>
+                                <option value="Active">Active</option>
+                                <option value="Paused">Paused</option>
+                                <option value="Cleared">Cleared</option>
+                                <option value="all">All</option>
+                            </select>
+                        </div> --}}
                         <div class="table-responsive custom-scrollbar">
                             <table class="display" id="helb-table">
                                 <thead>
@@ -42,6 +52,7 @@
                                         <th>Loan Balance</th>
                                         <th>Monthly Deduction</th>
                                         <th>Start Date</th>
+                                        <th>Ends</th>
                                         <th>Status</th>
                                         <th>Action</th>
                                     </tr>
@@ -73,6 +84,8 @@
                             <option value="">Select Staff</option>
                         </select>
                         <small class="text-muted">Select the staff member for this loan</small>
+                        {{-- What onboarding recorded about this person and HELB, so HR can see whether the profile agrees --}}
+                        <div id="helbStaffStatus" class="mt-2 d-none"></div>
                     </div>
                     <div class="row">
                         <div class="col-lg-6 mb-3">
@@ -88,23 +101,12 @@
                         <label for="start_deduction_date" class="form-label">Start Deduction Date <span style="color:red">*</span></label>
                         <input type="date" class="form-control" id="start_deduction_date" required>
                     </div>
-                    <div class="row" id="statusDiv" style="display:none;">
-                        <div class="col-lg-6 mb-3">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="cleared">
-                                <label class="form-check-label" for="cleared">
-                                    Cleared
-                                </label>
-                            </div>
-                        </div>
-                        <div class="col-lg-6 mb-3">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="suspended">
-                                <label class="form-check-label" for="suspended">
-                                    Suspended
-                                </label>
-                            </div>
-                        </div>
+                    {{-- Shown when an existing loan is edited: changing the balance, the monthly amount or the start date needs a reason.
+                         Pausing and closing the loan are done from its details page. --}}
+                    <div class="mb-3" id="reasonDiv" style="display:none;">
+                        <label for="change_reason" class="form-label">Reason for the change <span style="color:red">*</span></label>
+                        <textarea class="form-control" id="change_reason" rows="2" maxlength="1000"></textarea>
+                        <small class="text-muted">For example: HELB changed the monthly rate on the Employer Portal. Needed when the balance, monthly amount or start date changes.</small>
                     </div>
                     <div class="d-flex justify-content-end gap-2 mt-3">
                         <button type="button" class="btn btn-light" data-bs-dismiss="modal">
@@ -202,12 +204,22 @@
                     render: data => data ? new Date(data).toLocaleDateString() : '-'
                 },
                 {
+                    // The last month it will be taken, worked out from what is still owed and the monthly amount
+                    data: 'end_month',
+                    render: function(data, type, row) {
+                        if (!data) return '-';
+                        return data + ' (' + row.months_left + (row.months_left == 1 ? ' month' : ' months') + ')';
+                    }
+                },
+                {
                     data: 'status',
-                    render: function(data) {
+                    render: function(data, type) {
+                        // Searching and sorting use the plain word, so the filter above can match it exactly
+                        if (type !== 'display') return data;
                         if (data === 'Cleared') {
                             return '<span class="badge badge-light-danger">Cleared</span>';
-                        } else if (data === 'Suspended') {
-                            return '<span class="badge badge-light-danger">Suspended</span>';
+                        } else if (data === 'Paused') {
+                            return '<span class="badge badge-light-warning">Paused</span>';
                         } else {
                             return '<span class="badge badge-light-success">Active</span>';
                         }
@@ -219,15 +231,14 @@
                     searchable: false,
                     render: function(id, type, row) {
                         let buttons = '<div class="d-flex flex-row gap-1">';
-                        if (row.can_update) {
-                            buttons += `<button class="btn btn-xs btn-light edit-helb" 
-                                data-id="${row.id}" 
+                        // A closed loan is changed only after it is reopened, from its details page
+                        if (row.can_update && row.cleared != 1) {
+                            buttons += `<button class="btn btn-xs btn-light edit-helb"
+                                data-id="${row.id}"
                                 data-staff_id="${row.staff_id}"
                                 data-loan_balance="${row.loan_balance}"
                                 data-monthly_deduction="${row.monthly_deduction}"
                                 data-start_date="${row.start_deduction_date}"
-                                data-cleared="${row.cleared}"
-                                data-suspended="${row.suspended}"
                                 style="padding:1px 2px;">
                                 <span class="material-symbols-outlined" style="font-size:18px;">edit_document</span>
                             </button>`;
@@ -240,7 +251,16 @@
             pageLength: 10,
             order: [
                 [1, 'asc']
-            ]
+            ],
+            // Start on the loans that are still running; the Status column is the 8th (index 7)
+            searchCols: [null, null, null, null, null, null, null, { search: '^(Active|Paused)$', regex: true, smart: false }, null]
+        });
+
+        // The status filter: open loans (active and paused), one status, or all
+        $('#helbStatusFilter').on('change', function() {
+            const value = $(this).val();
+            const pattern = value === 'open' ? '^(Active|Paused)$' : (value === 'all' ? '' : '^' + value + '$');
+            helbTable.column(7).search(pattern, true, false).draw();
         });
 
         // HELB Form Submit
@@ -266,10 +286,9 @@
                 formData.staff_id = $('#staff_id').val();
             }
 
-            // Add status flags only for edit
+            // The reason for changing an existing loan (needed when the balance, monthly amount or start date changes)
             if (id) {
-                formData.cleared = $('#cleared').is(':checked') ? 1 : 0;
-                formData.suspended = $('#suspended').is(':checked') ? 1 : 0;
+                formData.reason = $('#change_reason').val();
             }
 
             $.ajax({
@@ -325,14 +344,12 @@
                 }
             }
             $('#start_deduction_date').val(startDate);
+            $('#change_reason').val('');
 
-            $('#cleared').prop('checked', data.cleared == 1);
-            $('#suspended').prop('checked', data.suspended == 1);
-
-            // Hide staff select and remove required, show status checkboxes for edit
+            // Hide the staff select and remove required, ask for the reason of the change
             $('#staff_id').removeAttr('required');
             $('#staffSelectDiv').hide();
-            $('#statusDiv').show();
+            $('#reasonDiv').show();
 
             $('#helbModalTitle').text('Edit HELB Loan');
             $('#addHelbModal').modal('show');
@@ -345,8 +362,37 @@
             staffSelect.val(null).trigger('change');
             $('#staff_id').attr('required', 'required');
             $('#staffSelectDiv').show();
-            $('#statusDiv').hide();
+            $('#reasonDiv').hide();
+            $('#helbStaffStatus').addClass('d-none').empty();
             $('#helbModalTitle').text('Add HELB Loan');
+        });
+
+        // When a staff member is chosen, show what onboarding recorded about them and HELB (a note, not a block)
+        staffSelect.on('change', function() {
+            const staffId = $(this).val();
+            const $box = $('#helbStaffStatus').addClass('d-none').empty();
+            if (!staffId || $('#helbId').val()) return;
+            $.ajax({
+                url: '/ajax/deductions/helb/staff/' + staffId + '/status',
+                type: 'GET',
+                success: function(status) {
+                    if ($('#staff_id').val() != staffId) return; // a different person was chosen meanwhile
+                    const beneficiary = status.beneficiary === null ? 'not answered' : (status.beneficiary ? 'yes' : 'no');
+                    let certificate = 'not on file';
+                    if (status.certificate === 'on_file') certificate = 'on file';
+                    if (status.certificate === 'exception') certificate = 'waived by the HR Manager (' + (status.exception_reason || 'no reason recorded') + ')';
+                    const fine = status.beneficiary === true && status.certificate !== 'missing';
+                    const $note = $('<div class="alert py-2 mb-0 small">').addClass(fine ? 'alert-success' : 'alert-warning');
+                    $note.append($('<div>').text('On their profile: HELB loan beneficiary: ' + beneficiary + '. HELB certificate: ' + certificate + '.'));
+                    if (status.running_loan) {
+                        $note.append($('<div class="fw-semibold">').text('This staff member already has a HELB loan that is not closed.'));
+                    }
+                    if (!fine) {
+                        $note.append($('<div>').text('The profile does not show a HELB beneficiary with a certificate. You can still add the loan, but check the profile first.'));
+                    }
+                    $box.append($note).removeClass('d-none');
+                }
+            });
         });
     });
 </script>

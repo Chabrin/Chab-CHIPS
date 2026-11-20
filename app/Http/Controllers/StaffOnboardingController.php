@@ -15,6 +15,7 @@ use Illuminate\Support\Str;
 use App\Services\EmployeeUploadGuard;
 use App\Services\StaffContactInput;
 use App\Services\StaffOnboardingTracker;
+use App\Services\StaffResidency;
 use App\Traits\HandlesStaffSignature;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Validation\ValidationException;
@@ -120,7 +121,10 @@ class StaffOnboardingController extends Controller
         $invitation = $this->findUsableInvitation($token);
         // The mobile number is kept with its country code (+254712345678)
         $contact = app(StaffContactInput::class)->prepare($request);
-        $data = $request->validate($this->signatureRules() + [
+        // Country of citizenship first, then Resident or Non-resident; a work permit for anyone who is not Kenyan
+        $request->merge(app(StaffResidency::class)->defaults($request->all()));
+        $residencyRules = app(StaffResidency::class)->rules($request->input('nationality'));
+        $data = $request->validate($this->signatureRules() + $residencyRules + [
             'full_names' => 'required|string|max:255',
             'gender' => 'required|in:Male,Female',
             'birth_date' => 'required|date|before:today',
@@ -150,9 +154,16 @@ class StaffOnboardingController extends Controller
             'documents.contract' => 'nullable|file|mimes:pdf|max:5120',
             'documents.cv' => 'nullable|file|mimes:pdf,doc,docx|max:5120',
             'documents.academic' => 'nullable|file|mimes:pdf,png,jpg,jpeg|max:5120',
+            'documents.helb' => 'nullable|file|mimes:pdf,png,jpg,jpeg|max:5120',
+            'is_helb_beneficiary' => 'required|in:YES,NO',
             'staff_photo' => 'nullable|image|mimes:jpg,jpeg,png|max:2048',
-        ], [], ['kins_names' => 'next of kin names', 'kins_relationship' => 'relationship', 'mobile_number' => 'mobile number']);
-        unset($data['documents'], $data['staff_photo'], $data['signature_file'], $data['signature_data']);
+            'data_notice_agreed' => 'accepted',
+        ], ['data_notice_agreed.accepted' => 'Please read the data protection notice and tick the box to agree.'], ['kins_names' => 'next of kin names', 'kins_relationship' => 'relationship', 'mobile_number' => 'mobile number']);
+        unset($data['documents'], $data['staff_photo'], $data['signature_file'], $data['signature_data'], $data['data_notice_agreed']);
+        // The old citizenship column keeps its Resident / NO answer
+        $data['citizenship'] = StaffResidency::legacyCitizenship($data['residency_status']);
+        // Their agreement is kept with the date, and goes onto the staff record when HR creates it
+        $data['data_notice_agreed_at'] = now()->toDateTimeString();
         $files = [];
         foreach (array_keys(StaffOnboardingInvitation::DOCUMENT_TYPES) as $type) {
             $files["documents.$type"] = $request->file("documents.$type");
@@ -202,7 +213,10 @@ class StaffOnboardingController extends Controller
                 'Date of Birth' => $data['birth_date'] ?? null, 'Birth Place' => $data['birth_place'] ?? null,
                 'National ID' => $data['national_id'] ?? null, 'Passport Number' => $data['passport'] ?? null,
                 'Marital Status' => $data['marital'] ?? null, 'Spouse Name' => $data['spouse_name'] ?? null,
-                'Citizenship' => $data['citizenship'] ?? null, 'Disability' => $data['disability'] ?? null,
+                'Citizenship' => $data['nationality'] ?? ($data['citizenship'] ?? null),
+                'Residency' => \App\Services\StaffResidency::LABELS[$data['residency_status'] ?? ''] ?? null,
+                'Work permit' => isset($data['work_permit_number']) ? trim($data['work_permit_number'] . (isset($data['work_permit_expiry']) ? ', expires ' . $data['work_permit_expiry'] : '')) : null,
+                'Disability' => $data['disability'] ?? null,
             ],
             'Contact Information' => [
                 'Mobile Number' => $data['mobile_number'] ?? null, 'Personal Email' => $data['personal_email'] ?? null,
