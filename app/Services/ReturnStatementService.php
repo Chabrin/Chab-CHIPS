@@ -494,10 +494,13 @@ class ReturnStatementService
      * @return string
      */
     private function roomLabel($line): string {
-        $room = (string) ($line->unit_code ?? '');
-        $property = (string) ($line->property_code ?? '');
+        $room = trim((string) ($line->unit_code ?? ''));
+        $property = trim((string) ($line->property_code ?? ''));
+        $prefix = $property . '-';
 
-        return $property !== '' && str_starts_with($room, $property . '-') ? substr($room, strlen($property) + 1) : $room;
+        return $property !== '' && strncasecmp($room, $prefix, strlen($prefix)) === 0
+            ? substr($room, strlen($prefix))
+            : $room;
     }
 
     /**

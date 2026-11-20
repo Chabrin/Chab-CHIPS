@@ -17,12 +17,13 @@ class ReturnStatementExport
      *
      * @param ReturnSummary $return
      * @param array $data the statement data from ReturnStatementService::statement()
-     * @param array $header landlord, property and period labels
+     * @param array $header title, landlord, property and period labels
      * @param array $signoff prepared, checked and approved names and dates
      * @return Spreadsheet
      */
     public function build(ReturnSummary $return, array $data, array $header, array $signoff): Spreadsheet {
         $book = new Spreadsheet();
+        $book->getProperties()->setTitle($header['title']);
         $sheet = $book->getActiveSheet();
         $sheet->setTitle('Return Statement');
         $text = function ($cell, $value) use ($sheet) {
@@ -31,6 +32,9 @@ class ReturnStatementExport
         $text('A1', 'CHABRIN AGENCIES LIMITED - RETURN STATEMENT');
         $sheet->mergeCells('A1:M1');
         $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(15);
+        $text('A2', $header['title']);
+        $sheet->mergeCells('A2:M2');
+        $sheet->getStyle('A2')->getFont()->setBold(true)->setSize(12);
         $row = 2;
         foreach (['Landlord' => $header['landlord_label'], 'Property' => $header['property_label'],
             'Period' => $header['period'], 'Return ID' => $return->return_code] as $label => $value) {

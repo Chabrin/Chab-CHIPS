@@ -10,7 +10,8 @@ use App\Models\User;
  * The only place a review is turned into something a page or an ajax call can show. Each person gets exactly the fields
  * their part allows, picked one by one (never by dumping the model), so nothing written about a person can leak to them:
  *
- *  - the staff member: their own self-rating, and HR's final rating and comment once the review is finalised;
+ *  - the staff member: their own self-rating, and once the review is finalised the supervisor's ratings and comments and
+ *    HR's final rating and comment (never who the supervisor is, the records or the history);
  *  - the supervisor: the self-rating (once submitted), their own rating, the records, and the final result once finalised;
  *  - HR: everything, including the history.
  */
@@ -18,7 +19,7 @@ class PerformanceReviewPresenter
 {
     private const ACTIONS = ['self', 'self_on_behalf', 'skip_self', 'supervisor', 'hr', 'return', 'reassign', 'correct'];
 
-    public function __construct(private PerformanceAccess $access, private PerformanceMetrics $metrics) {}
+    public function __construct(private PerformanceAccess $access, private PerformanceMetrics $metrics, private PerformanceMeetingPresenter $meetings) {}
 
     public function show(User $viewer, PerformanceReview $review): array
     {
@@ -26,7 +27,8 @@ class PerformanceReviewPresenter
         $review->loadMissing(['cycle', 'staff', 'supervisor', 'items']);
         $items = $review->items;
         $final = $review->isFinalised();
-        $selfVisible = $role !== PerformanceAccess::ROLE_SUPERVISOR || $review->self_submitted_at || $review->self_skipped;
+        // The supervisor and the committee read the self-rating once it is submitted, never a draft
+        $selfVisible = ! in_array($role, [PerformanceAccess::ROLE_SUPERVISOR, PerformanceAccess::ROLE_COMMITTEE], true) || $review->self_submitted_at || $review->self_skipped;
 
         $out = [
             'id' => $review->id,
@@ -34,6 +36,8 @@ class PerformanceReviewPresenter
             'status' => $review->status,
             'status_label' => $review->statusLabel(),
             'is_finalised' => $final,
+            // Whether a supervisor takes part (so the process tracker can say so); never who they are
+            'has_supervisor' => $review->route === PerformanceReview::ROUTE_SUPERVISOR,
             'self_skipped' => $selfVisible ? $review->self_skipped : false,
             'cycle' => [
                 'id' => $review->cycle->id,
@@ -45,6 +49,8 @@ class PerformanceReviewPresenter
             'staff' => ['id' => $review->staff_id, 'name' => $review->staff?->full_names, 'position' => $review->position_name],
             'scale' => ['min' => PerformanceScorer::MIN_RATING, 'max' => PerformanceScorer::MAX_RATING],
             'actions' => $this->actions($viewer, $review),
+            // Where the joint review meeting and the appeal have got to (the pages for them show the rest)
+            'stages' => $this->meetings->summary($viewer, $review),
             'items' => [],
         ];
 
@@ -53,6 +59,10 @@ class PerformanceReviewPresenter
 
             if ($role === PerformanceAccess::ROLE_SUBJECT) {
                 $row += ['self_rating' => $item->self_rating, 'self_comment' => $item->self_comment];
+                // The supervisor's rating is shared with the staff member only once the review is finalised
+                if ($final) {
+                    $row += ['supervisor_rating' => $item->supervisor_rating, 'supervisor_comment' => $item->supervisor_comment];
+                }
             } else {
                 if ($selfVisible) {
                     $row += ['self_rating' => $item->self_rating, 'self_comment' => $item->self_comment];
@@ -70,7 +80,12 @@ class PerformanceReviewPresenter
         $out['scores'] = ['self' => $selfVisible ? PerformanceScorer::score($items, 'self') : null];
 
         if ($role === PerformanceAccess::ROLE_SUBJECT) {
-            // Nothing about the supervisor's rating, who the supervisor is, the records or the history
+            // Once finalised: the supervisor's rating, score and overall comment. Never who the supervisor is, the records or the history
+            if ($final) {
+                $out['supervisor_summary'] = $review->supervisor_summary;
+                $out['scores']['supervisor'] = PerformanceScorer::score($items, 'supervisor');
+            }
+
             return $this->withFinal($out, $review, $final);
         }
 
@@ -94,10 +109,11 @@ class PerformanceReviewPresenter
     /** The one-line row a list shows for a review. Nothing in it is an appraisal rating except the final score. */
     public function row(PerformanceReview $review): array
     {
-        $review->loadMissing(['cycle', 'staff', 'supervisor']);
+        $review->loadMissing(['cycle', 'staff', 'supervisor', 'appeal']);
 
         return [
             'id' => $review->id,
+            'appeal' => $review->appeal ? ($review->appeal->isDecided() ? 'decided' : 'filed') : null,
             'cycle' => $review->cycle?->name,
             'cycle_id' => $review->cycle_id,
             'staff' => $review->staff?->full_names,

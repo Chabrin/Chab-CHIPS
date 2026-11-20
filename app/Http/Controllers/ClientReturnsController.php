@@ -15,6 +15,8 @@ use App\Exceptions\MiniReturnException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Str;
+use Symfony\Component\HttpFoundation\HeaderUtils;
 use App\Models\ClientReturnsBatch;
 use App\Models\ReturnSummary;
 use App\Models\ReturnClient;
@@ -61,9 +63,9 @@ class ClientReturnsController extends Controller
     public function index()
     {
         try {
-            $currentYear = (int) date('Y');
-            $currentMonth = (int) date('m');
-            $years = range($currentYear, $currentYear - 4);
+            $currentYear = (int) request()->input('year', date('Y'));
+            $currentMonth = (int) request()->input('month', date('m'));
+            $years = range(max((int) date('Y'), $currentYear), min((int) date('Y') - 4, $currentYear));
 
             return view('property.returns.list', compact('currentYear', 'currentMonth', 'years'));
         } catch (Exception $e) {
@@ -92,6 +94,9 @@ class ClientReturnsController extends Controller
             $query = ReturnSummary::unpaid()
                 ->where('year', $year)
                 ->where('month', $month);
+            if ($request->filled('generation')) {
+                $query->whereIn('id', $request->session()->get('returns_generation.' . $request->input('generation'), []));
+            }
             //count of lines for sorting in datatable
 
             // Role-based filtering: non-global users only see returns for properties assigned to them
@@ -1177,6 +1182,17 @@ class ClientReturnsController extends Controller
                 Log::info("Step 5: MASTERRETURN generation skipped (single property not in merge batch)");
             }
 
+            $generatedReturns = ReturnSummary::where('return_period', $returnPeriod)
+                ->where('return_type', 'MAINRETURN')
+                ->when($requestedPropertyId, function ($query) use ($propertyIds) {
+                    $query->whereIn('property_code', DB::table('sys_pm_properties')->whereIn('id', $propertyIds)->select('reference_number'));
+                })
+                ->get(['id', 'parent_return_code']);
+            $generatedIds = $generatedReturns->pluck('id')->all();
+            $masterIds = ReturnSummary::whereIn('return_code', $generatedReturns->pluck('parent_return_code')->filter()->unique())
+                ->pluck('id')->all();
+            $generatedIds = array_values(array_unique(array_merge($generatedIds, $masterIds)));
+
             DB::commit();
 
             Log::info("=== RETURN GENERATION COMPLETE ===", [
@@ -1214,6 +1230,7 @@ class ClientReturnsController extends Controller
 
             return response()->json([
                 'success'            => true,
+                'redirect_url'       => $this->generationRedirectUrl($generatedIds, $returnYear, $returnMonthNum),
                 'message'            => $message,
                 'count'              => $rentInserted,
                 'properties_count'   => $summaryCount,
@@ -1314,9 +1331,22 @@ class ClientReturnsController extends Controller
             'properties_count' => 1,
             'master_count' => 0,
             'return_code' => $result['return_code'],
+            'redirect_url' => route('returns.details', encrypt(ReturnSummary::where('return_code', $result['return_code'])->sole()->id)),
             'property_id' => $propertyId,
             'merge_batch' => null,
         ]);
+    }
+
+    protected function generationRedirectUrl(array $returnIds, int $year, int $month): string
+    {
+        if (count($returnIds) === 1) {
+            return route('returns.details', encrypt($returnIds[0]));
+        }
+
+        $generation = (string) \Illuminate\Support\Str::uuid();
+        request()->session()->put('returns_generation.' . $generation, $returnIds);
+
+        return route('returns.batches.index', ['year' => $year, 'month' => $month, 'generation' => $generation]);
     }
 
     /**
@@ -1692,6 +1722,7 @@ class ClientReturnsController extends Controller
                 ?: DB::table('sys_pm_clients')->where('reference_number', $return->landlord_code)->value('names');
             $propertyName = $return->property_name
                 ?: DB::table('sys_pm_properties')->where('reference_number', $return->property_code)->value('property_name');
+            $exportInfo = $this->propertyReturnExportInfo($return, $propertyName);
 
             $propertyDisplay = $propertyName
                 ? trim($propertyName . ' - ' . ($return->property_code ?? ''))
@@ -1700,7 +1731,7 @@ class ClientReturnsController extends Controller
                 ? trim($landlordName . ' (' . ($return->landlord_code ?? '') . ')')
                 : ($return->landlord_code ?? '-');
 
-            $data = compact('return', 'tenantRows', 'totals', 'summary', 'summaryRows', 'settlementRows', 'arrears', 'signoff', 'propertyDisplay', 'landlordDisplay');
+            $data = compact('return', 'tenantRows', 'totals', 'summary', 'summaryRows', 'settlementRows', 'arrears', 'signoff', 'propertyDisplay', 'landlordDisplay', 'exportInfo');
 
             $pdf = Pdf::loadView('property.processed-returns.pdf', $data)
                 ->setPaper('A4', 'landscape')
@@ -1711,12 +1742,11 @@ class ClientReturnsController extends Controller
             $dompdf->render();
             $this->addPdfPageNumbers($dompdf);
 
-            $fileName = 'Return_' . $return->return_code . '_' . date('Y-m-d') . '.pdf';
             $token    = request()->query('download_token');
             $pdfContent = $dompdf->output();
 
             header('Content-Type: application/pdf');
-            header('Content-Disposition: attachment; filename="' . $fileName . '"');
+            header('Content-Disposition: ' . $this->returnExportDisposition($exportInfo['filename_stem'] . '.pdf'));
             header('Cache-Control: max-age=0');
             if ($token) {
                 header('Set-Cookie: download_complete_' . $token . '=1; Path=/; Max-Age=60; SameSite=Lax');
@@ -1891,18 +1921,22 @@ class ClientReturnsController extends Controller
             }
 
             $lines = ReturnClient::forReturn($return->return_code);
+            $propertyName = $return->property_name
+                ?: DB::table('sys_pm_properties')->where('reference_number', $return->property_code)->value('property_name');
+            $exportInfo = $this->propertyReturnExportInfo($return, $propertyName);
+            $header = $this->buildReturnHeaderInfo($return);
+            $header['title'] = $exportInfo['title'];
             $spreadsheet = $this->statementExport->build(
                 $return,
                 $this->buildTenantStatementData($return, $lines),
-                $this->buildReturnHeaderInfo($return),
+                $header,
                 $this->buildReturnSignoffData($return)
             );
 
             $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
-            $filename = 'return_' . $return->return_code . '_' . date('Y-m-d') . '.xlsx';
 
             header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-            header('Content-Disposition: attachment;filename="' . $filename . '"');
+            header('Content-Disposition: ' . $this->returnExportDisposition($exportInfo['filename_stem'] . '.xlsx'));
             header('Cache-Control: max-age=0');
             $dlToken = request()->query('download_token');
             if ($dlToken) {
@@ -1919,6 +1953,37 @@ class ClientReturnsController extends Controller
                 'message' => 'Failed to generate Excel'
             ], 500);
         }
+    }
+
+    /** @return array{title:string,type:string,filename_stem:string} */
+    private function propertyReturnExportInfo(ReturnSummary $return, ?string $propertyName): array
+    {
+        $period = date('F Y', mktime(0, 0, 0, (int) $return->month, 1, (int) $return->year));
+        $type = 'Main Return';
+        if ($return->return_type === 'MINIRETURN') {
+            $type = 'Mini Return';
+            if (preg_match('/^R([2-9])/i', $return->return_code, $matches)) {
+                $type .= ' ' . ((int) $matches[1] - MiniReturnService::FIRST_SEQUENCE + 1);
+            } else {
+                $type .= ' ' . $return->id;
+            }
+        }
+
+        $property = trim($propertyName ?? '') ?: ($return->property_code ?: 'Property ' . $return->id);
+        $filenameProperty = str_replace(['<', '>', ':', '"', '/', '\\', '|', '?', '*'], ' ', $property);
+        $filenameProperty = preg_replace('/[\s\p{Cc}]+/u', ' ', $filenameProperty);
+        $filenameProperty = trim(mb_strcut($filenameProperty, 0, 180, 'UTF-8'), ' .') ?: 'Property ' . $return->id;
+
+        return [
+            'title' => "{$property} - {$period} - {$type}",
+            'type' => $type,
+            'filename_stem' => "{$filenameProperty} - {$period} - {$type}",
+        ];
+    }
+
+    private function returnExportDisposition(string $filename): string
+    {
+        return HeaderUtils::makeDisposition('attachment', $filename, str_replace('%', '', Str::ascii($filename)));
     }
 
     /**

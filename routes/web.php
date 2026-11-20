@@ -76,6 +76,20 @@ use App\Http\Controllers\PayrollMonthlyController;
 
 Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
 
+    // Staff messaging
+    Route::get('/staff-messaging', [\App\Http\Controllers\StaffMessagingController::class, 'index'])->name('staff-messaging.index');
+    Route::get('/staff-messaging/directory', [\App\Http\Controllers\StaffMessagingController::class, 'directory'])->name('staff-messaging.directory');
+    Route::get('/staff-messaging/conversations', [\App\Http\Controllers\StaffMessagingController::class, 'conversations'])->name('staff-messaging.conversations');
+    Route::get('/staff-messaging/unread-count', [\App\Http\Controllers\StaffMessagingController::class, 'unreadCount'])->name('staff-messaging.unread-count');
+    Route::get('/staff-messaging/conversations/{conversation}/messages', [\App\Http\Controllers\StaffMessagingController::class, 'messages'])->whereNumber('conversation')->name('staff-messaging.messages');
+    Route::get('/staff-messaging/conversations/{conversation}/messages/{message}/attachments/{attachment}', [\App\Http\Controllers\StaffMessagingController::class, 'downloadAttachment'])->whereNumber(['conversation', 'message', 'attachment'])->name('staff-messaging.attachments.download');
+    Route::post('/staff-messaging/conversations/{conversation}/messages', [\App\Http\Controllers\StaffMessagingController::class, 'sendMessage'])->whereNumber('conversation')->middleware('throttle:60,1')->name('staff-messaging.send');
+    Route::post('/staff-messaging/conversations/{conversation}/read', [\App\Http\Controllers\StaffMessagingController::class, 'markRead'])->whereNumber('conversation')->name('staff-messaging.read');
+    Route::post(
+        '/staff-messaging/conversations',
+        [\App\Http\Controllers\StaffMessagingController::class, 'startConversation']
+    )->middleware('throttle:30,1')
+        ->name('staff-messaging.conversations.store');
     // Notifications
     Route::get('/notifications/feed', [App\Http\Controllers\NotificationController::class, 'feed'])->name('notifications.feed');
     Route::get('/notifications', [App\Http\Controllers\NotificationController::class, 'index'])->name('notifications.index');
@@ -749,6 +763,28 @@ Route::middleware('throttle:5,1')->group(function () {
     // Supervisors
     Route::get('/ajax/hr/performance/supervisors/list', [\App\Http\Controllers\PerformanceSupervisorController::class, 'list'])->name('ajax.performance.supervisors.list');
     Route::post('/ajax/hr/performance/supervisors/assign', [\App\Http\Controllers\PerformanceSupervisorController::class, 'assign'])->name('ajax.performance.supervisors.assign');
+    // Joint review meeting (staff member, supervisor, HR and the review committee), the committee, and appeals
+    Route::get('/hr/performance/meetings', [\App\Http\Controllers\PerformanceMeetingController::class, 'index'])->name('performance.meetings');
+    Route::get('/hr/performance/reviews/{id}/meeting', [\App\Http\Controllers\PerformanceMeetingController::class, 'show'])->whereNumber('id')->name('performance.meeting');
+    Route::get('/hr/performance/reviews/{id}/appeal', [\App\Http\Controllers\PerformanceAppealController::class, 'show'])->whereNumber('id')->name('performance.appeal');
+    Route::get('/hr/performance/appeals', [\App\Http\Controllers\PerformanceAppealController::class, 'index'])->name('performance.appeals');
+    Route::get('/hr/performance/committee', [\App\Http\Controllers\PerformanceCommitteeController::class, 'index'])->name('performance.committee');
+
+    Route::get('/ajax/hr/performance/meetings/list', [\App\Http\Controllers\PerformanceMeetingController::class, 'list'])->name('ajax.performance.meetings.list');
+    Route::get('/ajax/hr/performance/reviews/{id}/page/{kind}', [\App\Http\Controllers\PerformanceMeetingController::class, 'data'])->whereNumber('id')->whereIn('kind', ['review', 'appeal'])->name('ajax.performance.meeting.data');
+    Route::post('/ajax/hr/performance/reviews/{id}/meeting/{kind}/schedule', [\App\Http\Controllers\PerformanceMeetingController::class, 'schedule'])->whereNumber('id')->whereIn('kind', ['review', 'appeal'])->name('ajax.performance.meeting.schedule');
+    Route::post('/ajax/hr/performance/reviews/{id}/meeting/{kind}/reschedule', [\App\Http\Controllers\PerformanceMeetingController::class, 'reschedule'])->whereNumber('id')->whereIn('kind', ['review', 'appeal'])->name('ajax.performance.meeting.reschedule');
+    Route::post('/ajax/hr/performance/reviews/{id}/meeting/record', [\App\Http\Controllers\PerformanceMeetingController::class, 'record'])->whereNumber('id')->name('ajax.performance.meeting.record');
+
+    Route::get('/ajax/hr/performance/appeals/list', [\App\Http\Controllers\PerformanceAppealController::class, 'list'])->name('ajax.performance.appeals.list');
+    Route::post('/ajax/hr/performance/reviews/{id}/appeal', [\App\Http\Controllers\PerformanceAppealController::class, 'file'])->whereNumber('id')->name('ajax.performance.appeal.file');
+    Route::post('/ajax/hr/performance/reviews/{id}/appeal/on-behalf', [\App\Http\Controllers\PerformanceAppealController::class, 'fileOnBehalf'])->whereNumber('id')->name('ajax.performance.appeal.on_behalf');
+    Route::post('/ajax/hr/performance/reviews/{id}/appeal/decide', [\App\Http\Controllers\PerformanceAppealController::class, 'decide'])->whereNumber('id')->name('ajax.performance.appeal.decide');
+
+    Route::get('/ajax/hr/performance/committee/list', [\App\Http\Controllers\PerformanceCommitteeController::class, 'list'])->name('ajax.performance.committee.list');
+    Route::post('/ajax/hr/performance/committee', [\App\Http\Controllers\PerformanceCommitteeController::class, 'add'])->name('ajax.performance.committee.add');
+    Route::post('/ajax/hr/performance/committee/settings', [\App\Http\Controllers\PerformanceCommitteeController::class, 'settings'])->name('ajax.performance.committee.settings');
+    Route::delete('/ajax/hr/performance/committee/{id}', [\App\Http\Controllers\PerformanceCommitteeController::class, 'remove'])->whereNumber('id')->name('ajax.performance.committee.remove');
     ####### Performance Review (HR) End ########
 
 

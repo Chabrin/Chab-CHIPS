@@ -19,6 +19,12 @@ use App\Exports\TenantPaymentsAllocatedExport;
 
 class TenantPaymentsController extends Controller
 {
+    private const ALLOCATED_PAYMENT_FILTER_RULES = [
+        'property_id' => 'required|integer',
+        'date_from' => 'required|date_format:Y-m-d',
+        'date_to' => 'required|date_format:Y-m-d|after_or_equal:date_from',
+    ];
+
     protected PaymentAllocationService $allocationService;
 
     /**
@@ -565,22 +571,9 @@ class TenantPaymentsController extends Controller
      */
     public function searchAllocatedPayments(Request $request)
     {
+        $request->validate(self::ALLOCATED_PAYMENT_FILTER_RULES);
+
         try {
-            if (!$request->filled('property_id')) {
-                return response()->json(['success' => false, 'message' => 'Please select a property'], 400);
-            }
-
-            if (!$request->filled('date_from') || !$request->filled('date_to')) {
-                return response()->json(['success' => false, 'message' => 'Both dates are required'], 400);
-            }
-
-            // Validate 32-day limit
-            $from = strtotime($request->date_from);
-            $to = strtotime($request->date_to);
-            if (($to - $from) > (32 * 86400)) {
-                return response()->json(['success' => false, 'message' => 'Date range cannot exceed 32 days'], 400);
-            }
-
             $query = TenantPaymentAllocated::with('tenant.tenantRecord')
                 ->where('property_id', $request->property_id)
                 ->where('current_status_id', 1)
@@ -627,11 +620,9 @@ class TenantPaymentsController extends Controller
      */
     public function exportAllocatedPayments(Request $request)
     {
-        try {
-            if (!$request->filled('property_id') || !$request->filled('date_from') || !$request->filled('date_to')) {
-                return redirect()->back()->with('error', 'Property and date range are required');
-            }
+        $request->validate(self::ALLOCATED_PAYMENT_FILTER_RULES);
 
+        try {
             $property = Property::find($request->property_id);
             $propertyName = $property->property_name ?? 'Unknown';
 

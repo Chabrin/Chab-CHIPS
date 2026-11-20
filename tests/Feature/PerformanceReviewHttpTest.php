@@ -278,6 +278,7 @@ class PerformanceReviewHttpTest extends TestCase
     {
         $this->publishedCycle([3]);
         $review = $this->service()->saveSelf($this->reviewOf(11), $this->userFor(11), $this->ratings($this->reviewOf(11), [5, 5]), null, true);
+        $review = $this->holdMeeting($review);
         $this->service()->saveHr($review, $this->hrUser(), $this->ratings($review, [5, 5]), null, true);
         $this->asHr();
 
@@ -413,6 +414,7 @@ class PerformanceReviewHttpTest extends TestCase
     {
         $cycle = $this->publishedCycle();
         $review = $this->service()->saveSelf($this->reviewOf(11), $this->userFor(11), $this->ratings($this->reviewOf(11), [5, 5]), null, true);
+        $review = $this->holdMeeting($review);
         $this->asHr();
 
         $this->assertCount(1, $this->rows('all', ['status' => 'awaiting_hr']));
@@ -436,6 +438,7 @@ class PerformanceReviewHttpTest extends TestCase
         $this->publishedCycle();
         $review = $this->reviewOf(10);
         $review = $this->service()->saveSelf($review, $this->userFor(10), $this->ratings($review, [8, 8], 'SECRET self'), null, true);
+        $review = $this->holdMeeting($review);
         $this->service()->saveSupervisor($review, $this->userFor(2), $this->ratings($review, [2, 2], 'SECRET sup'), null, true);
         $this->actAs(10);
 
@@ -443,7 +446,7 @@ class PerformanceReviewHttpTest extends TestCase
 
         $this->assertStringNotContainsString('SECRET', $json);
         $this->assertStringNotContainsString('rating', $json);
-        $this->assertSame(['id', 'cycle', 'cycle_id', 'staff', 'position', 'supervisor', 'route', 'status', 'status_label', 'final_score', 'deadline'], array_keys($this->rows('my')[0]));
+        $this->assertSame(['id', 'appeal', 'cycle', 'cycle_id', 'staff', 'position', 'supervisor', 'route', 'status', 'status_label', 'final_score', 'deadline'], array_keys($this->rows('my')[0]));
     }
 
     // ── one review ────────────────────────────────────────────────────────
@@ -474,6 +477,7 @@ class PerformanceReviewHttpTest extends TestCase
         $this->publishedCycle();
         $review = $this->reviewOf(10);
         $review = $this->service()->saveSelf($review, $this->userFor(10), $this->ratings($review, [8, 8], 'my words'), null, true);
+        $review = $this->holdMeeting($review);
         $review = $this->service()->saveSupervisor($review, $this->userFor(2), $this->ratings($review, [2, 2], 'SECRET sup'), 'SECRET summary', true);
         $this->actAs(10);
 
@@ -487,13 +491,19 @@ class PerformanceReviewHttpTest extends TestCase
         $after = [$page(), $data()];
 
         foreach (array_merge($before, $after) as $content) {
-            $this->assertStringNotContainsString('SECRET', $content);
             $this->assertStringContainsString('my words', $content);
         }
-        foreach ([$before[1], $after[1]] as $json) {
-            $this->assertStringNotContainsString('supervisor_rating', $json);
-            $this->assertStringNotContainsString('supervisor_comment', $json);
+        // The supervisor's rating and words stay hidden until the review is finalised, then the staff member is sent them
+        foreach ($before as $content) {
+            $this->assertStringNotContainsString('SECRET', $content);
         }
+        $this->assertStringNotContainsString('supervisor_rating', $before[1]);
+        $this->assertStringNotContainsString('supervisor_comment', $before[1]);
+        foreach ($after as $content) {
+            $this->assertStringContainsString('SECRET sup', $content);
+            $this->assertStringContainsString('SECRET summary', $content);
+        }
+        $this->assertStringContainsString('supervisor_rating', $after[1]);
         $this->assertStringNotContainsString('final words', $before[0].$before[1]);
         $this->assertStringContainsString('final words', $after[0]);
         $this->assertStringContainsString('final words', $after[1]);
@@ -509,8 +519,11 @@ class PerformanceReviewHttpTest extends TestCase
 
         $this->actAs(10);
         $res = $this->postJson(route('ajax.performance.reviews.self', $review->id), ['ratings' => $this->ratings($review, [8, 6], 'mine'), 'summary' => 'my summary', 'submit' => true])->assertOk();
-        $this->assertSame('awaiting_supervisor', $res->json('review.status'));
+        $this->assertSame('awaiting_meeting', $res->json('review.status'), 'the joint review meeting comes next');
         $this->assertSame([], $res->json('review.actions'));
+
+        $this->postJson(route('ajax.performance.reviews.supervisor', $review->id), ['ratings' => $this->ratings($review, [7, 5]), 'submit' => true])->assertForbidden();
+        $this->holdMeeting($review);
 
         $this->actAs(2);
         $res = $this->postJson(route('ajax.performance.reviews.supervisor', $review->id), ['ratings' => $this->ratings($review, [7, 5]), 'summary' => 'sup summary', 'submit' => true])->assertOk();
@@ -566,7 +579,8 @@ class PerformanceReviewHttpTest extends TestCase
         $this->asHr();
 
         $this->postJson(route('ajax.performance.reviews.skip_self', $review->id), ['reason' => ''])->assertStatus(422);
-        $this->postJson(route('ajax.performance.reviews.skip_self', $review->id), ['reason' => 'On leave'])->assertOk()->assertJsonPath('review.status', 'awaiting_supervisor');
+        $this->postJson(route('ajax.performance.reviews.skip_self', $review->id), ['reason' => 'On leave'])->assertOk()->assertJsonPath('review.status', 'awaiting_meeting');
+        $this->holdMeeting($review);
         $this->postJson(route('ajax.performance.reviews.reassign', $review->id), ['supervisor_staff_id' => 3, 'reason' => ''])->assertStatus(422);
         $this->postJson(route('ajax.performance.reviews.reassign', $review->id), ['supervisor_staff_id' => 3, 'reason' => 'Away'])->assertOk()->assertJsonPath('review.supervisor', 'Zola Zonemanager');
         $this->postJson(route('ajax.performance.reviews.reassign', $review->id), ['supervisor_staff_id' => '', 'reason' => 'HR takes over'])->assertOk()->assertJsonPath('review.status', 'awaiting_hr');

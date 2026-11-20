@@ -108,7 +108,7 @@ class PerformanceNotificationsTest extends TestCase
 
     // ── the self-rating is in ─────────────────────────────────────────────
 
-    public function test_when_the_self_rating_is_submitted_the_named_supervisor_is_asked_and_nobody_else(): void
+    public function test_when_the_self_rating_is_submitted_hr_is_asked_to_schedule_the_joint_review_meeting(): void
     {
         $this->nameSupervisor(10, 2);
         $this->publishedCycle();
@@ -117,10 +117,13 @@ class PerformanceNotificationsTest extends TestCase
 
         $this->service()->saveSelf($review, $this->userFor(10), $this->ratings($review, [8, 6]), null, true);
 
-        $this->assertSame([PerformanceNotifications::WAITING_FOR_SUPERVISOR => 1], $this->alertsOf(1002));
-        $this->assertSame(1, Notification::count(), 'not Zola (same position, not named), not HR, not the staff member');
-        $alert = Notification::first();
-        $this->assertSame('A review is waiting for your rating', $alert->title);
+        $this->assertSame([PerformanceNotifications::WAITING_FOR_MEETING => 1], $this->alertsOf(1060), 'the HR manager');
+        $this->assertSame([PerformanceNotifications::WAITING_FOR_MEETING => 1], $this->alertsOf(2000), 'the director');
+        $this->assertSame([], $this->alertsOf(1002), 'the supervisor is told once the meeting is scheduled, not before');
+        $this->assertSame([], $this->alertsOf(1010), 'the staff member just submitted');
+        $this->assertSame(2, Notification::count());
+        $alert = Notification::where('notifiable_id', 1060)->first();
+        $this->assertSame('A joint review meeting needs to be scheduled', $alert->title);
         $this->assertStringContainsString('Felix Officer', $alert->message);
         $this->assertStringContainsString('Q1 2027', $alert->message);
     }
@@ -145,9 +148,15 @@ class PerformanceNotificationsTest extends TestCase
 
         $this->service()->saveSelf($review, $this->userFor(11), $this->ratings($review, [8, 6]), null, true);
 
-        $this->assertSame([PerformanceNotifications::WAITING_FOR_HR => 1], $this->alertsOf(1060), 'the HR manager');
-        $this->assertSame([PerformanceNotifications::WAITING_FOR_HR => 1], $this->alertsOf(2000), 'the director');
+        $this->assertSame([PerformanceNotifications::WAITING_FOR_MEETING => 1], $this->alertsOf(1060), 'the HR manager');
+        $this->assertSame([PerformanceNotifications::WAITING_FOR_MEETING => 1], $this->alertsOf(2000), 'the director');
         $this->assertSame(2, Notification::count());
+
+        // After the meeting, with no supervisor it is HR that gives the rating, so HR is asked then
+        Notification::query()->delete();
+        $this->holdMeeting($review->refresh());
+        $this->assertSame(1, Notification::where('notifiable_id', 2000)->where('type', PerformanceNotifications::WAITING_FOR_HR)->count(), 'the director gives the final rating');
+        $this->assertSame(1, Notification::where('notifiable_id', 1011)->where('type', PerformanceNotifications::MEETING_HELD)->count(), 'the staff member can read the feedback');
     }
 
     public function test_an_hr_login_is_not_asked_to_finalise_its_own_review(): void
@@ -160,10 +169,10 @@ class PerformanceNotificationsTest extends TestCase
         $this->service()->saveSelf($review, $this->userFor(60, ['hr_manager']), $this->ratings($review, [9, 9]), null, true);
 
         $this->assertSame([], $this->alertsOf(1060), 'it is their own review');
-        $this->assertSame([PerformanceNotifications::WAITING_FOR_HR => 1], $this->alertsOf(2000), 'the director gives the final rating');
+        $this->assertSame([PerformanceNotifications::WAITING_FOR_MEETING => 1], $this->alertsOf(2000), 'the director schedules their meeting');
     }
 
-    public function test_when_hr_enters_the_self_rating_for_someone_or_skips_it_the_next_person_is_asked(): void
+    public function test_when_hr_enters_the_self_rating_for_someone_or_skips_it_hr_is_asked_to_schedule_the_meeting(): void
     {
         $this->nameSupervisor(10, 2);
         $this->publishedCycle();
@@ -171,11 +180,13 @@ class PerformanceNotificationsTest extends TestCase
 
         $review = $this->reviewOf(10);
         $this->service()->skipSelf($review, $this->hrUser(), 'On leave');
-        $this->assertSame([PerformanceNotifications::WAITING_FOR_SUPERVISOR => 1], $this->alertsOf(1002));
+        $this->assertSame([PerformanceNotifications::WAITING_FOR_MEETING => 1], $this->alertsOf(2000));
+        $this->assertSame([], $this->alertsOf(1002), 'the supervisor is told once the meeting is scheduled');
 
+        Notification::query()->delete();
         $review = $this->reviewOf(12); // no login, goes to HR
         $this->service()->saveSelf($review, $this->hrUser(), $this->ratings($review, [5, 5]), null, true, true);
-        $this->assertSame([PerformanceNotifications::WAITING_FOR_HR => 1], $this->alertsOf(2000));
+        $this->assertSame([PerformanceNotifications::WAITING_FOR_MEETING => 1], $this->alertsOf(2000));
     }
 
     // ── the supervisor has rated ──────────────────────────────────────────
@@ -185,6 +196,7 @@ class PerformanceNotificationsTest extends TestCase
         $this->nameSupervisor(10, 2);
         $this->publishedCycle();
         $review = $this->service()->saveSelf($this->reviewOf(10), $this->userFor(10), $this->ratings($this->reviewOf(10), [8, 6]), null, true);
+        $review = $this->holdMeeting($review);
 
         return $this->service()->saveSupervisor($review, $this->userFor(2), $this->ratings($review, [7, 5], 'SECRET comment'), 'SECRET summary', true);
     }
@@ -194,6 +206,7 @@ class PerformanceNotificationsTest extends TestCase
         $this->nameSupervisor(10, 2);
         $this->publishedCycle();
         $review = $this->service()->saveSelf($this->reviewOf(10), $this->userFor(10), $this->ratings($this->reviewOf(10), [8, 6]), null, true);
+        $review = $this->holdMeeting($review);
         Notification::query()->delete();
 
         $this->service()->saveSupervisor($review, $this->userFor(2), $this->ratings($review, [7, 5]), null, true);
@@ -210,7 +223,8 @@ class PerformanceNotificationsTest extends TestCase
         $this->criteria(self::POS_ACCOUNTANT);
         app(PerformanceCycleService::class)->publish($this->draftCycle(), $this->hrUser());
         $review = $this->service()->saveSelf($this->reviewOf(21), $this->userFor(21), $this->ratings($this->reviewOf(21), [6, 6]), null, true);
-        $this->assertSame([PerformanceNotifications::WAITING_FOR_SUPERVISOR => 1], $this->alertsOf(1060), 'the HR manager is the supervisor, so is asked to rate');
+        $review = $this->holdMeeting($review);
+        $this->assertSame([PerformanceNotifications::MEETING_SCHEDULED => 1], $this->alertsOf(1060), 'the HR manager is the supervisor, so is invited to the meeting');
         Notification::query()->delete();
 
         $this->service()->saveSupervisor($review, $this->userFor(60, ['hr_manager']), $this->ratings($review, [7, 7]), null, true);
@@ -239,6 +253,7 @@ class PerformanceNotificationsTest extends TestCase
         $this->nameSupervisor(10, 2);
         $this->publishedCycle();
         $review = $this->service()->saveSelf($this->reviewOf(10), $this->userFor(10), $this->ratings($this->reviewOf(10), [8, 6]), null, true);
+        $review = $this->holdMeeting($review);
         Notification::query()->delete();
 
         $review = $this->service()->reassign($review, $this->hrUser(), 3, 'Zane is away');
@@ -302,12 +317,15 @@ class PerformanceNotificationsTest extends TestCase
         DB::table('josya_users')->where('id', 2000)->update(['activation' => 0]);
         $review = $this->reviewOf(10);
         $review = $this->service()->saveSelf($review, $this->userFor(10), $this->ratings($review, [8, 6]), null, true);
+        $review = $this->holdMeeting($review);
 
-        $this->assertSame(0, Notification::count(), 'the supervisor\'s login is blocked');
+        $this->assertSame([], $this->alertsOf(1002), 'the supervisor\'s login is blocked');
+        $this->assertSame([], $this->alertsOf(2000), 'the director\'s login is not activated');
+        $this->assertGreaterThan(0, Notification::count(), 'the people who can be told were told');
 
         $this->service()->reassign($review, $this->hrUser(), null, 'HR takes over');
         $this->service()->saveHr($review->refresh(), $this->hrUser(), $this->ratings($review, [5, 5]), null, true);
-        $this->assertSame([PerformanceNotifications::FINALISED => 1], $this->alertsOf(1010));
+        $this->assertSame([PerformanceNotifications::MEETING_SCHEDULED => 1, PerformanceNotifications::MEETING_HELD => 1, PerformanceNotifications::FINALISED => 1], $this->alertsOf(1010), 'the staff member was invited, told the feedback is ready, and told it is finalised');
     }
 
     public function test_someone_who_has_left_is_not_told(): void
@@ -316,7 +334,8 @@ class PerformanceNotificationsTest extends TestCase
         $this->publishedCycle();
         $review = $this->reviewOf(10);
         $review = $this->service()->saveSelf($review, $this->userFor(10), $this->ratings($review, [8, 6]), null, true);
-        $this->assertSame([PerformanceNotifications::WAITING_FOR_SUPERVISOR => 1], $this->alertsOf(1002));
+        $review = $this->holdMeeting($review);
+        $this->assertSame([PerformanceNotifications::MEETING_SCHEDULED => 1], $this->alertsOf(1002), 'the supervisor was invited to the meeting');
         Notification::query()->delete();
 
         DB::table('sys_staff')->where('id', 10)->update(['current_status_id' => 3]);
@@ -335,7 +354,7 @@ class PerformanceNotificationsTest extends TestCase
 
         $saved = $this->service()->saveSelf($review, $this->userFor(10), $this->ratings($review, [8, 6]), null, true);
 
-        $this->assertSame(PerformanceReview::STATUS_AWAITING_SUPERVISOR, $saved->status);
+        $this->assertSame(PerformanceReview::STATUS_AWAITING_MEETING, $saved->status);
         $this->assertSame([8, 6], $saved->items()->pluck('self_rating')->all());
     }
 

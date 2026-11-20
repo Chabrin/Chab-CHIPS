@@ -42,7 +42,7 @@
                                 <span class="ms-1">Excel</span>
                             </button>
                         </div>
-                        <small class="text-muted d-block mb-2">Max 32-day range. Select property and dates, then search.</small>
+                        <small class="text-muted d-block mb-2">Select a property and date range, then search.</small>
 
                         <div id="results_area">
                             <div class="d-flex justify-content-between align-items-center mb-2">
@@ -160,32 +160,16 @@
             width: '100%'
         });
 
-        // Date validation â€” enforce 32-day max
-        function validateDates() {
-            var from = $('#date_from').val();
-            var to = $('#date_to').val();
-            if (from && to) {
-                var diff = (new Date(to) - new Date(from)) / (1000 * 60 * 60 * 24);
-                if (diff > 32) {
-                    alert('Date range cannot exceed 32 days.');
-                    return false;
-                }
-                if (diff < 0) {
-                    alert('Date To must be after Date From.');
-                    return false;
-                }
+        function validateDates(from, to) {
+            if (new Date(to) < new Date(from)) {
+                alert('The end date must be on or after the start date.');
+                return false;
             }
             return true;
         }
 
-        // Auto-set date_to max when date_from changes
         $('#date_from').on('change', function() {
-            var from = $(this).val();
-            if (from) {
-                var maxDate = new Date(from);
-                maxDate.setDate(maxDate.getDate() + 32);
-                $('#date_to').attr('max', maxDate.toISOString().split('T')[0]);
-            }
+            $('#date_to').attr('min', this.value);
         });
 
         // Search button
@@ -202,7 +186,7 @@
                 alert('Please select both dates.');
                 return;
             }
-            if (!validateDates()) return;
+            if (!validateDates(dateFrom, dateTo)) return;
 
             $('#search_spinner').show();
             $('#search_icon').hide();
@@ -249,6 +233,7 @@
             var dateFrom = $('#date_from').val();
             var dateTo = $('#date_to').val();
             if (!propertyId || !dateFrom || !dateTo) return;
+            if (!validateDates(dateFrom, dateTo)) return;
 
             $('#export_spinner').show();
             $('#export_icon').hide();

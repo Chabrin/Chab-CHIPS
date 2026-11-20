@@ -14,15 +14,17 @@
         });
     }
 
-    var STATUS_COLOURS = {
-        awaiting_self: 'warning',
-        awaiting_supervisor: 'info',
-        awaiting_hr: 'primary',
-        finalised: 'success'
+    // Each stage has its own colour; one we do not know is grey and still shows
+    var STATUS_TONES = {
+        awaiting_self: 'amber',
+        awaiting_meeting: 'violet',
+        awaiting_supervisor: 'blue',
+        awaiting_hr: 'teal',
+        finalised: 'green'
     };
 
     function statusBadge(status, label) {
-        return '<span class="badge bg-' + (STATUS_COLOURS[status] || 'secondary') + '-subtle text-' + (STATUS_COLOURS[status] || 'secondary') + '-emphasis border border-' + (STATUS_COLOURS[status] || 'secondary') + '-subtle">' + escapeHtml(label || status) + '</span>';
+        return '<span class="pr-chip is-' + (STATUS_TONES[status] || 'grey') + '">' + escapeHtml(label || status) + '</span>';
     }
 
     // The average of the ratings, each counted by its weight. A criterion nobody rated yet is left out, never counted as zero.
@@ -77,7 +79,8 @@
         if (mode === 'all') {
             cells += '<td>' + (row.supervisor ? escapeHtml(row.supervisor) : '<span class="text-muted">' + (row.route === 'hr' ? 'HR rates' : '-') + '</span>') + '</td>';
         }
-        cells += '<td>' + statusBadge(row.status, row.status_label) + '</td>';
+        var appeal = row.appeal ? '<div class="mt-1"><span class="pr-chip is-' + (row.appeal === 'decided' ? 'grey' : 'amber') + '">' + (row.appeal === 'decided' ? 'Appeal decided' : 'Under appeal') + '</span></div>' : '';
+        cells += '<td>' + statusBadge(row.status, row.status_label) + appeal + '</td>';
         cells += '<td class="text-nowrap">' + (row.final_score === null || row.final_score === undefined ? '<span class="text-muted">-</span>' : escapeHtml(formatScore(row.final_score))) + '</td>';
         cells += '<td class="text-nowrap">' + (row.deadline ? escapeHtml(row.deadline) : '<span class="text-muted">-</span>') + '</td>';
         cells += '<td class="text-end"><a class="btn btn-sm btn-outline-primary" href="' + escapeHtml(url) + '">Open</a></td>';
@@ -87,7 +90,7 @@
     function listBodyHtml(rows, mode, urlFor, emptyText) {
         var columns = mode === 'my' ? 5 : (mode === 'all' ? 7 : 6);
         if (!rows || !rows.length) {
-            return '<tr><td colspan="' + columns + '" class="text-center text-muted py-4">' + escapeHtml(emptyText) + '</td></tr>';
+            return '<tr><td colspan="' + columns + '"><div class="pr-empty"><span class="material-symbols-outlined" aria-hidden="true">inbox</span><div class="pr-empty-title">No reviews</div><div>' + escapeHtml(emptyText) + '</div></div></td></tr>';
         }
         return rows.map(function (row) { return listRowHtml(row, mode, urlFor(row)); }).join('');
     }

@@ -234,18 +234,18 @@ class ReturnStatementServiceTest extends TestCase
     {
         $dr = ['dr_cr' => 'DR', 'unit_code' => null, 'tenant_name' => null, 'transaction_source' => 'LANDLORD ACCOUNT'];
         $lines = collect([
-            $this->line(1, 'RENT CURRENT', 1000, ['property_code' => '594A', 'unit_code' => '594A-E01', 'tenant_name' => 'Anne']),
-            $this->line(2, 'RENT ARREARS', 300, ['property_code' => '594A', 'unit_code' => '594A-E01', 'tenant_name' => 'Anne', 'narration' => 'Rent for November 2026']),
-            $this->line(3, 'RENT ARREARS', 200, ['property_code' => '594A', 'unit_code' => '594A-E01', 'tenant_name' => 'Anne', 'narration' => 'Rent for March 2026']),
+            $this->line(1, 'RENT CURRENT', 1000, ['property_code' => '272E', 'unit_code' => '272e-A1', 'tenant_name' => 'Anne']),
+            $this->line(2, 'RENT ARREARS', 300, ['property_code' => '272E', 'unit_code' => '272e-A1', 'tenant_name' => 'Anne', 'narration' => 'Rent for November 2026']),
+            $this->line(3, 'RENT ARREARS', 200, ['property_code' => '272E', 'unit_code' => '272e-A1', 'tenant_name' => 'Anne', 'narration' => 'Rent for March 2026']),
             $this->line(4, 'ADVANCE PAYMENTS', 50, array_merge($dr, ['narration' => 'later', 'source_date' => '2026-07-16 10:00:00'])),
             $this->line(5, 'ADVANCE PAYMENTS', 70, array_merge($dr, ['narration' => 'earlier', 'source_date' => '2026-07-03 10:00:00'])),
         ]);
         $return = new ReturnSummary(['return_code' => 'R1']);
         $data = app(ReturnStatementService::class)->statement($return, $lines, collect());
 
-        $this->assertSame('E01', $data['tenantRows'][0]['unit_code']);
+        $this->assertSame('A1', $data['tenantRows'][0]['unit_code']);
         $this->assertSame(['Rent for March 2026', 'Rent for November 2026'], array_column($data['arrears'], 'details'));
-        $this->assertSame('E01', $data['arrears'][0]['room']);
+        $this->assertSame('A1', $data['arrears'][0]['room']);
         $deductions = array_values(array_filter($data['settlementRows'], fn($row) => $row['kind'] === 'item'));
         $this->assertSame(['earlier', 'later'], array_column($deductions, 'label'));
     }
@@ -289,9 +289,12 @@ class ReturnStatementServiceTest extends TestCase
         $return = new ReturnSummary(['return_code' => 'R1', 'commission_total' => 20000, 'commission_rate' => 10]);
         $lines = collect([$this->line(1, 'RENT CURRENT', 20000, ['remarks' => '=1+1', 'commission_amount' => 2000, 'vat_amount' => 320])]);
         $data = app(ReturnStatementService::class)->statement($return, $lines, collect());
+        $title = 'Sample Property - November 2026 - Main Return';
         $book = app(ReturnStatementExport::class)->build($return, $data,
-            ['landlord_label' => 'Landlord', 'property_label' => 'Property', 'period' => 'November 2026'], []);
+            ['title' => $title, 'landlord_label' => 'Landlord', 'property_label' => 'Property', 'period' => 'November 2026'], []);
         $sheet = $book->getActiveSheet();
+        $this->assertSame($title, $book->getProperties()->getTitle());
+        $this->assertSame($title, $sheet->getCell('A2')->getValue());
         $this->assertSame('Monthly Rent', $sheet->getCell('L8')->getValue());
         $this->assertSame('Remarks', $sheet->getCell('M8')->getValue());
         $this->assertSame('Arrears / Prepayments', $sheet->getCell('D8')->getValue());

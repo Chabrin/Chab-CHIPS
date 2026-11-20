@@ -12,12 +12,20 @@ use Illuminate\Support\Facades\DB;
  * Everything that changes a review: the self-rating, the supervisor's rating, HR's final rating, sending it back, skipping
  * a self-rating, changing the supervisor, and correcting a finalised review. Each one first asks PerformanceAccess whether
  * this person may, does its work in one transaction, and writes an event so the review keeps its history.
+ *
+ * The order is HR's Performance Review Process: self-rating, then the joint review meeting (PerformanceMeetingService), then
+ * the supervisor's rating and remarks, then HR's final rating, and last an optional appeal (PerformanceAppealService).
  */
 class PerformanceReviewService
 {
     private const COMMENT_MAX = 2000;
 
-    public function __construct(private PerformanceAccess $access, private PerformanceMetrics $metrics, private PerformanceNotifications $notifications) {}
+    public function __construct(
+        private PerformanceAccess $access,
+        private PerformanceMetrics $metrics,
+        private PerformanceNotifications $notifications,
+        private PerformanceMeetingService $meetings,
+    ) {}
 
     /**
      * The staff member rates themselves, or HR does it for them ($onBehalf).
@@ -35,9 +43,7 @@ class PerformanceReviewService
 
             if ($submit) {
                 $review->self_submitted_at = now();
-                $review->status = $review->route === PerformanceReview::ROUTE_SUPERVISOR
-                    ? PerformanceReview::STATUS_AWAITING_SUPERVISOR
-                    : PerformanceReview::STATUS_AWAITING_HR;
+                $review->status = PerformanceReview::STATUS_AWAITING_MEETING;
             }
             $review->save();
 
@@ -65,9 +71,7 @@ class PerformanceReviewService
         $saved = DB::transaction(function () use ($review, $actor, $reason) {
             $from = $review->status;
             $review->self_skipped = true;
-            $review->status = $review->route === PerformanceReview::ROUTE_SUPERVISOR
-                ? PerformanceReview::STATUS_AWAITING_SUPERVISOR
-                : PerformanceReview::STATUS_AWAITING_HR;
+            $review->status = PerformanceReview::STATUS_AWAITING_MEETING;
             $review->save();
 
             PerformanceReviewEvent::record($review, 'self_skipped', $actor->id, ['from_status' => $from, 'note' => $reason, 'on_behalf_of_staff_id' => $review->staff_id]);
@@ -207,6 +211,7 @@ class PerformanceReviewService
                 }
             }
             $review->save();
+            $this->meetings->syncSupervisor($review);
 
             PerformanceReviewEvent::record($review, 'supervisor_changed', $actor->id, [
                 'from_status' => $from,
@@ -224,8 +229,11 @@ class PerformanceReviewService
         return $saved;
     }
 
-    /** HR changes the final ratings of a finalised review. The old values and the reason are kept in its history. */
-    public function correct(PerformanceReview $review, User $actor, array $ratings, ?string $comment, string $reason): PerformanceReview
+    /**
+     * HR changes the final ratings of a finalised review. The old values and the reason are kept in its history. $notify is
+     * false when the caller tells the staff member itself (an appeal decision does).
+     */
+    public function correct(PerformanceReview $review, User $actor, array $ratings, ?string $comment, string $reason, bool $notify = true): PerformanceReview
     {
         $this->allow($actor, $review, 'correct');
         $reason = $this->requiredReason($reason, 'Say why the final rating is being corrected.');
@@ -251,7 +259,9 @@ class PerformanceReviewService
             return $review->refresh();
         });
 
-        $this->notifications->corrected($saved);
+        if ($notify) {
+            $this->notifications->corrected($saved);
+        }
 
         return $saved;
     }
