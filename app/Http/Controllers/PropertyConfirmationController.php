@@ -15,6 +15,15 @@ use Illuminate\Support\Facades\Crypt;
 
 class PropertyConfirmationController extends Controller
 {
+    private function guardTenantReview(Request $request, array $ids): void
+    {
+        $kind = ['Clients' => 'tenant', 'Tenants' => 'tenant', 'Lease Agreements' => 'lease'][$request->input('section')] ?? null;
+        if ($kind) {
+            foreach ($ids as $id) {
+                \App\Services\TenantReviewService::assertLegacy((int) $id, $kind);
+            }
+        }
+    }
     use HasWorkflowStatuses;
     use TenantExitSettlementCalculatorTrait;
 
@@ -447,6 +456,7 @@ class PropertyConfirmationController extends Controller
             case 'Tenants':
                 $base = \App\Models\Client::where('current_status_id', 1) // Pending
                     ->where('reference_number', 'LIKE', 'TEN%'); // Only tenants
+                \App\Services\TenantReviewService::legacyOnly($base, 'sys_pm_clients.id', 'tenant');
                 if ($search !== '') {
                     $base->where(function ($q) use ($search) {
                         $q->where('reference_number', 'ILIKE', "%{$search}%")
@@ -542,6 +552,7 @@ class PropertyConfirmationController extends Controller
 
             case 'Lease Agreements':
                 $base = \App\Models\LeaseAgreement::where('current_status_id', 1); // Pending
+                \App\Services\TenantReviewService::legacyOnly($base, 'sys_pm_lease_agreements.id', 'lease');
                 if ($search !== '') {
                     $base->where(function ($q) use ($search) {
                         $q->where('ref_number', 'ILIKE', "%{$search}%")
@@ -738,6 +749,7 @@ class PropertyConfirmationController extends Controller
 
     public function approve(Request $request, $id)
     {
+        $this->guardTenantReview($request, [(int) $id]);
         $section = $request->input('section');
         
         try {
@@ -1258,6 +1270,7 @@ class PropertyConfirmationController extends Controller
 
     public function reject(Request $request, $id)
     {
+        $this->guardTenantReview($request, [(int) $id]);
         $section = $request->input('section');
         $rejectionReason = $request->input('rejection_reason', null);
         
@@ -1386,6 +1399,7 @@ class PropertyConfirmationController extends Controller
 
     public function bulkApprove(Request $request)
     {
+        $this->guardTenantReview($request, $request->input('ids', []));
         $ids = $request->input('ids', []);
         $section = $request->input('section');
         $skipped = [];
@@ -1482,6 +1496,7 @@ class PropertyConfirmationController extends Controller
 
     public function bulkReject(Request $request)
     {
+        $this->guardTenantReview($request, $request->input('ids', []));
         $ids = $request->input('ids', []);
         $section = $request->input('section');
         $rejectionReason = $request->input('rejection_reason', null);

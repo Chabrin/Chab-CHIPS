@@ -1,161 +1,200 @@
 @extends('layouts.main')
+
+@section('styles')
+<link rel="stylesheet" href="{{ asset('assets/css/client-list.css') }}?v={{ filemtime(public_path('assets/css/client-list.css')) }}">
+@endsection
+
 @section('content')
-<div class="page-body" style="padding-top:10px;">
+<div class="page-body" id="clients-directory">
     <div class="container-fluid">
-        <div class="row">
-            <div class="col-sm-12">
-                <div class="card">
-                    <div class="card-header card-no-border d-flex align-items-center">
-                        <h5 class="mb-0">Clients Management</h5>
-                        @permission('create_clients')
-                        <div class="ms-auto d-flex gap-2">
-                            <a href="/property/clients/create" class="btn btn-primary btn-sm d-flex align-items-center">
-                                <span class="material-symbols-outlined">add_circle</span>
-                                <span class="ms-1">Add Client</span>
-                            </a>
+        <section class="card client-list-card" aria-labelledby="clients-list-title">
+            <header class="client-list-header">
+                <div>
+                    <p class="client-list-eyebrow">Management</p>
+                    <h1 id="clients-list-title">Clients</h1>
+                </div>
+                @permission('create_clients')
+                    <a href="{{ route('property.clients.create') }}" class="btn btn-primary client-list-add">
+                        <i class="fa fa-plus-circle" aria-hidden="true"></i>
+                        Add Client
+                    </a>
+                @endpermission
+            </header>
+            <div class="client-list-body">
+                <div class="client-list-search-area" role="search" aria-label="Client directory">
+                    <div class="client-list-toolbar">
+                        <div class="client-list-search-field">
+                            <label for="client-search">Search clients</label>
+                            <div class="client-list-search-control">
+                                <i class="fa fa-search" aria-hidden="true"></i>
+                                <input id="client-search" type="search" class="form-control"
+                                       placeholder="Name, phone, ID number or client reference" autocomplete="off" aria-controls="clients-table">
+                            </div>
                         </div>
-                        @endpermission
+                        <div class="client-list-toolbar-actions">
+                            <button type="button" class="btn btn-sm client-list-filter-toggle"
+                                    data-bs-toggle="collapse" data-bs-target="#client-list-filter-panel"
+                                    aria-expanded="false" aria-controls="client-list-filter-panel">
+                                <i class="fa fa-sliders" aria-hidden="true"></i>
+                                <span id="client-filter-summary">More filters</span>
+                            </button>
+                            <button type="button" class="btn btn-sm client-list-clear" id="clear-client-filters" hidden>Clear search and filters</button>
+                        </div>
                     </div>
-                    <div class="card-body">
-                        <div class="table-responsive custom-scrollbar">
-                            <table class="display" id="clients-table" style="width:100%;">
-                                <thead>
-                                    <tr>
-                                        <th>#</th>
-                                        <th>ID</th>
-                                        <th>Names</th>
-                                        <th>Phone</th>
-                                        <th>ID Number</th>
-                                        <th>Reference Number</th>
-                                        <th>Registered Date</th>
-                                        <th>Action</th>
-                                    </tr>
-                                    <tr class="column-filters">
-                                        <th></th>
-                                        <th></th>
-                                        <th><input type="text" class="form-control form-control-sm col-filter" placeholder="Filter..." /></th>
-                                        <th><input type="text" class="form-control form-control-sm col-filter" placeholder="Filter..." /></th>
-                                        <th><input type="text" class="form-control form-control-sm col-filter" placeholder="Filter..." /></th>
-                                        <th><input type="text" class="form-control form-control-sm col-filter" placeholder="Filter..." /></th>
-                                        <th></th>
-                                        <th></th>
-                                    </tr>
-                                </thead>
-                                <tbody></tbody>
-                            </table>
+                    <div class="collapse" id="client-list-filter-panel">
+                        <div class="client-list-filter-grid">
+                            <div>
+                                <label for="client-filter-name">Client name</label>
+                                <input id="client-filter-name" class="form-control" type="search" data-client-filter="names" aria-controls="clients-table">
+                            </div>
+                            <div>
+                                <label for="client-filter-reference">Client reference</label>
+                                <input id="client-filter-reference" class="form-control" type="search" data-client-filter="reference_number" aria-controls="clients-table">
+                            </div>
+                            <div>
+                                <label for="client-filter-phone">Phone</label>
+                                <input id="client-filter-phone" class="form-control" type="search" data-client-filter="mobile_number" aria-controls="clients-table">
+                            </div>
+                            <div>
+                                <label for="client-filter-id">ID number</label>
+                                <input id="client-filter-id" class="form-control" type="search" data-client-filter="national_id" aria-controls="clients-table">
+                            </div>
                         </div>
                     </div>
                 </div>
+
+                <div id="client-list-error" class="alert alert-light-danger" role="alert" hidden>
+                    Could not load clients.
+                    <button id="retry-client-list" type="button" class="btn btn-sm client-list-clear">Try again</button>
+                </div>
+
+                <div class="table-responsive custom-scrollbar" tabindex="0" role="region" aria-label="Client records">
+                    <table class="w-100" id="clients-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Client name</th>
+                                <th scope="col">Client reference</th>
+                                <th scope="col">Phone</th>
+                                <th scope="col">Registered date</th>
+                                <th scope="col">Actions</th>
+                                <th scope="col">ID number</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
             </div>
-        </div>
+        </section>
     </div>
 </div>
+@endsection
+
+@section('scripts')
 <script>
-    $(document).ready(function() {
-        var table = $('#clients-table').DataTable({
-            processing: true,
-            serverSide: true,
-            ajax: {
-                url: "{{ route('property.clients.data') }}",
-                type: 'GET',
-                dataSrc: 'data'
-            },
-            columns: [{
-                    data: null,
-                    orderable: false,
-                    searchable: false,
-                    render: function(data, type, row, meta) {
-                        return meta.row + 1;
-                    }
-                },
-                {
-                    data: 'id'
-                },
-                {
-                    data: 'names',
-                    render: function(data, type, row) {
-                        return `<a class="client-link" style="color:#3598db" href="/property/clients/${row.encrypted_id}">${data}</a>`;
-                    }
-                },
-                {
-                    data: 'mobile_number'
-                },
-                {
-                    data: 'national_id'
-                },
-                {
-                    data: 'reference_number'
-                },
-                {
-                    data: 'registered_date'
-                },
-                {
-                    data: 'encrypted_id',
-                    orderable: false,
-                    searchable: false,
-                    render: function(encryptedId, type, row) {
-                        let actions = '<div class="d-flex flex-row gap-1">';
+    $(function() {
+        const directory = @js(route('property.clients.index'));
+        const search = document.getElementById('client-search');
+        const filters = Array.from(document.querySelectorAll('[data-client-filter]'));
+        const clear = document.getElementById('clear-client-filters');
+        const filterSummary = document.getElementById('client-filter-summary');
+        const error = $('#client-list-error');
+        const text = $.fn.dataTable.render.text();
 
-                        actions += `
-                            <a class="client-link" href="/property/clients/${encryptedId}" title="View">
-                                <span class="material-symbols-outlined view-icon" style="font-size:18px;">visibility</span>
-                            </a>
-                            <div class="spinner-border spinner-border-sm text-primary row-spinner" role="status" style="display: none;">
-                                <span class="visually-hidden">Loading...</span>
-                            </div>
-                        `;
+        function clientUrl(encryptedId) {
+            return directory + '/' + encodeURIComponent(encryptedId);
+        }
 
-                        if (row.can_update) {
-                            actions += `
-                                <a href="/property/clients/${encryptedId}/edit" title="Edit">
-                                    <span class="material-symbols-outlined" style="font-size:18px;">edit_document</span>
-                                </a>
-                            `;
+        function displayValue(value, fallback = '—') {
+            const label = String(value ?? '').trim();
+            return label && !/^[.\s-]+$/.test(label) ? label : fallback;
+        }
+
+        function actionIcon(url, label, iconName) {
+            return $('<a>', { href: url, title: label, 'aria-label': label, class: 'client-list-icon-action' })
+                .append($('<i>', { class: 'fa fa-' + iconName, 'aria-hidden': 'true' }));
+        }
+
+        const table = $('#clients-table')
+            .on('xhr.dt', function(event, settings, response) {
+                error.prop('hidden', response !== null);
+                if (response === null) return true;
+            })
+            .DataTable({
+                processing: true,
+                serverSide: true,
+                ajax: "{{ route('property.clients.data') }}",
+                columns: [
+                    {
+                        data: 'names',
+                        name: 'names',
+                        render: function(value, type, row) {
+                            if (type !== 'display') return value;
+                            const name = displayValue(value, '');
+                            return $('<a>', {
+                                href: clientUrl(row.encrypted_id),
+                                class: name ? 'client-list-name' : 'client-list-name client-list-name-missing',
+                                text: name || 'Name missing'
+                            })[0];
                         }
-
-                        actions += '</div>';
-                        return actions;
-                    }
-                }
-            ],
-            paging: true,
-            info: true,
-            lengthChange: true,
-            searching: true,
-            pageLength: 25,
-            ordering: true,
-            orderCellsTop: true,
-            order: [
-                [2, 'asc']
-            ] // Sort by names
-        });
-
-        // Per-column filtering
-        $('#clients-table thead .column-filters th').each(function(i) {
-            $('input', this).on('keyup change', function() {
-                var col = table.column(i);
-                if (col.search() !== this.value) {
-                    col.search(this.value).draw();
+                    },
+                    { data: 'reference_number', name: 'reference_number', className: 'text-nowrap', render: value => text.display(displayValue(value)) },
+                    { data: 'mobile_number', name: 'mobile_number', className: 'text-nowrap', render: value => text.display(displayValue(value)) },
+                    { data: 'registered_date', name: 'registered_date', className: 'text-nowrap', render: value => text.display(displayValue(value)) },
+                    {
+                        data: 'encrypted_id',
+                        name: 'actions',
+                        orderable: false,
+                        searchable: false,
+                        render: function(value, type, row) {
+                            if (type !== 'display') return '';
+                            const url = clientUrl(value);
+                            const actions = $('<div>', { class: 'client-list-row-actions' }).append(actionIcon(url, 'Open client', 'eye'));
+                            if (row.can_update) actions.append(actionIcon(url + '/edit', 'Edit client', 'pencil'));
+                            return actions[0];
+                        }
+                    },
+                    { data: 'national_id', name: 'national_id', visible: false, orderable: false }
+                ],
+                layout: {
+                    topStart: null, topEnd: null,
+                    bottomStart: ['info', 'pageLength'], bottomEnd: 'paging'
+                },
+                pageLength: 25,
+                order: { name: 'names', dir: 'asc' },
+                language: {
+                    emptyTable: 'No clients are available.',
+                    zeroRecords: 'No clients match your search or filters.',
+                    info: 'Showing _START_–_END_ of _TOTAL_',
+                    infoEmpty: 'Showing 0 clients',
+                    infoFiltered: ' (from _MAX_ total)',
+                    lengthMenu: 'Rows per page _MENU_'
                 }
             });
+
+        let searchTimer;
+        function applyFilters() {
+            clearTimeout(searchTimer);
+            table.search(search.value.trim());
+            filters.forEach(input => table.column(input.dataset.clientFilter + ':name').search(input.value.trim()));
+            table.draw();
+        }
+
+        function updateFilters() {
+            const active = filters.filter(input => input.value.trim()).length;
+            filterSummary.textContent = active ? 'More filters (' + active + ')' : 'More filters';
+            clear.hidden = !search.value && !active;
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(applyFilters, 250);
+        }
+
+        [search, ...filters].forEach(input => input.addEventListener('input', updateFilters));
+        clear.addEventListener('click', function() {
+            [search, ...filters].forEach(input => { input.value = ''; });
+            updateFilters();
+            applyFilters();
+            search.focus();
         });
-
-        // Handle row-level spinner on client link click
-        $(document).on('click', '.client-link', function(e) {
-            e.preventDefault();
-            var row = $(this).closest('tr');
-            var url = $(this).attr('href');
-
-            // Hide view icon and show spinner
-            row.find('.view-icon').hide();
-            row.find('.row-spinner').show();
-
-            // Disable all links in the row
-            row.find('a').css('pointer-events', 'none').css('opacity', '0.6');
-
-            // Navigate to the details page
-            window.location.href = url;
-        });
+        $('#retry-client-list').on('click', applyFilters);
     });
 </script>
 @endsection

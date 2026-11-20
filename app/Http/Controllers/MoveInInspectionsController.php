@@ -143,6 +143,7 @@ class MoveInInspectionsController extends Controller
             ]);
 
             $tenantId = Crypt::decrypt($validated['tenant_id']);
+            app(\App\Services\TenantReviewService::class)->lockForCorrection((int) $tenantId, $request->user());
             $tenant = Client::tenants()->findOrFail($tenantId);
 
             if (!$tenant->property_id || !$tenant->unit_id) {

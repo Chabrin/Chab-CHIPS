@@ -52,6 +52,7 @@ class LeaseAgreementApprovalService
                 $join->whereRaw('z.id = COALESCE(l.zone_id, p.zone_id)');
             })
             ->leftJoin('josya_users as u', 'u.id', '=', 'l.created_by_id');
+        TenantReviewService::legacyOnly($query, 'l.id', 'lease');
 
         $status = $filters['status'] ?? (string) self::STATUS_PENDING;
         if ($status !== 'all') {
@@ -171,7 +172,9 @@ class LeaseAgreementApprovalService
      * Lease counts per status, for the tabs above the table.
      */
     public function statusCounts(): array {
-        $counts = DB::table('sys_pm_lease_agreements')
+        $query = DB::table('sys_pm_lease_agreements');
+        TenantReviewService::legacyOnly($query, 'sys_pm_lease_agreements.id', 'lease');
+        $counts = $query
             ->whereIn('current_status_id', [self::STATUS_PENDING, self::STATUS_APPROVED, self::STATUS_REJECTED])
             ->selectRaw('current_status_id, count(*) as total')
             ->groupBy('current_status_id')
@@ -375,6 +378,10 @@ class LeaseAgreementApprovalService
 
         DB::transaction(function () use ($leases, &$skipped, &$flipped) {
             foreach ($leases as $lease) {
+                if (\Illuminate\Support\Facades\Schema::hasTable('tenant_reviews') && \App\Models\TenantReview::where('lease_id', $lease->id)->exists()) {
+                    $skipped[$lease->id] = 'Use New Tenant Approvals for this record.';
+                    continue;
+                }
                 if ((int) $lease->current_status_id !== self::STATUS_PENDING) {
                     $skipped[$lease->id] = 'Not pending';
                     continue;
@@ -431,6 +438,10 @@ class LeaseAgreementApprovalService
 
         DB::transaction(function () use ($leases, &$skipped, &$rejected) {
             foreach ($leases as $lease) {
+                if (\Illuminate\Support\Facades\Schema::hasTable('tenant_reviews') && \App\Models\TenantReview::where('lease_id', $lease->id)->exists()) {
+                    $skipped[$lease->id] = 'Use New Tenant Approvals for this record.';
+                    continue;
+                }
                 if ((int) $lease->current_status_id !== self::STATUS_PENDING) {
                     $skipped[$lease->id] = 'Not pending';
                     continue;

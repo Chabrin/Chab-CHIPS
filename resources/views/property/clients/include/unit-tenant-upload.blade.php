@@ -1,12 +1,19 @@
 {{-- Units & tenants bulk upload sub-tab: download the template, upload, pick a batch to load its rows below, click a row for details. --}}
 <div class="d-flex justify-content-between align-items-center mb-3">
-    <p class="text-muted small mb-0">Upload units and their tenants together for the property selected above. Only clean files are staged; nothing is created until you submit.</p>
+    <div>
+        <label for="utuMode" class="form-label">Upload mode</label>
+        <select id="utuMode" class="form-select form-select-sm">
+            <option value="new_units">New units and tenants</option>
+            <option value="existing_units">Tenants for existing units</option>
+        </select>
+        <p class="text-muted small mt-2 mb-0" id="utuModeHelp">Create new units, with optional tenant details. Upload, review, then submit.</p>
+    </div>
     <div class="d-flex flex-shrink-0 ms-2 gap-2">
         <button type="button" class="btn btn-outline-primary btn-sm d-flex align-items-center" id="utuDownloadBtn" disabled>
             <span class="material-symbols-outlined me-1" style="font-size:18px;">download</span> Download Template
         </button>
         <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="utuUploadBtn" data-bs-toggle="modal" data-bs-target="#utuUploadModal" disabled>
-            <span class="material-symbols-outlined me-1" style="font-size:18px;">upload_file</span> Upload Units &amp; Tenants
+            <span class="material-symbols-outlined me-1" style="font-size:18px;">upload_file</span> Upload File
         </button>
     </div>
 </div>
@@ -55,6 +62,7 @@
             <form id="utuUploadForm">
                 <div class="modal-body">
                     <p class="small text-muted mb-2">Property: <strong id="utuUploadPropertyName"></strong></p>
+                    <p class="small">Mode: <strong id="utuUploadModeName"></strong></p>
                     <input type="file" class="form-control" id="utuFile" accept=".xlsx" required>
                     <small class="text-muted">Use the downloaded template (.xlsx). A file with any error is rejected and nothing is saved.</small>
                 </div>
@@ -111,6 +119,16 @@
         var utuProperty = null;
         var utuEdit = null;
         var utuBadge = {staged: 'bg-warning text-dark', submitting: 'bg-info', submitted: 'bg-success'};
+
+        $('#utuMode').on('change', function() {
+            $('#utuModeHelp').text(this.value === 'existing_units'
+                ? 'Add tenants to available existing units. Saved rent and VAT are used; no units are created. Upload, review, then submit.'
+                : 'Create new units, with optional tenant details. Upload, review, then submit.');
+        });
+        $('#utuUploadModal').on('show.bs.modal', function() {
+            $(this).data('mode', $('#utuMode').val());
+            $('#utuUploadModeName').text($('#utuMode option:selected').text());
+        });
 
         function esc(v) {
             return String(v === null || v === undefined ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -179,7 +197,7 @@
         $('#tenants-bulk-upload-subtab').on('shown.bs.tab', function() { utuTable.columns.adjust(); utuSync(); });
 
         $('#utuDownloadBtn').on('click', function() {
-            window.location.href = utuBase + '/template?property_id=' + $('#tenantPropertySelect').val();
+            window.location.href = utuBase + '/template?property_id=' + $('#tenantPropertySelect').val() + '&mode=' + $('#utuMode').val();
         });
 
         $('#utuUploadForm').on('submit', function(e) {
@@ -190,6 +208,7 @@
             fd.append('_token', utuToken);
             fd.append('property_id', $('#tenantPropertySelect').val());
             fd.append('bulk_file', file);
+            fd.append('mode', $('#utuUploadModal').data('mode'));
             $('#utuUploadSubmit').prop('disabled', true);
             $('#utuUploadSpinner').removeClass('d-none');
             $.ajax({url: utuBase + '/import', type: 'POST', data: fd, processData: false, contentType: false, dataType: 'json',
@@ -260,7 +279,7 @@
 
         function utuRender() {
             var b = utuCurrent.batch;
-            $('#utuReviewTitle').text(b.file_name);
+            $('#utuReviewTitle').text(b.file_name + (b.mode === 'existing_units' ? ' · Tenants for existing units' : ' · New units and tenants'));
             $('#utuReviewStatus').attr('class', 'badge ms-2 ' + (utuBadge[b.status] || 'bg-secondary')).text(b.status);
             $('#utuCounts').text(utuCurrent.units.length + ' unit(s) · ' + utuCurrent.tenants.length + ' tenant(s)');
             utuBuildPairs();
@@ -311,7 +330,7 @@
             var u = pair.unit;
             var t = pair.tenant;
             utuEdit = {unitId: u ? u.id : null};
-            var unitBtns = u && utuEditable(u) ? '<button type="button" class="btn btn-outline-primary btn-sm utu-modal-edit" data-kind="units" data-id="' + u.id + '">Edit unit</button>' : '';
+            var unitBtns = u && utuEditable(u) && utuCurrent.batch.mode !== 'existing_units' ? '<button type="button" class="btn btn-outline-primary btn-sm utu-modal-edit" data-kind="units" data-id="' + u.id + '">Edit unit</button>' : '';
             var html = '<div class="mb-1">' + utuState(utuPairState(pair)) + '</div>';
             if (u) { html += utuSection('Unit', 'units', u, unitBtns); }
             if (t) {
@@ -323,6 +342,7 @@
             $('#utuRowTitle').text(u ? 'Unit ' + (u.unit_number || '') : 'Tenant ' + (t.names || t.company_name || ''));
             $('#utuRowBody').html(html);
             $('#utuRowDelete').toggleClass('d-none', !(u && utuEditable(u)));
+            $('#utuRowDelete').text(utuCurrent.batch.mode === 'existing_units' ? 'Remove staged tenant row' : 'Delete Unit & Tenant');
             $('#utuRowModal').modal('show');
         });
 
@@ -334,6 +354,10 @@
                 if (kind !== 'units' && field === 'unit_number') { return; }
                 var label = utuLabel(field) + (optional ? '' : ' *');
                 var val = row[field] === null || row[field] === undefined ? '' : row[field];
+                if (field === 'vat_able') {
+                    if (val === '1') val = 'Yes';
+                    if (val === '0') val = 'No';
+                }
                 var input;
                 if (utuCurrent.options[field]) {
                     input = '<select class="form-select form-select-sm" name="' + field + '"><option value=""></option>';
@@ -382,13 +406,13 @@
 
         function utuDeleteRow(kind, id) {
             var bid = utuCurrent.batch.id;
-            utuConfirm('Delete this row?', kind === 'units' ? 'It is permanently deleted along with its tenant row. Nothing is created.' : 'It is permanently deleted. The unit stays and is created vacant.', 'Yes, Delete',
+            utuConfirm('Delete this row?', utuCurrent.batch.mode === 'existing_units' ? 'Remove this staged tenant from the upload. The existing unit is kept unchanged.' : (kind === 'units' ? 'It is permanently deleted along with its tenant row. Nothing is created.' : 'It is permanently deleted. The unit stays and is created vacant.'), 'Yes, Delete',
                 utuBase + '/' + (kind === 'units' ? 'units' : 'tenants') + '/' + id, 'DELETE', function() { $('#utuRowModal').modal('hide'); utuRefresh(bid); });
         }
 
 
         $('#utuSubmitBatchBtn').on('click', function() {
-            Swal.fire({title: 'Submit this batch?', text: 'Ready rows create the units, tenants and 1-year leases. Rows that fail stay staged.', icon: 'question', showCancelButton: true, confirmButtonColor: '#3598db', confirmButtonText: 'Submit'}).then(function(res) {
+            Swal.fire({title: 'Submit this batch?', text: utuCurrent.batch.mode === 'existing_units' ? 'Ready rows create pending tenants and leases for existing units and send them for approval. Existing rent and VAT settings are kept. Rows that fail stay staged.' : 'Ready rows create new units, tenants and leases using the entered dates. Rows that fail stay staged.', icon: 'question', showCancelButton: true, confirmButtonColor: '#3598db', confirmButtonText: 'Submit'}).then(function(res) {
                 if (!res.isConfirmed) { return; }
                 var bid = utuCurrent.batch.id;
                 $('#utuSubmitSpinner').removeClass('d-none');

@@ -61,13 +61,16 @@ class UnitTenantUploadController extends Controller
         }
 
         try {
-            $request->validate(['property_id' => 'required|integer|min:1|max:2147483647']);
+            $request->validate(['property_id' => 'required|integer|min:1|max:2147483647', 'mode' => 'sometimes|in:new_units,existing_units']);
             $property = Property::findOrFail($request->property_id);
-            $spreadsheet = $this->templates->build($property);
+            $existing = $request->input('mode') === 'existing_units';
+            $spreadsheet = $this->templates->build($property, $existing);
 
             return response()->streamDownload(function () use ($spreadsheet) {
                 (new Xlsx($spreadsheet))->save('php://output');
-            }, $this->templates->fileName($property), ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']);
+            }, ($existing ? 'existing_' : '').$this->templates->fileName($property), ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']);
+        } catch (DomainException $e) {
+            return redirect()->back()->with('error', $e->getMessage());
         } catch (ValidationException | ModelNotFoundException $e) {
             return redirect()->back()->with('error', 'Select a valid property before downloading the template.');
         } catch (\Throwable $e) {
@@ -86,11 +89,13 @@ class UnitTenantUploadController extends Controller
             $request->validate([
                 'property_id' => 'required|integer|min:1|max:2147483647',
                 'bulk_file' => 'required|file|mimes:xlsx|max:10240',
+                'mode' => 'sometimes|in:new_units,existing_units',
             ]);
 
             $property = Property::findOrFail($request->property_id);
-            $parsed = $this->parser->parse($request->file('bulk_file')->getPathname());
-            $batch = $this->batches->stage($property, $parsed, $request->file('bulk_file')->getClientOriginalName(), Auth::id());
+            $mode = $request->input('mode', 'new_units');
+            $parsed = $this->parser->parse($request->file('bulk_file')->getPathname(), $mode === 'existing_units', $property->id);
+            $batch = $this->batches->stage($property, $parsed, $request->file('bulk_file')->getClientOriginalName(), Auth::id(), $mode);
 
             return ['message' => "Staged {$batch->total_units} unit(s) and {$batch->total_tenants} tenant(s).", 'batch_id' => $batch->id];
         }, 'Failed to process the upload');

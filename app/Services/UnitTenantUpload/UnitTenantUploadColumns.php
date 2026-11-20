@@ -35,8 +35,8 @@ final class UnitTenantUploadColumns
         'lease_start_date' => false,
         'mobile_no' => false,
         'names' => false,
-        'other_contact_phone' => false,
-        'other_contact_name' => false,
+        'other_contact_phone' => true,
+        'other_contact_name' => true,
         'lease_end_date' => true,
         'tenant_type' => true,
         'national_id' => true,
@@ -87,6 +87,17 @@ final class UnitTenantUploadColumns
         'title' => 'titles',
         'nationality' => 'countries',
     ];
+
+    /** Accept readable choices and legacy numeric values without hiding invalid input. */
+    public static function normalizeVat(?string $value): ?string
+    {
+        return match (strtolower(trim((string) $value))) {
+            '' => null,
+            'yes', '1' => '1',
+            'no', '0' => '0',
+            default => trim($value),
+        };
+    }
 
     /**
      * Column definition for a sheet name.

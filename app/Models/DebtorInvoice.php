@@ -168,6 +168,7 @@ class DebtorInvoice extends Model
     public function getStatusNameAttribute()
     {
         $statuses = [
+            3 => 'Cancelled',
             1 => 'Pending',
             6 => 'Posted',
             8 => 'Partially Cleared',

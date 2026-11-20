@@ -29,6 +29,16 @@ class ViewServiceProvider extends ServiceProvider
             $submenusGrouped = $allowedSubmenus->groupBy('module_id');
             $modules = DB::table('cb_modules')->orderBy('module_order')->get();
 
+            // Tenant onboarding uses the same registered module grants as the rest of the app.
+            $allowedSubmenus = $allowedSubmenus->filter(function ($entry) use ($user) {
+                return match ($entry->sub_module_url) {
+                    \App\Services\TenantReviewAccess::REVIEWS => \App\Services\TenantReviewAccess::allows($user, 'view_tenant_onboarding'),
+                    \App\Services\TenantReviewAccess::SETUP => app(\App\Services\TenantReviewWorkflowService::class)->canManage($user),
+                    \App\Services\TenantReviewAccess::ACCOUNTS => app(\App\Services\TenantReviewService::class)->canReconcile($user),
+                    default => true,
+                };
+            });
+            $submenusGrouped = $allowedSubmenus->groupBy('module_id');
             // Build menu data for each module the user has access to
             $menuData = [];
             foreach ($modules as $menu) {

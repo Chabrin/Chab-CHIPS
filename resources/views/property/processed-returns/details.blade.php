@@ -10,13 +10,13 @@
         <div class="row">
             <div class="col-sm-12">
                 <div class="card card-no-border">
-                    <div class="card-header py-2 d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0" id="header-title">Return Details — {{ $return->return_code }}</h5>
+                    <div class="card-header d-flex flex-wrap gap-2 justify-content-between align-items-center">
+                        <h5 class="mb-0 text-break" id="header-title">{{ $headerInfo['heading'] }}</h5>
                         <a href="{{ route('processed.returns.index') }}" class="btn btn-primary btn-sm">
                             <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">arrow_back</span> Back
                         </a>
                     </div>
-                    <div class="card-body py-2 px-3" style="font-size:0.80rem;">
+                    <div class="card-body py-2 px-3">
 
                         {{-- Tabs for switching between returns --}}
                         @if($allReturns->count() > 1)
@@ -55,41 +55,34 @@
                             @endforeach
                         </ul>
                         @endif
-                        <!-- Return Header Info -->
-                        <div class="mb-1" id="header-info" style="font-size:0.72rem;color:#666;">
-                            <span class="text-muted">Return Code:</span> <strong id="hdr-return-code">{{ $headerInfo['return_code'] }}</strong>
-                            <span class="mx-1 text-muted">|</span>
-                            <span class="text-muted">Property:</span> <strong id="hdr-property">{{ $headerInfo['property_label'] }}</strong>
-                            <span class="mx-1 text-muted">|</span>
-                            <span class="text-muted">Landlord:</span> <strong id="hdr-landlord">{{ $headerInfo['landlord_label'] }}</strong>
-                            <span class="mx-1 text-muted">|</span>
-                            <span class="text-muted">Period:</span> <strong id="hdr-period">{{ $headerInfo['period'] }}</strong>
-                            <span class="mx-1 text-muted">|</span>
-                            <span class="text-muted">Type:</span> <strong id="hdr-type">{{ $headerInfo['return_type'] }}</strong>
+                        <div class="d-flex flex-wrap gap-3 text-muted mb-3" id="header-info">
+                            <span>Landlord <strong class="text-body" id="hdr-landlord">{{ $headerInfo['landlord_label'] }}</strong></span>
+                            <span>Return reference <strong class="text-body" id="hdr-return-code">{{ $headerInfo['return_code'] }}</strong></span>
                         </div>
-
                         @if(!empty($headerInfo['merged']))
                         <!-- Merged return: the property returns it covers -->
-                        <div id="merged-summary" class="border rounded p-2 mb-2" style="font-size:0.72rem;">
+                        <div id="merged-summary" class="border rounded p-3 mb-3">
                             <div class="fw-bold mb-1">Merged return{{ $headerInfo['merged']['batch_reference'] ? ' &middot; batch ' . $headerInfo['merged']['batch_reference'] : '' }}</div>
-                            <table class="table table-sm table-bordered mb-1" style="font-size:0.72rem;">
-                                <thead class="table-light"><tr><th>Property</th><th>Return</th><th class="text-end">Net</th><th>Status</th></tr></thead>
-                                <tbody>
-                                    @foreach($headerInfo['merged']['properties'] as $row)
-                                    <tr>
-                                        <td>{{ $row['property'] }}</td>
-                                        <td><a href="{{ $row['url'] }}">{{ $row['return_code'] }}</a></td>
-                                        <td class="text-end">{{ number_format($row['net'], 2) }}</td>
-                                        <td>{{ $row['status'] }}</td>
-                                    </tr>
-                                    @endforeach
-                                </tbody>
-                                <tfoot>
-                                    <tr><td colspan="2" class="text-end">Total of property returns</td><td class="text-end">{{ number_format($headerInfo['merged']['total'], 2) }}</td><td></td></tr>
-                                    <tr><td colspan="2" class="text-end">Less landlord deductions (listed below)</td><td class="text-end">{{ number_format($headerInfo['merged']['deductions'], 2) }}</td><td></td></tr>
-                                    <tr class="fw-bold"><td colspan="2" class="text-end">Net payable</td><td class="text-end">{{ number_format($headerInfo['merged']['net'], 2) }}</td><td></td></tr>
-                                </tfoot>
-                            </table>
+                            <div class="table-responsive">
+                                <table class="table table-sm table-bordered mb-1">
+                                    <thead class="table-light"><tr><th>Property</th><th>Return</th><th class="text-end">Net</th><th>Status</th></tr></thead>
+                                    <tbody>
+                                        @foreach($headerInfo['merged']['properties'] as $row)
+                                        <tr>
+                                            <td>{{ $row['property'] }}</td>
+                                            <td><a href="{{ $row['url'] }}">{{ $row['return_code'] }}</a></td>
+                                            <td class="text-end">{{ number_format($row['net'], 2) }}</td>
+                                            <td>{{ $row['status'] }}</td>
+                                        </tr>
+                                        @endforeach
+                                    </tbody>
+                                    <tfoot>
+                                        <tr><td colspan="2" class="text-end">Total of property returns</td><td class="text-end">{{ number_format($headerInfo['merged']['total'], 2) }}</td><td></td></tr>
+                                        <tr><td colspan="2" class="text-end">Less landlord deductions (listed below)</td><td class="text-end">{{ number_format($headerInfo['merged']['deductions'], 2) }}</td><td></td></tr>
+                                        <tr class="fw-bold"><td colspan="2" class="text-end">Net payable</td><td class="text-end">{{ number_format($headerInfo['merged']['net'], 2) }}</td><td></td></tr>
+                                    </tfoot>
+                                </table>
+                            </div>
                             <div class="text-muted">Paid into: {{ $headerInfo['merged']['bank'] ? trim(($headerInfo['merged']['bank']['bank_name'] ?? '') . ' ' . ($headerInfo['merged']['bank']['account_name'] ?? '') . ' ' . ($headerInfo['merged']['bank']['account_number'] ?? '')) : 'no bank account chosen for this batch: paid by cheque' }}</div>
                         </div>
                         @endif
@@ -344,12 +337,10 @@
         }
 
         function updatePage(r, lt) {
-            $('#header-title').text('Return Details — ' + r.return_code);
+
+            $('#header-title').text(r.heading);
             $('#hdr-return-code').text(r.return_code);
-            $('#hdr-property').text(r.property_label || r.property_code || '-');
             $('#hdr-landlord').text(r.landlord_label || r.landlord_code || '-');
-            $('#hdr-period').text(r.period);
-            $('#hdr-type').text(r.return_type);
             $('#merged-summary').toggle(r.return_type === 'MASTERRETURN');
             currentReturnType = r.return_type;
 

@@ -11,6 +11,7 @@ use App\Models\UnitCategory;
 use App\Models\UnitTopology;
 use App\Models\UnitType;
 use App\Models\UsageType;
+use App\Models\Unit;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\Cell\DataValidation;
@@ -31,16 +32,48 @@ class UnitTenantUploadTemplateService
      * @param Property $property
      * @return Spreadsheet
      */
-    public function build(Property $property): Spreadsheet
+    public function build(Property $property, bool $existingUnits = false): Spreadsheet
     {
         $spreadsheet = new Spreadsheet();
         $lists = $this->lookupLists();
 
-        $this->addUnitsSheet($spreadsheet->getActiveSheet(), $lists, $property);
+        if ($existingUnits) {
+            $sheet = $spreadsheet->getActiveSheet()->setTitle('units');
+            $sheet->fromArray(['unit_number', 'unit_code'], null, 'A1');
+            $units = Unit::where('property_id', $property->id)->orderBy('unit_number')->get()
+                ->filter(fn ($unit) => !ExistingUnitAvailability::blocked($unit))->take(UnitTenantUploadColumns::MAX_ROWS);
+            if ($units->isEmpty()) throw new \DomainException('This property has no available units for tenant onboarding.');
+            foreach ($units->values() as $index => $unit) {
+                $row = $index + 2;
+                $sheet->setCellValueExplicit('A'.$row, $unit->unit_number, DataType::TYPE_STRING);
+                $sheet->setCellValueExplicit('B'.$row, Unit::generateUnitCode($property, $unit->unit_number), DataType::TYPE_STRING);
+            }
+            $sheet->getColumnDimension('A')->setWidth(24);
+            $sheet->getColumnDimension('B')->setWidth(32);
+            $sheet->getStyle('A1:B1')->getFont()->setBold(true);
+            $sheet->freezePane('A2');
+            $sheet->getProtection()->setSheet(true);
+        } else {
+            $this->addUnitsSheet($spreadsheet->getActiveSheet(), $lists, $property);
+        }
         $this->addTenantSheet($spreadsheet->createSheet(), UnitTenantUploadColumns::SHEET_INDIVIDUAL, $lists);
         $this->addTenantSheet($spreadsheet->createSheet(), UnitTenantUploadColumns::SHEET_CORPORATE, $lists);
         $this->addReadmeSheet($spreadsheet->createSheet(), $property);
+        if ($existingUnits) {
+            $readme = $spreadsheet->getSheetByName('readme');
+            $readme->setCellValue('A1', 'Tenants for existing units — '.$property->reference_number);
+            $readme->setCellValue('A4', 'The units sheet lists up to 100 available existing units. Fill tenant details on the matching row; leave other tenant rows blank. Download again after submitting for remaining units.');
+            $readme->setCellValue('A5', 'Unit numbers and codes are locked. Existing rent and VAT settings are used and are not changed by this upload.');
+            $readme->setCellValue('A7', 'Rows without tenant details are ignored. No units are created. Occupied units and pending onboarding are blocked.');
+            $readme->setCellValue('A11', 'Rent and VAT come from the existing unit; there is no VAT column to fill in this mode.');
+        }
         $this->addListsSheet($spreadsheet->createSheet(), $lists);
+        if ($existingUnits) {
+            $metadata = $spreadsheet->createSheet()->setTitle('_upload');
+            $metadata->setCellValue('A1', 'existing_units');
+            $metadata->setCellValue('B1', $property->id);
+            $metadata->setSheetState(Worksheet::SHEETSTATE_VERYHIDDEN);
+        }
 
         $spreadsheet->setActiveSheetIndex(0);
 
@@ -76,7 +109,7 @@ class UnitTenantUploadTemplateService
             'genders' => Gender::orderBy('id')->pluck('name')->all(),
             'titles' => Salutation::orderBy('id')->pluck('name')->all(),
             'countries' => SystemCountry::orderBy('country_name')->pluck('country_name')->all(),
-            'vat' => ['0', '1'],
+            'vat' => ['No', 'Yes'],
         ];
     }
 
@@ -208,7 +241,8 @@ class UnitTenantUploadTemplateService
             'Individuals need a National ID or a Passport number (either one).',
             'unit_number, National ID, passport and registration number: letters A-Z, digits, spaces and - / . only (no accents or other symbols).',
             'Pick dropdown values from the list; leave blank where optional. unit_type blank = Normal.',
-            'vat_able: 0 = no VAT, 1 = VAT (blank = 0).',
+            'vat_able: select Yes if VAT applies, or No if it does not (blank = No). Older files may use 1 = Yes or 0 = No.',
+            'Other contact name and phone are optional on individual_tenants.',
             'lease_start_date and lease_end_date format: YYYY-MM-DD. Leave lease_end_date blank for an open-ended lease (no end date); fill it for a fixed-term lease.',
             'Do not rename sheets, add or delete rows. Maximum ' . UnitTenantUploadColumns::MAX_ROWS . ' units per file.',
         ];

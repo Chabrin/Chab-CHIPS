@@ -310,11 +310,18 @@ class ReturnStatementServiceTest extends TestCase
     public function test_screen_escapes_notes_and_places_summary_after_the_tenant_table(): void
     {
         $return = new ReturnSummary(['id' => 1, 'return_code' => 'R1', 'commission_total' => 10000]);
-        $lines = collect([$this->line(1, 'RENT CURRENT', 10000, ['remarks' => '<script>alert(1)</script>'])]);
+        $lines = collect([
+            $this->line(1, 'RENT CURRENT', 10000, ['remarks' => '<script>alert(1)</script>']),
+            $this->line(2, 'Service Charge', 150),
+        ]);
         $data = app(ReturnStatementService::class)->statement($return, $lines, collect());
         $html = view('property.processed-returns.partials.statement', array_merge($data, ['return' => $return]))->render();
         $this->assertStringNotContainsString('<script>alert(1)</script>', $html);
         $this->assertStringContainsString('&lt;script&gt;', $html);
+        $overview = substr($html, 0, strpos($html, '<table'));
+        $this->assertStringContainsString('Service charges', $overview);
+        $this->assertStringContainsString('150.00', $overview);
+        $this->assertStringContainsString('10,150.00', $overview);
         $this->assertLessThan(strpos($html, 'Financial summary'), strpos($html, '</table>'));
         $this->assertStringContainsString('statement-save', $html);
     }
@@ -322,11 +329,13 @@ class ReturnStatementServiceTest extends TestCase
     public function test_both_detail_pages_keep_processing_controls_and_the_statement_container(): void
     {
         $return = new ReturnSummary(['id' => 1, 'return_code' => 'R1', 'return_type' => 'MAINRETURN', 'paid_status' => 0]);
-        $headerInfo = ['return_code' => 'R1', 'property_label' => 'Sample property', 'landlord_label' => 'Sample landlord',
+        $headerInfo = ['return_code' => 'R1', 'heading' => 'Sample property - November 2026 - Main Return',
+            'property_label' => 'Sample property', 'landlord_label' => 'Sample landlord',
             'period' => '11/2026', 'return_type' => 'MAINRETURN'];
         foreach (['property.processed-returns.details', 'property.returns.unprocessed-details'] as $view) {
             $html = view($view, ['return' => $return, 'lineTotals' => (object) [],
                 'allReturns' => collect([$return]), 'headerInfo' => $headerInfo])->render();
+            $this->assertStringContainsString('Sample property - November 2026 - Main Return', $html);
             $this->assertStringContainsString('id="return-transaction-details"', $html);
             $this->assertStringContainsString('id="return-statement"', $html);
             $this->assertStringContainsString('return-statement.js', $html);

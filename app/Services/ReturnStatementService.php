@@ -47,12 +47,58 @@ class ReturnStatementService
      */
     public function statement(ReturnSummary $return, Collection $lines, ?Collection $ledgerGaps = null): array {
         $data = $this->build($lines);
+        $data['tenantRows'] = $this->includeMissingRooms($return, $lines, $data['tenantRows']);
         $data['summary'] = $this->summary($return, $lines, $data['totals']);
         $data['summaryRows'] = $this->summaryRows($return);
         $data['settlementRows'] = $this->settlement($return, $lines, $data['summary'], $ledgerGaps ?? $this->ledgerGaps($return, $lines));
         $data['arrears'] = $this->arrearsDetails($return, $lines);
 
         return $data;
+    }
+
+    /** Add display-only rooms to draft main returns; never invent financial transactions. */
+    private function includeMissingRooms(ReturnSummary $return, Collection $lines, array $rows): array {
+        if ($return->return_type !== 'MAINRETURN' || $return->approved_status || $return->paid_status
+            || !trim((string) $return->property_code) || !checkdate((int) $return->month, 1, (int) $return->year)) {
+            return $rows;
+        }
+
+        $start = Carbon::create((int) $return->year, (int) $return->month, 1)->startOfDay();
+        $end = $start->copy()->endOfMonth();
+        $units = DB::table('sys_pm_units as u')->join('sys_pm_properties as p', 'p.id', '=', 'u.property_id')
+            ->where('p.reference_number', $return->property_code)
+            ->where(fn ($q) => $q->whereNull('u.date_time')->orWhereDate('u.date_time', '<=', $end->toDateString()))
+            ->get(['u.id', 'u.unit_number', 'u.unit_code']);
+        if ($units->isEmpty()) return $rows;
+
+        $tenants = DB::table('sys_pm_lease_agreements as l')->leftJoin('sys_pm_clients as t', 't.id', '=', 'l.tenant_id')
+            ->whereIn('l.unit_id', $units->pluck('id'))->whereIn('l.current_status_id', [1, 5])
+            ->where(fn ($q) => $q->whereNull('l.date_start')->orWhereDate('l.date_start', '<=', $end->toDateString()))
+            ->where(fn ($q) => $q->whereNull('l.date_end')->orWhereDate('l.date_end', '>=', $start->toDateString()))
+            ->orderByDesc('l.date_start')->orderByDesc('l.id')->get(['l.unit_id', 't.names'])->unique('unit_id')->keyBy('unit_id');
+
+        $perLine = $this->commissionOnRentLines($lines);
+        $represented = $lines->filter(fn ($line) => $this->roleOf($line, $perLine) === 'column')->pluck('unit_id')->filter()->flip();
+        $labels = array_fill_keys(array_map(fn ($row) => mb_strtolower(trim($row['unit_code'])), $rows), true);
+        $originalCount = count($rows);
+        foreach ($units as $unit) {
+            $room = trim((string) $unit->unit_number) ?: $this->roomLabel((object) [
+                'unit_code' => $unit->unit_code, 'property_code' => $return->property_code,
+            ]);
+            if ($room === '' || $represented->has($unit->id) || isset($labels[mb_strtolower($room)])
+                || isset($labels[mb_strtolower(trim((string) $unit->unit_code))])) continue;
+
+            $row = array_fill_keys(array_diff(array_keys(self::COLUMNS), ['unit_code', 'tenant_name', 'remarks']), 0.0);
+            $rows[] = $row + ['unit_code' => $room, 'tenant_name' => $tenants[$unit->id]->names ?? '[VACANT]',
+                'remarks' => '', 'remarks_line_id' => null];
+            $labels[mb_strtolower($room)] = true;
+        }
+
+        // Sort the full roster naturally when rooms are added. Otherwise keep the recorded order.
+        if (count($rows) > $originalCount) {
+            usort($rows, fn ($a, $b) => strnatcasecmp($a['unit_code'], $b['unit_code']));
+        }
+        return $rows;
     }
 
     /**
@@ -297,13 +343,13 @@ class ReturnStatementService
         $overdraft = round((float) ($return->amount_overdraft ?? 0), 2);
 
         $rows = $recoveries;
-        $rows[] = ['strong', 'I. Total deductions', '', '', $recoveriesTotal];
+        $rows[] = ['strong', 'I. Total deductions', '', '', $recoveriesTotal, 'key' => 'recoveries'];
         $rows[] = ['strong', 'J. Nett income (H - I)', '', '', $nettIncome];
         $rows = array_merge($rows, $opening);
         $rows[] = ['strong', 'K. Add opening balance and other receipts', '', '', $openingTotal];
         $rows = array_merge($rows, $deductions);
-        $rows[] = ['strong', 'L. Total deductions from landlord account', '', '', $deductionsTotal];
-        $rows[] = ['closing', 'M. Amount payable (J + K - L)', '', '', $payable];
+        $rows[] = ['strong', 'L. Total deductions from landlord account', '', '', $deductionsTotal, 'key' => 'landlord_deductions'];
+        $rows[] = ['closing', 'M. Amount payable (J + K - L)', '', '', $payable, 'key' => 'payable'];
         $rows[] = ['plain', 'N. Less overdraft charge', '', '', $overdraft];
         $rows[] = ['closing', 'O. Nett balance (M - N)', '', '', round($payable - $overdraft, 2)];
 
@@ -312,7 +358,11 @@ class ReturnStatementService
             $rows[] = ['gap', 'Lines differ from the return\'s stored net amount of ' . number_format((float) $stored, 2) . ' by', '', '', round($payable - (float) $stored, 2)];
         }
 
-        return array_map(fn($row) => array_combine(['kind', 'label', 'ref', 'date', 'amount'], array_slice($row, 0, 5)), $rows);
+        return array_map(function ($row) {
+            $values = array_combine(['kind', 'label', 'ref', 'date', 'amount'], array_slice($row, 0, 5));
+
+            return isset($row['key']) ? $values + ['key' => $row['key']] : $values;
+        }, $rows);
     }
 
     /**

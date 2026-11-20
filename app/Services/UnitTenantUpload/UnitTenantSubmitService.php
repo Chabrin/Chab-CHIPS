@@ -93,7 +93,7 @@ class UnitTenantSubmitService
                 }
 
                 try {
-                    DB::transaction(fn() => $this->submitPair($unitRow, $tenantRow, $property, $slaId, $userId));
+                    DB::transaction(fn() => $this->submitPair($unitRow, $tenantRow, $property, $slaId, $userId, $batch->mode === TempUploadBatch::MODE_EXISTING));
                     $submitted++;
                 } catch (\Throwable $e) {
                     $message = $this->failureMessage($e);
@@ -194,14 +194,14 @@ class UnitTenantSubmitService
      * @param int|null $slaId
      * @param int|null $userId
      */
-    private function submitPair(TempBatchUnit $unitRow, ?TempBatchTenant $tenantRow, Property $property, ?int $slaId, ?int $userId): void
+    private function submitPair(TempBatchUnit $unitRow, ?TempBatchTenant $tenantRow, Property $property, ?int $slaId, ?int $userId, bool $existingUnits = false): void
     {
-        $this->assertStillFree($unitRow, $tenantRow, $property);
-
-        $unit = $this->createUnit($unitRow, $property, $userId);
-
-        // Pending unless the property's SLA is already approved.
-        $this->slaApprovals->approveNewUnits($property->id, [$unit->id], $userId, 'unit_tenant_upload');
+        $unit = $this->assertStillFree($unitRow, $tenantRow, $property, $existingUnits);
+        if (!$existingUnits) {
+            $unit = $this->createUnit($unitRow, $property, $userId);
+            // Pending unless the property's SLA is already approved.
+            $this->slaApprovals->approveNewUnits($property->id, [$unit->id], $userId, 'unit_tenant_upload');
+        }
 
         $unitRow->update(['submitted_at' => now(), 'unit_id' => $unit->id, 'error' => null]);
 
@@ -228,6 +228,7 @@ class UnitTenantSubmitService
             'escalation_frequency' => 'Annually',
         ]);
 
+        app(\App\Services\TenantReviewService::class)->register($tenant, $lease, \App\Models\User::findOrFail($userId));
         $tenantRow->update(['submitted_at' => now(), 'tenant_id' => $tenant->id, 'lease_id' => $lease->id, 'error' => null]);
     }
 
@@ -256,16 +257,23 @@ class UnitTenantSubmitService
      * @param TempBatchTenant|null $tenantRow
      * @param Property $property
      */
-    private function assertStillFree(TempBatchUnit $unitRow, ?TempBatchTenant $tenantRow, Property $property): void
+    private function assertStillFree(TempBatchUnit $unitRow, ?TempBatchTenant $tenantRow, Property $property, bool $existingUnits = false): ?Unit
     {
         $this->lockUploads($property);
 
-        if (Unit::where('property_id', $property->id)->whereRaw('LOWER(unit_number) = ?', [mb_strtolower($unitRow->unit_number)])->exists()) {
+        $unit = null;
+        if ($existingUnits) {
+            if (!$tenantRow) throw new DomainException('This mode requires tenant details. Remove this staged row if it is no longer needed.');
+            $unit = Unit::where('property_id', $property->id)->whereKey($unitRow->unit_id)
+                ->whereRaw('LOWER(unit_number) = ?', [mb_strtolower($unitRow->unit_number)])->lockForUpdate()->first();
+            if (!$unit) throw new DomainException('The original unit has changed. Upload a fresh template.');
+            if (ExistingUnitAvailability::blocked($unit)) throw new DomainException('This unit already has a tenant, active lease or pending onboarding.');
+        } elseif (Unit::where('property_id', $property->id)->whereRaw('LOWER(unit_number) = ?', [mb_strtolower($unitRow->unit_number)])->exists()) {
             throw new DomainException("Unit Number '{$unitRow->unit_number}' already exists under this property");
         }
 
         if (!$tenantRow) {
-            return;
+            return null;
         }
 
         $taken = [
@@ -279,6 +287,7 @@ class UnitTenantSubmitService
                 throw new DomainException("{$label} already belongs to an existing tenant");
             }
         }
+        return $unit;
     }
 
     /**
@@ -309,7 +318,7 @@ class UnitTenantSubmitService
             'unit_condition_id' => $row->unit_condition,
             'rent_amount' => (float) str_replace(',', '', $row->rent_amount),
             'description' => $row->unit_description,
-            'vat_able' => trim((string) $row->vat_able) === '1' ? 'Yes' : 'No',
+            'vat_able' => UnitTenantUploadColumns::normalizeVat($row->vat_able) === '1' ? 'Yes' : 'No',
             'initial_water_meter_reading' => (float) str_replace(',', '', $row->initial_water_reading),
             'date_time' => now(),
             'created_by_id' => $userId,

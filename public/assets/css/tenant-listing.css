@@ -81,8 +81,14 @@
 #tenant-listing #tenants-table tbody tr:hover td { background: #f3f8fe; }
 #tenant-listing #tenants-table tbody td:nth-child(3) { text-align: left; white-space: nowrap; }
 #tenant-listing #tenants-table tbody .tenant-exited td { color: var(--tenant-muted); }
-#tenant-listing .col-filter-wrap { position: relative; }
-#tenant-listing .col-filter-wrap .col-filter { padding-right: 24px; }
+#tenant-listing .col-filter-wrap { display: block; position: relative; min-width: 0; }
+#tenant-listing .col-filter-wrap .col-filter {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+    padding-inline-end: 24px;
+}
 #tenant-listing .filter-spinner { display: none; position: absolute; right: 7px; top: 9px; width: 14px; height: 14px; border: 2px solid var(--tenant-border); border-top-color: var(--tenant-blue); border-radius: 50%; }
 #tenant-listing .col-filter-wrap.loading .filter-spinner { display: block; animation: tenant-listing-spin .6s linear infinite; }
 @keyframes tenant-listing-spin { to { transform: rotate(360deg); } }
@@ -97,15 +103,21 @@
 #tenant-listing .tenant-row-actions .material-symbols-outlined { font-size: 18px; }
 #tenant-listing :is(a, button, input, select):focus-visible { outline: 2px solid var(--tenant-blue); outline-offset: 2px; }
 
-#tenant-filters { display: grid; gap: 8px; margin-bottom: 10px; }
+#tenant-filters { container-type: inline-size; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin-bottom: 10px; }
 #tenant-filters label { display: grid; gap: 4px; margin: 0; min-width: 0; }
 #tenant-filters > label { width: min(100%, 24rem); }
 #tenant-filters summary { color: var(--tenant-blue); cursor: pointer; }
 #tenant-filters .tenant-extra-filters {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
-    gap: 8px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
     padding: 8px 0 2px;
+}
+@container (width < 40rem) {
+    #tenant-filters .tenant-extra-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@container (width < 22rem) {
+    #tenant-filters .tenant-extra-filters { grid-template-columns: minmax(0, 1fr); }
 }
 #tenant-listing .tenant-unit { display: block; color: var(--tenant-muted); }
 #tenant-listing .dt-layout-end { flex-wrap: wrap; gap: 6px; }

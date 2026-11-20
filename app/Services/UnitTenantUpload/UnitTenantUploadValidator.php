@@ -55,7 +55,7 @@ class UnitTenantUploadValidator
      * @param array $tenantRows
      * @return array
      */
-    public function loadExisting(int $propertyId, array $unitRows, array $tenantRows): array
+    public function loadExisting(int $propertyId, array $unitRows, array $tenantRows, bool $existingUnits = false): array
     {
         $values = fn(string $field) => array_values(array_unique(array_map('mb_strtolower', array_filter(array_column($tenantRows, $field)))));
         $found = function ($query, string $column, array $lowered) {
@@ -66,7 +66,16 @@ class UnitTenantUploadValidator
             return $query->whereRaw('LOWER(' . $column . ') IN (' . implode(',', array_fill(0, count($lowered), '?')) . ')', $lowered)->pluck($column)->all();
         };
 
+        $matches = [];
+        if ($existingUnits) {
+            foreach (Unit::where('property_id', $propertyId)->get() as $unit) {
+                $key = $this->norm($unit->unit_number);
+                $matches[$key][] = ['id' => $unit->id, 'blocked' => ExistingUnitAvailability::blocked($unit)];
+            }
+        }
         return [
+            'existing_mode' => $existingUnits,
+            'existing_units' => $matches,
             'unit_numbers' => $this->set(Unit::where('property_id', $propertyId)->pluck('unit_number')->all()),
             'national_ids' => $this->set($found(TenantRecord::query(), 'national_id', $values('national_id'))),
             'passports' => $this->set($found(TenantRecord::query(), 'passport_number', $values('passport_no'))),
@@ -158,6 +167,17 @@ class UnitTenantUploadValidator
     private function unitErrors(array $row, array $context, array $existing): array
     {
         $errors = [];
+        if ($existing['existing_mode'] ?? false) {
+            $number = $this->norm($row['unit_number'] ?? null);
+            $matches = $existing['existing_units'][$number] ?? [];
+            if (count($matches) !== 1) $errors[] = "Unit '{$row['unit_number']}' must match exactly one existing unit in this property";
+            elseif ($matches[0]['blocked']) $errors[] = "Unit '{$row['unit_number']}' already has a tenant, active lease or pending onboarding";
+            elseif (!empty($row['unit_id']) && (int) $row['unit_id'] !== (int) $matches[0]['id']) $errors[] = 'The original unit has changed. Upload a fresh template.';
+            if (($context['unit_numbers'][$number] ?? 0) > 1) $errors[] = 'The unit appears more than once in the file';
+            if (($context['tenant_units'][$number] ?? 0) < 1) $errors[] = 'Enter tenant details for this existing unit or remove the staged row.';
+            if (isset($existing['staged_units'][$number])) $errors[] = 'This unit is already waiting in another staged upload';
+            return $errors;
+        }
         $missing = $this->missing($row, ['unit_number', 'topology', 'rent_amount', 'initial_water_reading']);
         if ($missing) {
             $errors[] = implode(', ', $missing) . ' required';
@@ -197,8 +217,8 @@ class UnitTenantUploadValidator
 
         $errors = array_merge($errors, $this->lengthErrors($row, array_diff(array_keys(UnitTenantUploadColumns::UNITS), ['unit_description'])));
 
-        if ($this->filled($row['vat_able'] ?? null) && !in_array(trim((string) $row['vat_able']), ['0', '1'], true)) {
-            $errors[] = "vat_able must be 0 or 1 (got '{$row['vat_able']}')";
+        if ($this->filled($row['vat_able'] ?? null) && !in_array(UnitTenantUploadColumns::normalizeVat($row['vat_able']), ['0', '1'], true)) {
+            $errors[] = "vat_able must be Yes or No (older files may use 1 or 0; got '{$row['vat_able']}')";
         }
 
         return $errors;
@@ -220,7 +240,7 @@ class UnitTenantUploadValidator
         $required = ['unit_number', 'lease_start_date', 'mobile_no'];
         $required = array_merge($required, $isCompany
             ? ['company_name', 'registration_number', 'contact_phone', 'contact_name']
-            : ['names', 'other_contact_phone', 'other_contact_name']);
+            : ['names']);
         $missing = $this->missing($row, $required);
         if ($missing) {
             $errors[] = implode(', ', $missing) . ' required';

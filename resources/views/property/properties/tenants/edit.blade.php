@@ -1,5 +1,9 @@
 @extends('layouts.main')
 @section('content')
+@php
+    $tenantReview = \Illuminate\Support\Facades\Schema::hasTable('tenant_reviews')
+        ? \App\Models\TenantReview::where('tenant_id', $tenant->id)->where('stage', 'correction')->first() : null;
+@endphp
 <style>
     input[readonly], textarea[readonly], select[readonly] {
         background-color: #f5f5f5 !important;
@@ -40,6 +44,10 @@
                         @endif
 
                         <form action="{{ route('units.tenants.update', Crypt::encrypt($tenant->id)) }}" method="POST" id="unitTenantForm" enctype="multipart/form-data" novalidate>
+                            @if($tenantReview)
+                                <input type="hidden" name="review_revision" value="{{ $tenantReview->revision }}">
+                                <div class="alert alert-info">Saving these corrections signs them and sends the onboarding back to {{ $tenantReview->steps()[1]['label'] }}.</div>
+                            @endif
                             @csrf
                             @method('PUT')
 

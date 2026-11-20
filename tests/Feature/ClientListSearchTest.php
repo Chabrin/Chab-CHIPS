@@ -101,6 +101,36 @@ class ClientListSearchTest extends TestCase
         $this->assertSame([1], array_column($this->listing(['order' => [['column' => 6, 'dir' => 'desc']], 'length' => 1, 'start' => 1])['data'], 'id'));
     }
 
+    public function test_phone_search_matches_local_and_international_spellings(): void
+    {
+        DB::table('sys_pm_clients')->where('id', 2)->update(['mobile_number' => '+254 (722) 000-102']);
+        foreach (['0722000102', '+254722000102', '0722 000 102'] as $phone) {
+            $result = $this->listing(['search' => ['value' => $phone]]);
+            $this->assertSame([2], array_column($result['data'], 'id'));
+        }
+        $result = $this->listing(['columns' => [
+            2 => ['name' => 'mobile_number', 'search' => ['value' => '0722']],
+        ]]);
+        $this->assertSame([2], array_column($result['data'], 'id'));
+    }
+
+    public function test_named_columns_sort_and_filter_by_the_fields_sent_by_the_directory(): void
+    {
+        $columns = [
+            0 => ['name' => 'names'],
+            1 => ['name' => 'reference_number'],
+            2 => ['name' => 'mobile_number'],
+            3 => ['name' => 'registered_date'],
+            4 => ['name' => 'actions'],
+            5 => ['name' => 'national_id', 'search' => ['value' => '9988']],
+        ];
+        $result = $this->listing(['columns' => $columns, 'order' => [['column' => 3, 'dir' => 'desc']]]);
+        $this->assertSame([1], array_column($result['data'], 'id'));
+        unset($columns[5]['search']);
+        $result = $this->listing(['columns' => $columns, 'order' => [['column' => 3, 'dir' => 'desc']]]);
+        $this->assertSame([2, 1], array_column($result['data'], 'id'));
+    }
+
     public function test_search_cannot_bypass_a_users_client_access_scope(): void
     {
         $this->actingAs((new User())->forceFill(['id' => 100]));
