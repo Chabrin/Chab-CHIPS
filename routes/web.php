@@ -1289,6 +1289,8 @@ Route::middleware('throttle:5,1')->group(function () {
     Route::get('/ajax/payment/vouchers/landlord-account', [App\Http\Controllers\PaymentVouchersController::class, 'landlordAccount'])->name('ajax.payment.vouchers.landlord-account');
     Route::get('/ajax/payment/vouchers/return/{returnId}/breakdown', [App\Http\Controllers\PaymentVouchersController::class, 'returnBreakdown'])->name('ajax.payment.vouchers.return-breakdown');
     Route::get('/cheque/cancelled', [App\Http\Controllers\CancelledChequesController::class, 'index'])->name('cheque.cancelled.index');
+    Route::get('/payments/cheques', [App\Http\Controllers\AllChequesController::class, 'index'])->name('payments.cheques.index');
+    Route::get('/ajax/payments/cheques/data', [App\Http\Controllers\AllChequesController::class, 'data'])->name('ajax.payments.cheques.data');
     Route::get('/returns/flow', [App\Http\Controllers\ReturnsFlowController::class, 'index'])->name('returns.flow.index');
     Route::get('/ajax/returns/flow/data', [App\Http\Controllers\ReturnsFlowController::class, 'data'])->name('ajax.returns.flow.data');
     Route::get('/ajax/cheque/cancelled/data', [App\Http\Controllers\CancelledChequesController::class, 'data'])->name('ajax.cheque.cancelled.data');
