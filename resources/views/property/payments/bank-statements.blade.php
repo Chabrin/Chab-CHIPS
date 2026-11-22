@@ -213,6 +213,27 @@ $(function() {
         return sum;
     }
 
+    // How far a statement's run has got, from its line counts: matching counts the lines no longer Pending (Invalid and Skipped
+    // were set when the file was read), paying counts the matched lines already Paid. Null when nothing is running.
+    function progressOf(row) {
+        var c = row.lines || {};
+        var n = function(name) { return c[name] || 0; };
+
+        if (row.status === 'Confirmed') { return { text: 'Waiting for the queue to start', pct: 0 }; }
+        if (row.status === 'Matching') {
+            var judged = n('Matched') + n('Unmatched') + n('Ambiguous') + n('Duplicate') + n('Paid');
+            var all = judged + n('Pending');
+            return { text: 'Matching ' + judged + ' of ' + all + ' lines', pct: all ? judged * 100 / all : 0 };
+        }
+        if (row.status === 'Matched') { return { text: 'Matching done, starting the payments', pct: 100 }; }
+        if (row.status === 'Paying') {
+            var toPay = n('Paid') + n('Matched');
+            return { text: 'Paying ' + n('Paid') + ' of ' + toPay + ' matched lines', pct: toPay ? n('Paid') * 100 / toPay : 0 };
+        }
+
+        return null;
+    }
+
     // ── Bank tabs ─────────────────────────────────────────────
     function showBank(bank) {
         if (banks.indexOf(bank) === -1) { bank = banks[0]; }
@@ -240,6 +261,7 @@ $(function() {
     }
 
     function uploadRow(row, selected) {
+        var progress = progressOf(row);
         var actions = '';
         if (row.can_confirm) { actions += '<button type="button" class="bs-btn bs-btn-ok bs-btn-sm btn-confirm" data-id="' + row.id + '"><span class="material-symbols-outlined">check_circle</span>Confirm</button>'; }
         if (row.needs_other_confirmer) { actions += '<span class="bs-wait" title="You captured this statement, so someone else has to confirm it."><span class="material-symbols-outlined">lock</span>Another person confirms</span>'; }
@@ -254,6 +276,7 @@ $(function() {
             '<td class="text-end bs-num"><div class="bs-cell-main">' + row.line_count + '</div><div class="bs-cell-sub">' + esc(row.total_amount) + '</div></td>' +
             '<td>' + resultCell(row) + '</td>' +
             '<td><span class="bs-pill ' + esc(row.status) + '">' + esc(uploadText[row.status] || row.status) + '</span>' + (row.error ? '<div class="bs-err">' + esc(row.error) + '</div>' : '') +
+                (progress ? '<div class="bs-prog" title="' + esc(progress.text) + '"><div class="bs-prog-fill" style="width:' + progress.pct.toFixed(1) + '%"></div></div><div class="bs-txt"><span>' + esc(progress.text) + ' (' + Math.floor(progress.pct) + '%)</span></div>' : '') +
                 (actions ? '<div class="bs-actions">' + actions + '</div>' : '') + '</td>' +
             '<td><div class="bs-cell-main">' + esc(row.uploader || 'unknown') + '</div><div class="bs-cell-sub">' + esc(when(row.uploaded_at, true, true)) + '</div></td>' +
             '<td>' + (row.confirmed_at ? '<div class="bs-cell-main">' + esc(row.confirmer || 'unknown') + '</div><div class="bs-cell-sub">' + esc(when(row.confirmed_at, true, true)) + '</div>' : '<span class="bs-hint">Not yet</span>') + '</td>' +
