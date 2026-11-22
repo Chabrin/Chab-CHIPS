@@ -267,7 +267,11 @@ class RecoveryController extends Controller
                 'client',
                 'property',
                 'zone',
-                'createdBy'
+                'createdBy',
+                'unit',
+                'tenant',
+                'lease',
+                'sla'
             ])->findOrFail($id);
 
             $reason = $this->recoveries->reasonOf($recovery);

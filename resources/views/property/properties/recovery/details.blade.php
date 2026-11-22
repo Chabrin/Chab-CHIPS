@@ -161,7 +161,7 @@
                             </div>
                             <div class="col-md-3 mb-3">
                                 <label class="form-label text-muted">SLA Reference</label>
-                                <p class="fw-bold">{{ $recovery->sla_id ?? '-' }}</p>
+                                <p class="fw-bold">{{ $recovery->sla->reference_number ?? $recovery->sla_id ?? '-' }}</p>
                             </div>
                         </div>
 
@@ -171,20 +171,27 @@
                                 <h5 class="border-bottom pb-2 mb-3">Tenant & Lease Information</h5>
                             </div>
                             <div class="col-md-3 mb-3">
-                                <label class="form-label text-muted">Unit ID</label>
-                                <p class="fw-bold">{{ $recovery->unit_id ?? '-' }}</p>
+                                <label class="form-label text-muted">Unit</label>
+                                <p class="fw-bold">{{ $recovery->unit->unit_number ?? $recovery->unit->unit_name ?? $recovery->unit_id ?? '-' }}</p>
+                                @if(!empty($recovery->unit->unit_name) && $recovery->unit->unit_name !== ($recovery->unit->unit_number ?? null))
+                                <small class="text-muted">{{ $recovery->unit->unit_name }}</small>
+                                @endif
                             </div>
                             <div class="col-md-3 mb-3">
-                                <label class="form-label text-muted">Tenant ID</label>
-                                <p class="fw-bold">{{ $recovery->tenant_id ?? '-' }}</p>
+                                <label class="form-label text-muted">Tenant</label>
+                                <p class="fw-bold">{{ $recovery->tenant->names ?? $recovery->tenant_id ?? '-' }}</p>
+                                <small class="text-muted">{{ $recovery->tenant->reference_number ?? '' }}</small>
                             </div>
                             <div class="col-md-3 mb-3">
-                                <label class="form-label text-muted">Lease ID</label>
-                                <p class="fw-bold">{{ $recovery->lease_id ?? '-' }}</p>
+                                <label class="form-label text-muted">Lease</label>
+                                <p class="fw-bold">{{ $recovery->lease->ref_number ?? $recovery->lease_id ?? '-' }}</p>
+                                @if($recovery->lease && $recovery->lease->date_start)
+                                <small class="text-muted">{{ \Carbon\Carbon::parse($recovery->lease->date_start)->format('d-m-Y') }}{{ $recovery->lease->date_end ? ' to ' . \Carbon\Carbon::parse($recovery->lease->date_end)->format('d-m-Y') : '' }}</small>
+                                @endif
                             </div>
                             <div class="col-md-3 mb-3">
-                                <label class="form-label text-muted">Offset Invoice ID</label>
-                                <p class="fw-bold">{{ $recovery->offset_invoice_id ?? '-' }}</p>
+                                <label class="form-label text-muted">Offset Invoice</label>
+                                <p class="fw-bold">{{ $invoice->reference_number ?? $recovery->offset_invoice_id ?? '-' }}</p>
                             </div>
                         </div>
 
