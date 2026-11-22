@@ -1689,15 +1689,27 @@ $(document).ready(function () {
             displayReturnLineItems(netBalance);
             validateReturnVoucherForm();
         } else {
-            // How the return's amount was reached
+            // Load property bank details
+            loadPropertyBankDetails(returnData.property_id, netBalance);
+        }
+    });
+
+    // How the return's amount was reached
     function loadReturnBreakdown(returnId) {
         $('#returnBreakdownWrap').hide();
         $('#returnBreakdownBody').removeClass('show');
         $('#returnBreakdownTable tbody').empty();
         if (!returnId) { return; }
 
+        function breakdownFailed(why) {
+            $('#returnBreakdownTable tbody').html('<tr><td class="text-danger">' + laEsc(why) + '</td></tr>');
+            $('#returnBreakdownWrap').show();
+            $('#returnBreakdownBody').addClass('show');
+        }
+
         $.get('{{ url("/ajax/payment/vouchers/return") }}/' + returnId + '/breakdown', function (r) {
-            if (!r.success) { return; }
+            if (!r.success) { breakdownFailed('The breakdown could not be loaded: ' + (r.message || 'unknown error')); return; }
+            if (!r.rows || !r.rows.length) { breakdownFailed('This return has no lines to show.'); return; }
             var html = '';
             r.rows.forEach(function (row) {
                 var strong = row.kind === 'strong' || row.kind === 'closing';
@@ -1707,14 +1719,11 @@ $(document).ready(function () {
                     + (row.kind === 'less' ? '-' : '') + laMoney(row.amount) + '</td></tr>';
             });
             $('#returnBreakdownTable tbody').html(html);
-            $('#returnBreakdownWrap').toggle(r.rows.length > 0);
+            $('#returnBreakdownWrap').show();
+        }).fail(function (xhr) {
+            breakdownFailed('The breakdown could not be loaded (error ' + xhr.status + ').');
         });
     }
-
-    // Load property bank details
-            loadPropertyBankDetails(returnData.property_id, netBalance);
-        }
-    });
 
     // Load property bank details
     function loadPropertyBankDetails(propertyId, netBalance) {
