@@ -10,9 +10,19 @@ use App\Models\PaymentVoucherHeader;
 use App\Models\PaymentVoucherLine;
 use App\Services\ApprovalService;
 use App\Services\ErrorDispatcher;
+use App\Services\VoucherPrintService;
 
 class ChequePrintingController extends Controller
 {
+    protected VoucherPrintService $voucherPrints;
+
+    /**
+     * Inject the service that works out what the printed voucher shows.
+     */
+    public function __construct(VoucherPrintService $voucherPrints) {
+        $this->voucherPrints = $voucherPrints;
+    }
+
     /**
      * List all unprinted vouchers pending cheque printing.
      */
@@ -187,14 +197,9 @@ class ChequePrintingController extends Controller
         try {
             $id      = decrypt($encryptedId);
             $voucher = PaymentVoucherHeader::findOrFail($id);
-            $lines   = PaymentVoucherLine::where('voucher_number', $voucher->voucher_number)
-                ->orderBy('id')
-                ->get();
-            
+            $print   = $this->voucherPrints->forVoucher($voucher);
 
-            $amountInWords = $this->numberToWords($voucher->debit_amount ?? 0);
-
-            return view('finance.cheques.print-voucher', compact('voucher', 'lines', 'amountInWords'));
+            return view('finance.cheques.print-voucher', compact('voucher', 'print'));
         } catch (Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error printing voucher: ' . $e->getMessage());

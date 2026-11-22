@@ -145,6 +145,9 @@
         border-bottom: 1px solid #000;
         height: 24px;
         margin-bottom: 12px;
+        font-size: 13px;
+        line-height: 22px;
+        text-transform: uppercase;
     }
 
     .stamp {
@@ -192,7 +195,7 @@
 
     <div class="name-row">
         <span><strong>NAME:</strong> {{ $voucher->vendor_name }}</span>
-        <span><strong>DATE:</strong> {{ now()->format('d M Y') }}</span>
+        <span><strong>DATE:</strong> {{ $print['date'] }}</span>
     </div>
 
     <!-- Dynamic Table -->
@@ -206,18 +209,27 @@
             </tr>
         </thead>
         <tbody>
-            @foreach($lines as $key => $line)
-            <tr @if($loop->last) style="height:200px;" @endif>
-                <td style="border-right:none; text-align: center;">{{ $line->entry_description ?? '-' }}</td>
-                <td style="border-right:none;border-left:none; text-align: center;">{{ $line->account_bank ?: '-' }}</td>
-                <td style="border-left:none; text-align: center;">{{ $line->cheque_number ?: '-' }}</td>
-                <td class="amt">{{ number_format($line->amount ?? 0, 2) }}</td>
+            @foreach($print['lines'] as $line)
+            <tr @if($loop->last && !count($print['charges'])) style="height:200px;" @endif>
+                <td style="border-right:none; text-align: center;">{{ $line['description'] ?: '-' }}</td>
+                <td style="border-right:none;border-left:none; text-align: center;">{{ $line['bank'] ?: '-' }}</td>
+                <td style="border-left:none; text-align: center;">{{ $line['cheque'] ?: '-' }}</td>
+                <td class="amt">{{ number_format($line['amount'], 2) }}</td>
+            </tr>
+            @endforeach
+            {{-- Cheque charges are the company's charge, listed apart and left out of the grand total --}}
+            @foreach($print['charges'] as $charge)
+            <tr @if($loop->last) style="height:{{ count($print['lines']) ? 120 : 200 }}px;" @endif>
+                <td style="border-right:none; text-align: left; vertical-align: top;">{{ $charge['description'] }}</td>
+                <td style="border-right:none;border-left:none;"></td>
+                <td style="border-left:none;"></td>
+                <td class="amt" style="vertical-align: top;">{{ number_format($charge['amount'], 2) }}</td>
             </tr>
             @endforeach
             <tr>
                 {{-- Amount in words on the left, no borders --}}
                 <td colspan="2" style="font-weight:600; text-transform:uppercase; border-left:none; border-bottom:none;">
-                    {{ strtoupper($amountInWords) }}
+                    {{ $print['words'] }}
                 </td>
 
                 {{-- Grand Total label --}}
@@ -227,7 +239,7 @@
 
                 {{-- Grand Total amount --}}
                 <td class="amt" style="font-weight:700; border-top:1px solid #000;">
-                    {{ number_format($lines->sum('amount'), 2) }}
+                    {{ number_format($print['total'], 2) }}
                 </td>
             </tr>
 
@@ -239,15 +251,15 @@
         <div class="left-sig">
             <div>
                 <div class="sig-label">Prepared By:</div>
-                <div class="sig-line"></div>
+                <div class="sig-line">{{ $print['prepared_by'] }}</div>
             </div>
             <div>
                 <div class="sig-label">Checked By:</div>
-                <div class="sig-line"></div>
+                <div class="sig-line">{{ $print['checked_by'] }}</div>
             </div>
             <div>
                 <div class="sig-label">Authorized By:</div>
-                <div class="sig-line"></div>
+                <div class="sig-line">{{ $print['authorized_by'] }}</div>
             </div>
         </div>
 
