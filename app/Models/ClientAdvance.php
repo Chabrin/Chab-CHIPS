@@ -43,6 +43,11 @@ class ClientAdvance extends Model
         'loan_form_name',
         'loan_form_uploaded_by',
         'loan_form_uploaded_at',
+        'limit_exception_reason',
+        'limit_exception_by',
+        'limit_exception_at',
+        'limit_exception_kind',
+        'limit_at_request',
     ];
 
     protected $casts = [
@@ -52,6 +57,7 @@ class ClientAdvance extends Model
         'disbursement_date' => 'datetime',
         'approved_at' => 'datetime',
         'loan_form_uploaded_at' => 'datetime',
+        'limit_exception_at' => 'datetime',
     ];
 
     public function client()
@@ -62,6 +68,11 @@ class ClientAdvance extends Model
     public function createdBy()
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function limitExceptionBy()
+    {
+        return $this->belongsTo(User::class, 'limit_exception_by');
     }
 
     public function approvedBy()

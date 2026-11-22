@@ -174,6 +174,23 @@
                                             </div>
                                         </div>
 
+                                        @permission('override_advance_limit')
+                                        <!-- Exception to the limit: shown only when the amount is over the limit or the client already has 2 active advances -->
+                                        <div class="row g-2 mb-2 d-none" id="rowException">
+                                            <div class="col-12">
+                                                <div class="border rounded p-2" style="background:#fff8e6;">
+                                                    <div class="form-check mb-1">
+                                                        <input class="form-check-input" type="checkbox" id="limitException" name="limit_exception" value="1">
+                                                        <label class="form-check-label" for="limitException" style="font-size:0.85rem;">
+                                                            Give this advance as an exception <span id="exceptionWhy" class="text-muted"></span>
+                                                        </label>
+                                                    </div>
+                                                    <textarea class="form-control form-control-sm d-none" id="limitExceptionReason" name="limit_exception_reason" rows="2" maxlength="500" placeholder="Reason for the exception (at least 10 characters). The approver will see it."></textarea>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        @endpermission
+
                                         <!-- Repayment Row: Months (Overpayment only) + Payment Start Date (both types) -->
                                         <div class="row g-2 mb-2 d-none" id="rowRepayment">
                                             <div class="col-md-6 d-none" id="colMonths">
@@ -371,6 +388,10 @@
                         const outstanding = parseFloat(data.outstanding_balance || 0);
                         const maxAmount = parseFloat(data.maximum_advance_amount || data.max_advance_amount || 0);
                         const activeCount = parseInt(data.active_advances_count || 0);
+
+                        window.advanceLimit = maxAmount;
+                        window.advanceActive = activeCount;
+                        toggleException();
 
                         $('#eligibilityText').html(
                             `Avg Returns: KSh ${avgReturns.toLocaleString()} | Outstanding: KSh ${outstanding.toLocaleString()} | ` +
@@ -610,6 +631,34 @@
                     submitForm();
                 }
             });
+        });
+
+        // The exception box shows only when the limit or the two-active-advances rule would stop this advance
+        function toggleException() {
+            const $row = $('#rowException');
+            if (!$row.length) { return; }
+
+            const amount = parseFloat($('#amount').val()) || 0;
+            const overLimit = window.advanceLimit !== undefined && amount > window.advanceLimit;
+            const tooMany = (window.advanceActive || 0) >= 2;
+            const needed = overLimit || tooMany;
+
+            $row.toggleClass('d-none', !needed);
+            if (!needed) {
+                $('#limitException').prop('checked', false);
+                $('#limitExceptionReason').addClass('d-none').val('');
+                return;
+            }
+
+            const why = [];
+            if (overLimit) { why.push('the amount is over the limit of KSh ' + Number(window.advanceLimit).toLocaleString()); }
+            if (tooMany) { why.push('the client already has 2 active advances'); }
+            $('#exceptionWhy').text('(' + why.join(' and ') + ')');
+        }
+
+        $('#amount').on('input change', toggleException);
+        $('#limitException').on('change', function () {
+            $('#limitExceptionReason').toggleClass('d-none', !this.checked);
         });
 
         // AJAX form submission

@@ -21,9 +21,28 @@ use App\Models\ChequeLeaf;
 use App\Services\ChequeBookService;
 use App\Services\ClientAdvanceService;
 use App\Models\ClientAdvance;
+use App\Models\ApprovalRequestLog;
+use App\Services\ClientLedgerService;
+use App\Services\ReturnVoucherBreakdownService;
+use App\Services\VoucherCancellationService;
+use Illuminate\Support\Facades\Crypt;
+use RuntimeException;
 
 class PaymentVouchersController extends Controller
 {
+    protected VoucherCancellationService $cancellation;
+    protected ReturnVoucherBreakdownService $breakdown;
+    protected ClientLedgerService $ledger;
+
+    /**
+     * Inject the services behind cancelling a voucher, explaining a return's amount and viewing a landlord's account.
+     */
+    public function __construct(VoucherCancellationService $cancellation, ReturnVoucherBreakdownService $breakdown, ClientLedgerService $ledger) {
+        $this->cancellation = $cancellation;
+        $this->breakdown = $breakdown;
+        $this->ledger = $ledger;
+    }
+
     /**
      * Validate and consume a locked cheque leaf for a voucher line, marking it Used.
      * A cheque_number with no matching locked leaf is rejected outright — this is
@@ -105,9 +124,11 @@ class PaymentVouchersController extends Controller
                 ->orderBy('account_name')
                 ->get(['id', 'account_name', 'account_number', 'bank_id']);
 
+            $narrations = \App\Services\VoucherNarrations::LIST;
+
             return view('finance.vouchers.create', compact(
                 'currentYear', 'currentMonth', 'years',
-                'invoiceableItems', 'bankAccounts'
+                'invoiceableItems', 'bankAccounts', 'narrations'
             ));
         } catch (Exception $e) {
             ErrorDispatcher::dispatch($e);
@@ -166,7 +187,22 @@ class PaymentVouchersController extends Controller
             $id      = decrypt($encryptedId);
             $voucher = PaymentVoucherHeader::findOrFail($id);
 
-            return view('finance.vouchers.details', compact('voucher'));
+            $canCancel = Auth::user()->isAbleTo('cancel_payment_vouchers');
+            $cancelRefusal = $canCancel ? $this->cancellation->refusal($voucher) : null;
+            $returnLine = PaymentVoucherLine::where('entry_id', $voucher->id)->where('voucher_type', 'client_returns')->first();
+            $returnId = $returnLine ? (int) $returnLine->entry_number : null;
+
+            // The reason an approver gave when they rejected it, or sent it back, so the person who prepared it can see why
+            $lastDecision = null;
+            $approval = $voucher->approvalRequest();
+            if ($approval) {
+                $lastDecision = ApprovalRequestLog::where('approval_request_id', $approval->id)
+                    ->whereIn('action', [ApprovalRequestLog::ACTION_REJECTED, ApprovalRequestLog::ACTION_CHANGES_REQUESTED, ApprovalRequestLog::ACTION_RETURNED])
+                    ->orderByDesc('id')
+                    ->first();
+            }
+
+            return view('finance.vouchers.details', compact('voucher', 'canCancel', 'cancelRefusal', 'returnId', 'lastDecision'));
         } catch (Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading voucher details: ' . $e->getMessage());
@@ -540,6 +576,84 @@ class PaymentVouchersController extends Controller
     }
 
     /**
+     * Cancel a voucher and the cheque it used (AJAX). Needs the cancel_payment_vouchers permission and a reason.
+     */
+    public function cancel(Request $request, $encryptedId)
+    {
+        if (!Auth::user()->isAbleTo('cancel_payment_vouchers')) {
+            return response()->json(['success' => false, 'message' => 'You do not have permission to cancel vouchers.'], 403);
+        }
+
+        try {
+            $voucher = PaymentVoucherHeader::findOrFail(decrypt($encryptedId));
+            $validated = $request->validate(['reason' => ['required', 'string', 'min:5', 'max:1000']]);
+
+            $cheques = $this->cancellation->cancel($voucher, (int) Auth::id(), (string) Auth::user()->name, $validated['reason']);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Voucher ' . $voucher->voucher_number . ' cancelled' . ($cheques ? ' with ' . $cheques . ' cheque(s).' : '.'),
+            ]);
+        } catch (ValidationException $e) {
+            return response()->json(['success' => false, 'message' => collect($e->errors())->flatten()->first(), 'errors' => $e->errors()], 422);
+        } catch (RuntimeException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        } catch (Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error cancelling voucher: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to cancel the voucher'], 500);
+        }
+    }
+
+    /**
+     * A landlord's account for the voucher screen (AJAX): who they are, the balance and the latest entries. Expects ?client=<encrypted id>.
+     */
+    public function landlordAccount(Request $request)
+    {
+        try {
+            $clientId = (int) Crypt::decrypt((string) $request->input('client'));
+            $account = $this->ledger->account($clientId);
+
+            if (!$account) {
+                return response()->json(['success' => false, 'message' => 'Landlord not found'], 404);
+            }
+
+            $entries = $this->ledger->entries($clientId);
+            $latest = array_slice($entries, -25);
+
+            return response()->json([
+                'success' => true,
+                'account' => $account + ['encrypted_id' => Crypt::encrypt($clientId)],
+                'balance' => $entries ? end($entries)['balance'] : 0,
+                'entry_count' => count($entries),
+                'data' => array_reverse($latest),
+            ]);
+        } catch (\Illuminate\Contracts\Encryption\DecryptException $e) {
+            return response()->json(['success' => false, 'message' => 'Landlord not found'], 404);
+        } catch (Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading landlord account for voucher: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to load the landlord account'], 500);
+        }
+    }
+
+    /**
+     * How a return's amount was reached, for the voucher screens (AJAX).
+     */
+    public function returnBreakdown($returnId)
+    {
+        try {
+            $return = ReturnSummary::findOrFail((int) $returnId);
+
+            return response()->json(['success' => true, 'return_code' => $return->return_code] + $this->breakdown->forReturn($return));
+        } catch (Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error building return breakdown: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to load the breakdown'], 500);
+        }
+    }
+
+    /**
      * Get approved unpaid returns for returns vouchers tab (AJAX).
      */
     public function getApprovedReturns(Request $request)
@@ -596,6 +710,7 @@ class PaymentVouchersController extends Controller
                         'encrypted_id' => encrypt($r->id),
                         'return_code' => $r->return_code,
                         'landlord_id' => $r->landlord_id,
+                        'landlord_encrypted_id' => $r->landlord_id ? Crypt::encrypt($r->landlord_id) : null,
                         'landlord_code' => $r->landlord_code,
                         'landlord_name' => $r->landlord_name ?? '-',
                         'property_id' => $r->property_id,

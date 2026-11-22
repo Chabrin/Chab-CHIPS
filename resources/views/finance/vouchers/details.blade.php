@@ -72,10 +72,32 @@
                 <!-- Page header -->
                 <div class="d-flex align-items-center justify-content-between mb-2">
                     <h6 class="mb-0 text-muted">Voucher Details</h6>
-                    <a href="{{ route('payment.vouchers.index') }}" class="btn btn-outline-primary btn-sm d-flex align-items-center gap-1">
-                        <span class="material-symbols-outlined" style="font-size:16px;">arrow_back</span> Back
-                    </a>
+                    <div class="d-flex align-items-center gap-2">
+                        @if($canCancel && !$cancelRefusal)
+                        <button type="button" class="btn btn-outline-danger btn-sm d-flex align-items-center gap-1" data-bs-toggle="modal" data-bs-target="#cancelVoucherModal">
+                            <span class="material-symbols-outlined" style="font-size:16px;">cancel</span> Cancel voucher and cheque
+                        </button>
+                        @endif
+                        <a href="{{ route('payment.vouchers.index') }}" class="btn btn-outline-primary btn-sm d-flex align-items-center gap-1">
+                            <span class="material-symbols-outlined" style="font-size:16px;">arrow_back</span> Back
+                        </a>
+                    </div>
                 </div>
+
+                @if($lastDecision && in_array($voucher->voucher_status, ['Rejected', 'Pending'], true))
+                <div class="alert alert-warning py-2 mb-2" style="font-size:0.85rem;">
+                    <strong>{{ ['rejected' => 'Rejected', 'changes_requested' => 'Sent back for changes', 'returned' => 'Sent back to the previous stage'][$lastDecision->action] ?? 'Not approved' }}</strong>
+                    on {{ $lastDecision->action_on?->format('d/m/Y H:i') ?? '-' }}.
+                    Reason: {{ $lastDecision->comment ?: 'No reason was written.' }}
+                </div>
+                @endif
+
+                @if($voucher->voucher_status === 'Cancelled')
+                <div class="alert alert-danger py-2 mb-2" style="font-size:0.85rem;">
+                    <strong>Cancelled</strong> by {{ $voucher->cancelled_by ?? '-' }} on {{ $voucher->cancelled_at?->format('d/m/Y H:i') ?? '-' }}.
+                    Reason: {{ $voucher->cancel_reason ?? '-' }}
+                </div>
+                @endif
 
                 <!-- Summary Card -->
                 <div class="card mb-3">
@@ -117,6 +139,10 @@
                                     <span class="badge badge-light-success">Paid</span>
                                     @elseif($voucher->voucher_status === 'Approved')
                                     <span class="badge badge-light-primary">Approved</span>
+                                    @elseif($voucher->voucher_status === 'Cancelled')
+                                    <span class="badge badge-light-secondary">Cancelled</span>
+                                    @elseif($voucher->voucher_status === 'Rejected')
+                                    <span class="badge badge-light-warning">Rejected</span>
                                     @else
                                     <span class="badge badge-light-danger">Pending</span>
                                     @endif
@@ -200,6 +226,21 @@
                     </div>
                 </div>
 
+                @if($returnId)
+                <!-- How the amount was reached -->
+                <div class="card mb-3">
+                    <div class="card-header card-no-border py-2">
+                        <h6 class="mb-0">How this amount was reached</h6>
+                        <small class="text-muted" id="breakdownReturn"></small>
+                    </div>
+                    <div class="card-body pt-0">
+                        <table class="table table-sm mb-0" id="breakdownTable" style="font-size:0.82rem;">
+                            <tbody><tr><td class="text-muted">Loading...</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+                @endif
+
                 <!-- Lines Table -->
                 <div class="card">
                     <div class="card-header card-no-border d-flex align-items-center justify-content-between py-2">
@@ -231,6 +272,29 @@
         </div>
     </div>
 </div>
+
+@if($canCancel && !$cancelRefusal)
+<div class="modal fade" id="cancelVoucherModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title">Cancel voucher {{ $voucher->voucher_number }}</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-2" style="font-size:0.85rem;">The voucher and its cheque number are cancelled together. The cheque number cannot be used again, and a return or advance this voucher was paying can be paid by a new voucher.</p>
+                <label class="form-label">Reason for cancelling <span class="text-danger">*</span></label>
+                <textarea class="form-control" id="cancelReason" rows="3" maxlength="1000" placeholder="For example: cheque spoiled at printing, wrong payee"></textarea>
+                <div class="text-danger mt-1" style="font-size:0.78rem;" id="cancelError"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Keep voucher</button>
+                <button type="button" class="btn btn-danger btn-sm" id="confirmCancelBtn">Cancel voucher and cheque</button>
+            </div>
+        </div>
+    </div>
+</div>
+@endif
 @endsection
 
 @section('scripts')
@@ -331,6 +395,53 @@
         }
 
         loadLines();
+
+        @if($canCancel && !$cancelRefusal)
+        $('#confirmCancelBtn').on('click', function () {
+            var reason = $('#cancelReason').val().trim();
+            if (reason.length < 5) { $('#cancelError').text('Give the reason (at least 5 characters).'); return; }
+            $('#cancelError').text('');
+            var $btn = $(this).prop('disabled', true);
+
+            $.ajax({
+                url: '{{ route("payment.vouchers.cancel", encrypt($voucher->id)) }}',
+                type: 'POST',
+                data: { _token: '{{ csrf_token() }}', reason: reason },
+                success: function (r) {
+                    toastr.success(r.message);
+                    setTimeout(function () { location.reload(); }, 800);
+                },
+                error: function (xhr) {
+                    $btn.prop('disabled', false);
+                    $('#cancelError').text((xhr.responseJSON && xhr.responseJSON.message) || 'Failed to cancel the voucher.');
+                }
+            });
+        });
+        @endif
+
+        @if($returnId)
+        function money(n) {
+            return Number(n).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+        function esc(v) { return $('<div>').text(v == null ? '' : v).html(); }
+
+        $.get('{{ route("ajax.payment.vouchers.return-breakdown", $returnId) }}', function (r) {
+            if (!r.success) { $('#breakdownTable tbody').html('<tr><td class="text-danger">Could not load the breakdown.</td></tr>'); return; }
+            $('#breakdownReturn').text('Return ' + r.return_code);
+            var html = '';
+            r.rows.forEach(function (row) {
+                var strong = row.kind === 'strong' || row.kind === 'closing';
+                var sign = row.kind === 'less' ? '-' : '';
+                var meta = [row.reference, row.date].filter(Boolean).join(' · ');
+                html += '<tr' + (row.kind === 'closing' ? ' class="table-light"' : '') + '>'
+                    + '<td' + (strong ? ' class="fw-semibold"' : '') + '>' + esc(row.label) + (meta ? ' <small class="text-muted">' + esc(meta) + '</small>' : '') + '</td>'
+                    + '<td class="text-end' + (strong ? ' fw-semibold' : '') + '">' + sign + money(row.amount) + '</td></tr>';
+            });
+            $('#breakdownTable tbody').html(html || '<tr><td class="text-muted">No lines.</td></tr>');
+        }).fail(function () {
+            $('#breakdownTable tbody').html('<tr><td class="text-danger">Could not load the breakdown.</td></tr>');
+        });
+        @endif
     });
 </script>
 @endsection

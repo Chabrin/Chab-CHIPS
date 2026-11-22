@@ -213,6 +213,10 @@ a.view-link:hover {
                 <input type="hidden" id="approvalAction">
                 <input type="hidden" id="approvalEncryptedId">
                 <input type="hidden" id="approvalReturnLevel">
+                <div class="mb-3" id="sendBackChoices" style="display:none;">
+                    <label class="form-label">What should happen to it?</label>
+                    <div id="sendBackOptions"></div>
+                </div>
                 <div class="mb-3">
                     <label class="form-label" id="commentLabel">Comment</label>
                     <textarea class="form-control" id="approvalComment" rows="3" placeholder="Enter your comment..."></textarea>
@@ -510,20 +514,14 @@ $(document).ready(function() {
         // Action buttons
         var actionsHtml = '';
         if (d.can_approve && !d.is_complete) {
-            var returnBtn = d.current_level > 1
-                ? '<button type="button" class="btn btn-outline-secondary btn-sm approval-action-btn" data-action="return" data-eid="' + encryptedId + '" data-level="' + (d.current_level - 1) + '">' +
-                  '<span class="material-symbols-outlined" style="font-size:16px;">undo</span> Return to Previous Stage</button>'
-                : '';
+            var noun = requestType === 'voucher' ? 'voucher' : (requestType === 'return' ? 'return' : 'request');
             actionsHtml =
                 '<div class="card"><div class="card-header"><h6>Actions</h6></div><div class="card-body">' +
                 '<div class="d-flex flex-wrap gap-2">' +
-                '<button type="button" class="btn btn-primary btn-sm approval-action-btn" data-action="approve" data-eid="' + encryptedId + '">' +
-                '<span class="material-symbols-outlined" style="font-size:16px;">check</span> Approve</button>' +
-                '<button type="button" class="btn btn-danger btn-sm approval-action-btn" data-action="reject" data-eid="' + encryptedId + '">' +
-                '<span class="material-symbols-outlined" style="font-size:16px;">close</span> Reject</button>' +
-                '<button type="button" class="btn btn-warning btn-sm approval-action-btn" data-action="request_changes" data-eid="' + encryptedId + '">' +
-                '<span class="material-symbols-outlined" style="font-size:16px;">edit_note</span> Request Changes</button>' +
-                returnBtn +
+                '<button type="button" class="btn btn-primary btn-sm approval-action-btn" data-action="approve" data-eid="' + encryptedId + '" data-noun="' + noun + '">' +
+                '<span class="material-symbols-outlined" style="font-size:16px;">check</span> Approve ' + noun + '</button>' +
+                '<button type="button" class="btn btn-danger btn-sm approval-action-btn" data-action="send_back" data-eid="' + encryptedId + '" data-noun="' + noun + '" data-level="' + d.current_level + '">' +
+                '<span class="material-symbols-outlined" style="font-size:16px;">close</span> Reject ' + noun + ' with reason</button>' +
                 '</div></div></div>';
         }
 
@@ -578,21 +576,41 @@ $(document).ready(function() {
         var eid = $(this).data('eid');
         var level = $(this).data('level') || '';
 
+        var noun = $(this).data('noun') || 'request';
         var titles = {
-            approve: 'Approve Request',
-            reject: 'Reject Request',
-            request_changes: 'Request Changes',
-            return: 'Return to Previous Stage',
-            resubmit: 'Resubmit for Approval'
+            approve: 'Approve ' + noun,
+            send_back: 'Reject ' + noun + ' with reason',
+            reject: 'Reject ' + noun,
+            request_changes: 'Send ' + noun + ' back for changes',
+            return: 'Send ' + noun + ' back to the previous stage',
+            resubmit: 'Send ' + noun + ' for approval again'
         };
         var hints = {
             approve: 'Add a comment (optional)',
+            send_back: 'The reason is kept on the ' + noun + ' and shown to the person who prepared it',
             reject: 'Please provide a reason for rejection',
             request_changes: 'Please describe the changes required',
             return: 'Add a comment (optional)',
             resubmit: 'Add a comment (optional)'
         };
-        var required = (action === 'reject' || action === 'request_changes');
+        var required = (action === 'reject' || action === 'request_changes' || action === 'send_back');
+
+        // One Reject button: the reason is always asked, and the person chooses where the item goes
+        $('#sendBackChoices').toggle(action === 'send_back');
+        if (action === 'send_back') {
+            var current = parseInt(level, 10) || 1;
+            var choices = [];
+            if (current > 1) { choices.push(['return', 'Send it back to the previous approver (stage ' + (current - 1) + ')']); }
+            choices.push(['request_changes', 'Send it back to the person who prepared it, to change and send again']);
+            choices.push(['reject', 'Reject it completely (it is closed and must be raised again)']);
+            var html = '';
+            choices.forEach(function (c, i) {
+                html += '<div class="form-check"><input class="form-check-input" type="radio" name="sendBackOption" id="sb' + i + '" value="' + c[0] + '"' + (i === 0 ? ' checked' : '') + '>' +
+                    '<label class="form-check-label" for="sb' + i + '">' + c[1] + '</label></div>';
+            });
+            $('#sendBackOptions').html(html);
+            level = current - 1;
+        }
 
         $('#approvalAction').val(action);
         $('#approvalEncryptedId').val(eid);
@@ -609,6 +627,11 @@ $(document).ready(function() {
         var eid = $('#approvalEncryptedId').val();
         var comment = $('#approvalComment').val().trim();
         var returnLevel = $('#approvalReturnLevel').val();
+
+        // The one Reject button: the chosen option decides which action runs
+        if (action === 'send_back') {
+            action = $('input[name="sendBackOption"]:checked').val() || 'reject';
+        }
 
         if ((action === 'reject' || action === 'request_changes') && !comment) {
             toastr.error('Comment is required for this action.');

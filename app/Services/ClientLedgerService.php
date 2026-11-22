@@ -31,6 +31,18 @@ class ClientLedgerService
     const SNAPSHOT_DESCRIPTIONS = ['Opening Balance B/F', 'Closing Balance C/F'];
 
     /**
+     * The charges on a landlord's account by entry code, for the statement's charges block. 'company' = what the company
+     * charges (cheque charges, banking services, registration, advance charges and interest, VAT); 'behalf' = what was
+     * paid for the landlord and taken off the account (caretaker and watchman salaries, security, water and electricity bills).
+     */
+    const CHARGE_CODES = [
+        '0014' => ['company', 'Cheque charges'], '0030' => ['company', 'Cheque charges'],
+        '0019' => ['company', 'Banking services'], '0023' => ['company', 'Registration fee'], '0022' => ['company', 'VAT'],
+        '0015' => ['behalf', 'Caretaker salary'], '0033' => ['behalf', 'Watchman salary'], '0012' => ['behalf', 'Worker salary'],
+        '0031' => ['behalf', 'Security payment'], '0004' => ['behalf', 'Water bill'], '0002' => ['behalf', 'Electricity bill'],
+    ];
+
+    /**
      * One row per landlord, newest activity first, optionally narrowed by filters.
      *
      * Filters: account (all|open|none), fee (all|unpaid), balance (all|owed_to|owed_by).
@@ -201,6 +213,7 @@ class ClientLedgerService
             'closing' => round($rows ? (float) end($rows)['balance'] : $opening, 2) + 0.0,
             'has_uncounted' => $hasUncounted,
             'undated' => $undated,
+            'charges' => $this->charges($rows),
             'properties' => DB::table('sys_pm_properties')->where('client_id', $clientId)->orderBy('property_name')->pluck('property_name')->filter()->values()->all(),
         ];
     }
@@ -227,6 +240,8 @@ class ClientLedgerService
 
             $statementEntries[] = [
                 'counted' => $counted,
+                'code' => (string) ($txn->entry_type_code ?? ''),
+                'description' => (string) ($txn->entry_description ?? ''),
                 'date' => $txn->entry_date,
                 'reference' => $txn->transaction_number ?? '-',
                 'narration' => $txn->entry_particulars ?: ($txn->entry_description ?? '-'),
@@ -241,6 +256,62 @@ class ClientLedgerService
         }
 
         return $statementEntries;
+    }
+
+    /**
+     * Where a debit belongs in the charges block: ['company' or 'behalf', label], or null when it is not a charge (advances,
+     * returns, deposit refunds, recoveries and so on). An advance's own charge and interest are told apart by their text or
+     * by the /CHG reference the advance service writes.
+     *
+     * @param string|null $code entry_type_code
+     * @param string|null $description entry_description
+     * @param string|null $reference transaction number
+     */
+    public function chargeGroup(?string $code, ?string $description, ?string $reference): ?array {
+        if (stripos((string) $description, 'Interest on Advances') !== false) {
+            return ['company', 'Interest on advances'];
+        }
+        if (stripos((string) $description, 'Advance Payments Charges') !== false || str_ends_with(strtoupper((string) $reference), '/CHG')) {
+            return ['company', 'Advance charges'];
+        }
+
+        return self::CHARGE_CODES[(string) $code] ?? null;
+    }
+
+    /**
+     * The charges in a statement's rows, by kind: the debits that count toward the balance, grouped by what they were for,
+     * biggest first inside each of the two groups, with the total of each group.
+     *
+     * @param array $rows statement rows with code, description, reference, debit and counted
+     * @return array ['company' => ['rows' => [[label, count, amount]], 'total' => float], 'behalf' => ... same]
+     */
+    public function charges(array $rows): array {
+        $groups = ['company' => [], 'behalf' => []];
+
+        foreach ($rows as $row) {
+            if (empty($row['counted']) || (float) ($row['debit'] ?? 0) <= 0) {
+                continue;
+            }
+
+            $group = $this->chargeGroup($row['code'] ?? null, $row['description'] ?? null, $row['reference'] ?? null);
+            if (!$group) {
+                continue;
+            }
+
+            [$key, $label] = $group;
+            $groups[$key][$label] ??= ['label' => $label, 'count' => 0, 'amount' => 0.0];
+            $groups[$key][$label]['count']++;
+            $groups[$key][$label]['amount'] += (float) $row['debit'];
+        }
+
+        $out = [];
+        foreach ($groups as $key => $items) {
+            usort($items, fn($a, $b) => $b['amount'] <=> $a['amount']);
+            $items = array_map(fn($item) => ['label' => $item['label'], 'count' => $item['count'], 'amount' => round($item['amount'], 2)], $items);
+            $out[$key] = ['rows' => array_values($items), 'total' => round(array_sum(array_column($items, 'amount')), 2)];
+        }
+
+        return $out;
     }
 
     /**

@@ -276,6 +276,46 @@ class ClientAdvanceService
         return max(0.0, round($averageMonthlyReturns * 12 * 0.8 - $outstanding, 2));
     }
 
+    /** The advance checks an exception can overrule: the amount against the limit, and the two-active-advances rule. */
+    const EXCEPTION_KINDS = ['amount' => 'limit', 'client_id' => 'active_advances'];
+
+    /**
+     * Decide whether an advance that failed the limit checks goes ahead as an exception. Only the limit (amount) and the
+     * two-active-advances (client_id) errors can be overruled, and only by someone allowed to, with a reason; every other
+     * error (dates and so on) stays. Asking for an exception when nothing needs one changes nothing.
+     *
+     * @param array $errors field => messages, from the checks
+     * @param bool $requested whether the form asked for an exception
+     * @param bool $allowed whether the user may give an exception
+     * @param string|null $reason why the exception is given
+     * @return array ['errors' => the errors left, 'kind' => 'limit', 'active_advances', 'both', or null when no exception is given]
+     */
+    public function applyException(array $errors, bool $requested, bool $allowed, ?string $reason): array {
+        $overruled = array_values(array_intersect_key(self::EXCEPTION_KINDS, $errors));
+
+        if (!$requested || !$overruled) {
+            return ['errors' => $errors, 'kind' => null];
+        }
+
+        if (!$allowed) {
+            $errors['limit_exception'] = ['You do not have permission to give an exception to the advance limit.'];
+
+            return ['errors' => $errors, 'kind' => null];
+        }
+
+        if (mb_strlen(trim((string) $reason)) < 10) {
+            $errors['limit_exception_reason'] = ['Give the reason for the exception (at least 10 characters).'];
+
+            return ['errors' => $errors, 'kind' => null];
+        }
+
+        foreach (array_keys(self::EXCEPTION_KINDS) as $field) {
+            unset($errors[$field]);
+        }
+
+        return ['errors' => $errors, 'kind' => count($overruled) > 1 ? 'both' : $overruled[0]];
+    }
+
     /**
      * The interest change when a posted advance is restructured, from the advance total before and after.
      * More interest means more receivable and more income; less means the reverse. Null when nothing changed.

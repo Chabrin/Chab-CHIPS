@@ -274,6 +274,8 @@ class ClientAdvanceController extends Controller
                 'disbursement_date' => 'required|date|after_or_equal:requisition_date',
                 'amount' => 'required|numeric|min:1',
                 'narration' => 'nullable|string|max:500',
+                'limit_exception' => 'nullable|boolean',
+                'limit_exception_reason' => 'nullable|string|max:500',
             ];
 
             // Type-specific rules
@@ -324,9 +326,28 @@ class ClientAdvanceController extends Controller
                 $errors['disbursement_date'] = ['Disbursement date must be within 30 days of requisition'];
             }
 
+            // An exception to the limit or to the two-active-advances rule, given by someone allowed to, with a reason
+            $exception = $this->advances->applyException(
+                $errors,
+                (bool) ($validated['limit_exception'] ?? false),
+                (bool) Auth::user()->isAbleTo('override_advance_limit'),
+                $validated['limit_exception_reason'] ?? null
+            );
+            $errors = $exception['errors'];
+
             if (!empty($errors)) {
                 DB::rollBack();
                 return response()->json(['success' => false, 'errors' => $errors], 422);
+            }
+
+            unset($validated['limit_exception'], $validated['limit_exception_reason']);
+
+            if ($exception['kind']) {
+                $validated['limit_exception_kind'] = $exception['kind'];
+                $validated['limit_exception_reason'] = trim((string) $request->input('limit_exception_reason'));
+                $validated['limit_exception_by'] = Auth::id();
+                $validated['limit_exception_at'] = now();
+                $validated['limit_at_request'] = $maxAmount;
             }
 
             // Get zone_id from the selected property
@@ -548,7 +569,10 @@ class ClientAdvanceController extends Controller
 
             // The limit applies to an edit that raises the amount, the same as when the advance was requested.
             // The advance's own balance is left out of what is outstanding, since it is the one being changed.
-            if ($amount > (float) $advance->amount) {
+            // An advance given as an exception can be raised by someone who may give exceptions.
+            $mayRaiseAsException = $advance->limit_exception_by && Auth::user()->isAbleTo('override_advance_limit');
+
+            if ($amount > (float) $advance->amount && !$mayRaiseAsException) {
                 $maxAmount = $this->getMaxAdvanceAmount($advance->client_id, $advance->id);
 
                 if ($amount > $maxAmount) {

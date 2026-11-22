@@ -132,6 +132,8 @@
                     render: function(d) {
                         if (d === 'Paid') return '<span class="badge badge-light-success">Paid</span>';
                         if (d === 'Approved') return '<span class="badge badge-light-primary">Approved</span>';
+                        if (d === 'Cancelled') return '<span class="badge badge-light-secondary">Cancelled</span>';
+                        if (d === 'Rejected') return '<span class="badge badge-light-warning">Rejected</span>';
                         return '<span class="badge badge-light-danger">Pending</span>';
                     }
                 },

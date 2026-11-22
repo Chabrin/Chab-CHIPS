@@ -244,6 +244,7 @@ $(function() {
         if (row.can_confirm) { actions += '<button type="button" class="bs-btn bs-btn-ok bs-btn-sm btn-confirm" data-id="' + row.id + '"><span class="material-symbols-outlined">check_circle</span>Confirm</button>'; }
         if (row.needs_other_confirmer) { actions += '<span class="bs-wait" title="You captured this statement, so someone else has to confirm it."><span class="material-symbols-outlined">lock</span>Another person confirms</span>'; }
         if (row.can_retry) { actions += '<button type="button" class="bs-btn bs-btn-warn bs-btn-sm btn-retry" data-id="' + row.id + '"><span class="material-symbols-outlined">replay</span>Run again</button>'; }
+        actions += '<a class="bs-btn bs-btn-sm" href="' + urls.matchBase + '/' + row.id + '/download" title="Download the file as it was uploaded" aria-label="Download the statement file"><span class="material-symbols-outlined">download</span>Download</a>';
         if (row.can_delete) { actions += '<button type="button" class="bs-btn bs-btn-danger bs-btn-sm btn-delete" data-id="' + row.id + '" title="Delete this statement" aria-label="Delete this statement"><span class="material-symbols-outlined">delete</span></button>'; }
 
         return '<tr class="bs-click' + (selected ? ' bs-selected' : '') + '" data-id="' + row.id + '" tabindex="0">' +

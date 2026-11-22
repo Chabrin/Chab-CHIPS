@@ -425,6 +425,8 @@
         </tbody>
     </table>
 
+    @include('property.landlord.partials.charges-breakdown')
+
     @if($st['has_uncounted'] || $st['undated'] > 0)
     <div class="note">
         @if($st['has_uncounted'])

@@ -13,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * The Bank Statements page: anyone with the menu entry uploads a bank's statement file, and a user in a confirming role
@@ -270,6 +271,25 @@ class BankStatementController extends Controller
 
             return response()->json(['success' => false, 'message' => 'Failed to start matching'], 500);
         }
+    }
+
+    /**
+     * Download the statement file as it was uploaded, under the name it was uploaded with.
+     *
+     * @param int $id the upload
+     */
+    public function download($id) {
+        if (!$this->menuAllowed(self::MENU_URL)) {
+            return $this->denied();
+        }
+
+        $upload = DB::table('cb_bank_statement_uploads')->where('id', (int) $id)->first(['file_name', 'file_path']);
+
+        if (!$upload || !$upload->file_path || !Storage::disk('local')->exists($upload->file_path)) {
+            return redirect()->back()->with('error', 'The statement file is no longer available.');
+        }
+
+        return Storage::disk('local')->download($upload->file_path, $upload->file_name ?: basename($upload->file_path));
     }
 
     /**

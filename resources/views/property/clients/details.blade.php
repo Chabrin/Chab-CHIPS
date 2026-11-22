@@ -56,6 +56,10 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                 <span class="ms-1">Statement</span>
                             </a>
                             @endif
+                            <button type="button" class="btn btn-outline-primary btn-sm d-flex align-items-center" id="paidOwnerLinkBtn" title="A link the landlord opens to tell us a tenant paid them rent directly">
+                                <span class="material-symbols-outlined">link</span>
+                                <span class="ms-1">Paid Owner Link</span>
+                            </button>
                             <a href="/property/clients/{{ Crypt::encrypt($client->id) }}/edit" class="btn btn-primary btn-sm d-flex align-items-center">
                                 <span class="material-symbols-outlined">edit_document</span>
                                 <span class="ms-1">Edit Client</span>
@@ -5454,4 +5458,78 @@ COPY PERMISSIONS (paste when re-enabling checks):
     });
 </script>
 <script src="{{ asset('assets/js/client-details.js') }}?v={{ filemtime(public_path('assets/js/client-details.js')) }}"></script>
+
+{{-- Paid Owner link: the landlord opens it to tell us a tenant paid them rent directly --}}
+<div class="modal fade" id="paidOwnerLinkModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title">Paid Owner link for {{ $client->names }}</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-2" style="font-size:0.85rem;">The landlord opens this link, picks the tenant and the rent, and says how much and when they were paid. It becomes a Pending Paid Owner recovery on the Recovery page for the confirmer to check. Nothing changes on any account until it is confirmed.</p>
+                <div id="paidOwnerLinkWait" class="text-muted">Making the link...</div>
+                <div id="paidOwnerLinkBox" style="display:none;">
+                    <label class="form-label mb-1">Link (works for <span id="paidOwnerLinkDays"></span> days)</label>
+                    <textarea class="form-control form-control-sm" id="paidOwnerLinkUrl" rows="3" readonly></textarea>
+                    <div class="d-flex gap-2 mt-2">
+                        <button type="button" class="btn btn-primary btn-sm" id="paidOwnerCopyBtn">Copy link</button>
+                        <button type="button" class="btn btn-outline-primary btn-sm" id="paidOwnerEmailBtn">Email it to {{ $client->email_address ?: 'the landlord' }}</button>
+                    </div>
+                    <div class="mt-2" style="font-size:0.8rem;" id="paidOwnerLinkMsg"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+(function () {
+    var url = '{{ route("property.clients.paid-owner-link", Crypt::encrypt($client->id)) }}';
+    var token = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    var btn = document.getElementById('paidOwnerLinkBtn');
+    if (!btn) { return; }
+
+    function call(sendEmail, done) {
+        var body = new FormData();
+        body.append('send_email', sendEmail ? '1' : '0');
+        fetch(url, { method: 'POST', headers: { 'X-CSRF-TOKEN': token, 'Accept': 'application/json' }, body: body })
+            .then(function (r) { return r.json().then(function (j) { return { status: r.status, json: j }; }); })
+            .then(function (res) { done(res.json); })
+            .catch(function () { done({ success: false, message: 'Could not make the link.' }); });
+    }
+
+    btn.addEventListener('click', function () {
+        document.getElementById('paidOwnerLinkWait').style.display = '';
+        document.getElementById('paidOwnerLinkWait').textContent = 'Making the link...';
+        document.getElementById('paidOwnerLinkBox').style.display = 'none';
+        new bootstrap.Modal(document.getElementById('paidOwnerLinkModal')).show();
+        call(false, function (r) {
+            if (!r.success) { document.getElementById('paidOwnerLinkWait').textContent = r.message || 'You cannot make this link.'; return; }
+            document.getElementById('paidOwnerLinkWait').style.display = 'none';
+            document.getElementById('paidOwnerLinkBox').style.display = '';
+            document.getElementById('paidOwnerLinkUrl').value = r.url;
+            document.getElementById('paidOwnerLinkDays').textContent = r.days;
+            document.getElementById('paidOwnerLinkMsg').textContent = '';
+        });
+    });
+
+    document.getElementById('paidOwnerCopyBtn').addEventListener('click', function () {
+        var box = document.getElementById('paidOwnerLinkUrl');
+        box.select();
+        (navigator.clipboard ? navigator.clipboard.writeText(box.value) : Promise.resolve(document.execCommand('copy')))
+            .then(function () { document.getElementById('paidOwnerLinkMsg').textContent = 'Link copied.'; });
+    });
+
+    document.getElementById('paidOwnerEmailBtn').addEventListener('click', function () {
+        var msg = document.getElementById('paidOwnerLinkMsg');
+        msg.textContent = 'Sending...';
+        call(true, function (r) {
+            if (!r.success) { msg.textContent = r.message || 'Could not send.'; return; }
+            document.getElementById('paidOwnerLinkUrl').value = r.url;
+            msg.textContent = r.emailed ? 'Email sent to the landlord.' : (r.email_error || 'The email was not sent.');
+        });
+    });
+})();
+</script>
 @endsection

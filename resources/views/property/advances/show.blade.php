@@ -101,6 +101,16 @@
                     </div>
                     <div class="card-body" style="padding: 15px;">
 
+                        @if($advance->limit_exception_by)
+                        <div class="alert alert-warning py-2 mb-3" style="font-size:0.85rem;">
+                            <strong>Given as an exception</strong>
+                            ({{ ['limit' => 'amount over the limit', 'active_advances' => 'client already had 2 active advances', 'both' => 'over the limit and 2 active advances'][$advance->limit_exception_kind] ?? 'limit exception' }})
+                            by {{ $advance->limitExceptionBy->name ?? 'unknown' }} on {{ $advance->limit_exception_at?->format('d/m/Y H:i') ?? '-' }}.
+                            @if($advance->limit_at_request !== null) The limit available then was KSh {{ number_format($advance->limit_at_request, 2) }}. @endif
+                            <br>Reason: {{ $advance->limit_exception_reason }}
+                        </div>
+                        @endif
+
                         <ul class="nav nav-tabs mb-3" id="advanceTabs" role="tablist">
                             <li class="nav-item" role="presentation">
                                 <button class="nav-link active" id="details-tab" data-bs-toggle="tab" data-bs-target="#details-pane" type="button" role="tab">

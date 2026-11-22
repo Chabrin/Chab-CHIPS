@@ -134,6 +134,9 @@
                 <div class="col-md-4" id="landlordWrap" style="display:none;">
                     <label class="form-label">Landlord <span class="text-danger">*</span></label>
                     <select id="landlordSearch" style="width:100%;"></select>
+                    <button type="button" class="btn btn-link btn-sm p-0 mt-1 js-view-landlord-account" id="viewLandlordAccountBtn" style="display:none; font-size:0.78rem;">
+                        <span class="material-symbols-outlined" style="font-size:14px; vertical-align:middle;">account_balance_wallet</span> View landlord account
+                    </button>
                     <div class="text-danger mt-1" style="font-size:0.75rem;" id="err_vendor_name_landlord"></div>
                 </div>
 
@@ -219,10 +222,10 @@
             <div class="border-top pt-3">
                 <div class="entry-section-label">Entry Details</div>
 
-                {{-- Row 1: Entry Type + Description --}}
+                {{-- Row 1: Entry Type + Narration + Unit/property + Description --}}
                 <div class="row g-2 mb-2">
 
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <label class="form-label">Entry Type</label>
                         <select class="form-select form-select-sm" id="entryType">
                             <option value="">-- Select Entry Type --</option>
@@ -236,10 +239,27 @@
                         </select>
                     </div>
 
-                    <div class="col-md-8">
+                    <div class="col-md-3">
+                        <label class="form-label">Narration <span class="text-danger">*</span></label>
+                        <select class="form-select form-select-sm" id="entryNarration">
+                            <option value="">-- Select narration --</option>
+                            @foreach($narrations as $narration)
+                            <option value="{{ $narration }}">{{ $narration }}</option>
+                            @endforeach
+                            <option value="OTHER">OTHER (type it below)</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-2">
+                        <label class="form-label">Unit / property</label>
+                        <input type="text" class="form-control form-control-sm" id="entryNarrationDetail"
+                               placeholder="e.g. PLOT 14 / A3" style="text-transform:uppercase;">
+                    </div>
+
+                    <div class="col-md-4">
                         <label class="form-label">Description <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control form-control-sm" id="entryDesc"
-                               placeholder="e.g. ADVANCE PAYMENT APR 2026">
+                        <input type="text" class="form-control form-control-sm" id="entryDesc" readonly
+                               placeholder="Chosen narration and unit appear here">
                     </div>
 
                 </div>
@@ -449,6 +469,9 @@
                                 <div class="col-md-6">
                                     <label class="form-label">Landlord</label>
                                     <input type="text" class="form-control form-control-sm" id="returnLandlordName" readonly style="background-color:#f8f9fa;" placeholder="Select return">
+                                    <button type="button" class="btn btn-link btn-sm p-0 mt-1 js-view-landlord-account" id="viewReturnLandlordAccountBtn" style="display:none; font-size:0.78rem;">
+                                        <span class="material-symbols-outlined" style="font-size:14px; vertical-align:middle;">account_balance_wallet</span> View landlord account
+                                    </button>
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label">Reference</label>
@@ -541,6 +564,15 @@
                             <div class="mb-3">
                                 <label class="form-label">Net Balance</label>
                                 <input type="text" class="form-control form-control-sm fw-bold" id="returnNetBalance" readonly style="background-color:#f0f7ff; color:#1a5f9e;" placeholder="0.00">
+                            </div>
+
+                            <div class="mb-3" id="returnBreakdownWrap" style="display:none;">
+                                <a class="small" data-bs-toggle="collapse" href="#returnBreakdownBody" role="button" aria-expanded="false">
+                                    <span class="material-symbols-outlined" style="font-size:14px; vertical-align:middle;">receipt_long</span> How this amount was reached
+                                </a>
+                                <div class="collapse mt-2" id="returnBreakdownBody">
+                                    <table class="table table-sm mb-0" id="returnBreakdownTable" style="font-size:0.8rem;"><tbody></tbody></table>
+                                </div>
                             </div>
 
                             <div id="returnSplitSection" style="display:none;">
@@ -744,6 +776,32 @@
     </div>
 </div>
 
+
+{{-- Landlord account (ledger) viewer --}}
+<div class="modal fade" id="landlordAccountModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <div>
+                    <h6 class="modal-title mb-0" id="laName">Landlord account</h6>
+                    <small class="text-muted" id="laMeta"></small>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <div><span class="text-muted">Balance</span> <strong id="laBalance" style="font-size:1.1rem;">-</strong></div>
+                    <a href="#" target="_blank" class="btn btn-outline-primary btn-sm" id="laStatementLink" style="display:none;">Open full statement</a>
+                </div>
+                <div class="text-muted mb-1" style="font-size:0.78rem;" id="laNote"></div>
+                <table class="table table-sm" style="font-size:0.8rem;">
+                    <thead><tr><th>Date</th><th>Reference</th><th>Narration</th><th class="text-end">Debit</th><th class="text-end">Credit</th><th class="text-end">Balance</th></tr></thead>
+                    <tbody id="laRows"><tr><td colspan="6" class="text-muted">Loading...</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
 @endsection
 
 @section('scripts')
@@ -820,12 +878,16 @@ $(document).ready(function () {
         
         // Fetch bank details for the selected landlord
         const encryptedId = e.params.data.encryptedId;
+        selectedLandlordEncryptedId = encryptedId || null;
+        $('#viewLandlordAccountBtn').toggle(!!encryptedId);
         if (encryptedId) {
             fetchLandlordBankDetails(encryptedId);
         }
     });
 
     $('#landlordSearch').on('select2:clear', function () {
+        selectedLandlordEncryptedId = null;
+        $('#viewLandlordAccountBtn').hide();
         $('#finalVendorId').val('');
         $('#finalVendorName').val('');
         clearLandlordBankFields();
@@ -884,9 +946,73 @@ $(document).ready(function () {
     });
 
     // ─── Entry Type: auto-fill description with item_name ────────────
+    // ─── Landlord account viewer ──────────────────────────────────────
+    function laMoney(n) {
+        return Number(n).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    function laEsc(v) { return $('<div>').text(v == null ? '' : v).html(); }
+
+    function showLandlordAccount(encryptedId) {
+        if (!encryptedId) { return; }
+        $('#laName').text('Landlord account');
+        $('#laMeta').text('');
+        $('#laBalance').text('-');
+        $('#laNote').text('');
+        $('#laStatementLink').hide();
+        $('#laRows').html('<tr><td colspan="6" class="text-muted">Loading...</td></tr>');
+        new bootstrap.Modal(document.getElementById('landlordAccountModal')).show();
+
+        $.get('{{ route("ajax.payment.vouchers.landlord-account") }}', { client: encryptedId }, function (r) {
+            if (!r.success) { $('#laRows').html('<tr><td colspan="6" class="text-danger">' + laEsc(r.message || 'Could not load the account.') + '</td></tr>'); return; }
+            $('#laName').text(r.account.names || 'Landlord account');
+            $('#laMeta').text(r.account.reference_number || '');
+            $('#laBalance').text(laMoney(r.balance));
+            $('#laNote').text(r.entry_count > r.data.length ? 'Showing the latest ' + r.data.length + ' of ' + r.entry_count + ' entries, newest first.' : '');
+            $('#laStatementLink').attr('href', '{{ route("landlord.account.statement") }}?landlord=' + encodeURIComponent(r.account.encrypted_id)).show();
+            var html = '';
+            r.data.forEach(function (e) {
+                html += '<tr><td>' + laEsc(e.date_formatted || e.date) + '</td><td>' + laEsc(e.reference) + '</td><td>' + laEsc(e.narration) + '</td>'
+                    + '<td class="text-end">' + (e.debit ? laMoney(e.debit) : '') + '</td><td class="text-end">' + (e.credit ? laMoney(e.credit) : '') + '</td>'
+                    + '<td class="text-end">' + laMoney(e.balance) + '</td></tr>';
+            });
+            $('#laRows').html(html || '<tr><td colspan="6" class="text-muted">No entries on this account.</td></tr>');
+        }).fail(function () {
+            $('#laRows').html('<tr><td colspan="6" class="text-danger">Could not load the account.</td></tr>');
+        });
+    }
+
+    let selectedLandlordEncryptedId = null;
+    $('#viewLandlordAccountBtn').on('click', function () { showLandlordAccount(selectedLandlordEncryptedId); });
+    $('#viewReturnLandlordAccountBtn').on('click', function () {
+        showLandlordAccount(currentReturnData ? currentReturnData.landlord_encrypted_id : null);
+    });
+
+    // ─── Narration: standard list + unit/property builds the description ───
+    function composeEntryDescription() {
+        const narration = $('#entryNarration').val();
+        const detail = ($('#entryNarrationDetail').val() || '').trim();
+        if (narration === 'OTHER') {
+            $('#entryDesc').prop('readonly', false).attr('placeholder', 'Type the description');
+            return;
+        }
+        $('#entryDesc').prop('readonly', true).attr('placeholder', 'Chosen narration and unit appear here');
+        $('#entryDesc').val(narration ? (narration + (detail ? ' ' + detail : '')).toUpperCase() : '');
+    }
+    $('#entryNarration, #entryNarrationDetail').on('input change', composeEntryDescription);
+
+    // ─── Entry Type: pick the matching narration, otherwise let the description be typed ───
     $('#entryType').on('change', function () {
-        const itemName = $(this).find(':selected').data('item-name') || '';
-        if (itemName) { $('#entryDesc').val(itemName.toUpperCase()); }
+        const itemName = ($(this).find(':selected').data('item-name') || '').toString().toUpperCase();
+        if (!itemName) { return; }
+        const match = $('#entryNarration option').filter(function () { return $(this).val() === itemName; });
+        if (match.length) {
+            $('#entryNarration').val(itemName);
+            composeEntryDescription();
+        } else {
+            $('#entryNarration').val('OTHER');
+            composeEntryDescription();
+            $('#entryDesc').val(itemName);
+        }
     });
 
     // ─── Release a single cheque leaf lock ───────────────────────────
@@ -1192,6 +1318,7 @@ $(document).ready(function () {
         const desc   = $('#entryDesc').val().trim();
         const amount = parseFloat($('#entryAmount').val());
 
+        if (!$('#entryNarration').val()) { toastr.warning('Select the narration'); $('#entryNarration').focus(); return; }
         if (!desc)         { toastr.warning('Description is required'); $('#entryDesc').focus(); return; }
         if (!(amount > 0)) { toastr.warning('Enter a valid amount');    $('#entryAmount').focus(); return; }
 
@@ -1275,7 +1402,10 @@ $(document).ready(function () {
         refreshTable();
 
         // Reset entry form for the next entry
-        $('#entryDesc').val('').focus();
+        $('#entryNarration').val('');
+        $('#entryNarrationDetail').val('');
+        $('#entryDesc').val('').prop('readonly', true).attr('placeholder', 'Chosen narration and unit appear here');
+        $('#entryNarration').focus();
         $('#entryAmount').val('');
         $('#entryType').val('');
         $('#entryPayeeBank').val('');
@@ -1542,6 +1672,8 @@ $(document).ready(function () {
         $('#returnSummaryId').val(returnData.id);
         $('#returnLandlordName').val(returnData.landlord_name);
         $('#returnReference').val(returnData.landlord_code);
+        $('#viewReturnLandlordAccountBtn').toggle(!!returnData.landlord_encrypted_id);
+        loadReturnBreakdown(returnData.id);
         
         // Format and display net balance
         var netBalance = parseFloat(returnData.net_balance_raw) || 0;
@@ -1557,7 +1689,29 @@ $(document).ready(function () {
             displayReturnLineItems(netBalance);
             validateReturnVoucherForm();
         } else {
-            // Load property bank details
+            // How the return's amount was reached
+    function loadReturnBreakdown(returnId) {
+        $('#returnBreakdownWrap').hide();
+        $('#returnBreakdownBody').removeClass('show');
+        $('#returnBreakdownTable tbody').empty();
+        if (!returnId) { return; }
+
+        $.get('{{ url("/ajax/payment/vouchers/return") }}/' + returnId + '/breakdown', function (r) {
+            if (!r.success) { return; }
+            var html = '';
+            r.rows.forEach(function (row) {
+                var strong = row.kind === 'strong' || row.kind === 'closing';
+                var meta = [row.reference, row.date].filter(Boolean).join(' · ');
+                html += '<tr' + (row.kind === 'closing' ? ' class="table-light"' : '') + '><td' + (strong ? ' class="fw-semibold"' : '') + '>' + laEsc(row.label)
+                    + (meta ? ' <small class="text-muted">' + laEsc(meta) + '</small>' : '') + '</td><td class="text-end' + (strong ? ' fw-semibold' : '') + '">'
+                    + (row.kind === 'less' ? '-' : '') + laMoney(row.amount) + '</td></tr>';
+            });
+            $('#returnBreakdownTable tbody').html(html);
+            $('#returnBreakdownWrap').toggle(r.rows.length > 0);
+        });
+    }
+
+    // Load property bank details
             loadPropertyBankDetails(returnData.property_id, netBalance);
         }
     });
@@ -1992,6 +2146,8 @@ $(document).ready(function () {
     // Cancel/Clear return voucher form
     $('#cancelReturnVoucherBtn').on('click', function() {
         currentReturnData = null;
+        $('#returnBreakdownWrap').hide();
+        $('#viewReturnLandlordAccountBtn').hide();
         
         // Clear form fields
         $('#returnLandlordId').val('');

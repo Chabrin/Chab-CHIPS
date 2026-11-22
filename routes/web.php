@@ -878,6 +878,7 @@ Route::middleware('throttle:5,1')->group(function () {
     Route::get('/ajax/property/bank-details', [App\Http\Controllers\ClientsController::class, 'getPropertyBankDetails'])->name('ajax.property.bank-details');
     Route::get('/property/clients/{encryptedId}/leases', [App\Http\Controllers\ClientsController::class, 'getLeases'])->name('property.clients.leases');
     Route::get('/property/clients/{encryptedId}/recoveries', [App\Http\Controllers\ClientsController::class, 'getRecoveries'])->name('property.clients.recoveries');
+    Route::post('/property/clients/{encryptedId}/paid-owner-link', [App\Http\Controllers\LandlordPaidOwnerController::class, 'makeLink'])->name('property.clients.paid-owner-link');
     Route::get('/property/clients/{encryptedId}/inspections', [App\Http\Controllers\ClientsController::class, 'getInspections'])->name('property.clients.inspections');
     Route::get('/property/clients/{encryptedId}/repairs', [App\Http\Controllers\ClientsController::class, 'getRepairs'])->name('property.clients.repairs');
     Route::get('/property/clients/{encryptedId}/returns-config', [App\Http\Controllers\ClientsController::class, 'getReturnsConfig'])->name('property.clients.returns-config');
@@ -1156,6 +1157,7 @@ Route::middleware('throttle:5,1')->group(function () {
     Route::get('/ajax/tenant/bank-statements/confirmers', [App\Http\Controllers\BankStatementController::class, 'confirmers'])->name('ajax.tenant.bank-statements.confirmers');
     Route::post('/ajax/tenant/bank-statements/confirmers', [App\Http\Controllers\BankStatementController::class, 'saveConfirmers'])->name('ajax.tenant.bank-statements.confirmers.save');
     Route::get('/ajax/tenant/bank-statements/{id}/lines', [App\Http\Controllers\BankStatementController::class, 'lines'])->name('ajax.tenant.bank-statements.lines')->whereNumber('id');
+    Route::get('/tenant/bank-statements/{id}/download', [App\Http\Controllers\BankStatementController::class, 'download'])->name('tenant.bank-statements.download')->whereNumber('id');
     Route::post('/ajax/tenant/bank-statements/{id}/confirm', [App\Http\Controllers\BankStatementController::class, 'confirm'])->name('ajax.tenant.bank-statements.confirm')->whereNumber('id');
     Route::post('/ajax/tenant/bank-statements/{id}/retry', [App\Http\Controllers\BankStatementController::class, 'retry'])->name('ajax.tenant.bank-statements.retry')->whereNumber('id');
     Route::delete('/ajax/tenant/bank-statements/{id}', [App\Http\Controllers\BankStatementController::class, 'destroy'])->name('ajax.tenant.bank-statements.destroy')->whereNumber('id');
@@ -1281,6 +1283,13 @@ Route::middleware('throttle:5,1')->group(function () {
     Route::delete('/ajax/payment/vouchers/lines/{lineId}/remove', [App\Http\Controllers\PaymentVouchersController::class, 'removeLine'])->name('ajax.payment.vouchers.lines.remove');
     Route::get('/ajax/payment/vouchers/approved-returns', [App\Http\Controllers\PaymentVouchersController::class, 'getApprovedReturns'])->name('ajax.payment.vouchers.approved-returns');
     Route::post('/payment/vouchers/create-return', [App\Http\Controllers\PaymentVouchersController::class, 'createReturnVoucher'])->name('payment.vouchers.create.return');
+    Route::post('/payment/vouchers/{id}/cancel', [App\Http\Controllers\PaymentVouchersController::class, 'cancel'])->name('payment.vouchers.cancel');
+    Route::get('/ajax/payment/vouchers/landlord-account', [App\Http\Controllers\PaymentVouchersController::class, 'landlordAccount'])->name('ajax.payment.vouchers.landlord-account');
+    Route::get('/ajax/payment/vouchers/return/{returnId}/breakdown', [App\Http\Controllers\PaymentVouchersController::class, 'returnBreakdown'])->name('ajax.payment.vouchers.return-breakdown');
+    Route::get('/cheque/cancelled', [App\Http\Controllers\CancelledChequesController::class, 'index'])->name('cheque.cancelled.index');
+    Route::get('/returns/flow', [App\Http\Controllers\ReturnsFlowController::class, 'index'])->name('returns.flow.index');
+    Route::get('/ajax/returns/flow/data', [App\Http\Controllers\ReturnsFlowController::class, 'data'])->name('ajax.returns.flow.data');
+    Route::get('/ajax/cheque/cancelled/data', [App\Http\Controllers\CancelledChequesController::class, 'data'])->name('ajax.cheque.cancelled.data');
 
     Route::get('/ajax/invoices/property/{propertyId}/units', [App\Http\Controllers\InvoicingController::class, 'getUnitsByProperty'])->name('ajax.invoices.property.units');
 
@@ -1659,6 +1668,13 @@ Route::middleware(['throttle:5,1', 'signed'])->group(function () {
 });
 
 
+
+// Public Paid Owner report routes: a landlord opens a signed link from us (no login, rate-limited, signature and expiry
+// enforced) and reports a tenant who paid them rent directly. GET shows the form, POST records a Pending Paid Owner recovery.
+Route::middleware(['throttle:20,1', 'signed'])->group(function () {
+    Route::get('/paid-owner/report/{encryptedId}', [App\Http\Controllers\LandlordPaidOwnerController::class, 'show'])->name('property.paid-owner-report.show');
+    Route::post('/paid-owner/report/{encryptedId}', [App\Http\Controllers\LandlordPaidOwnerController::class, 'submit'])->name('property.paid-owner-report.submit');
+});
 
 Route::redirect('/', '/dashboard');
 //Create the login routes

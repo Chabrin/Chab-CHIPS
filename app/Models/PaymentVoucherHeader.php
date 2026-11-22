@@ -55,6 +55,9 @@ class PaymentVoucherHeader extends Model
         'is_printed',
         'checked_date',
         'authorized_date',
+        'cancelled_by',
+        'cancelled_at',
+        'cancel_reason',
     ];
 
     protected $casts = [
@@ -63,6 +66,7 @@ class PaymentVoucherHeader extends Model
         'voucher_date' => 'datetime',
         'checked_date' => 'datetime',
         'authorized_date' => 'datetime',
+        'cancelled_at' => 'datetime',
     ];
 
     public function lines()

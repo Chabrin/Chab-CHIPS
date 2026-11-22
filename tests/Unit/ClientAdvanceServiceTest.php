@@ -62,4 +62,64 @@ class ClientAdvanceServiceTest extends TestCase
     {
         $this->assertEquals(['increase' => true, 'amount' => 0.1], (new ClientAdvanceService(new GlJournalPoster()))->interestAdjustment(100.10, 100.20));
     }
+
+    private function exceptions(): ClientAdvanceService
+    {
+        return new ClientAdvanceService(new GlJournalPoster());
+    }
+
+    public function test_no_exception_is_given_unless_the_form_asks_for_one(): void
+    {
+        $errors = ['amount' => ['Amount exceeds available limit']];
+
+        $this->assertSame(['errors' => $errors, 'kind' => null], $this->exceptions()->applyException($errors, false, true, 'Long standing client, board approved'));
+    }
+
+    public function test_someone_allowed_overrules_the_limit_with_a_reason(): void
+    {
+        $out = $this->exceptions()->applyException(['amount' => ['over']], true, true, 'Long standing client, board approved');
+
+        $this->assertSame([], $out['errors']);
+        $this->assertSame('limit', $out['kind']);
+    }
+
+    public function test_the_two_active_advances_rule_is_its_own_kind_and_both_together_say_both(): void
+    {
+        $this->assertSame('active_advances', $this->exceptions()->applyException(['client_id' => ['max 2']], true, true, 'Settling the first one next week')['kind']);
+
+        $both = $this->exceptions()->applyException(['amount' => ['over'], 'client_id' => ['max 2']], true, true, 'Settling the first one next week');
+        $this->assertSame('both', $both['kind']);
+        $this->assertSame([], $both['errors']);
+    }
+
+    public function test_someone_not_allowed_cannot_overrule_and_the_limit_error_stays(): void
+    {
+        $out = $this->exceptions()->applyException(['amount' => ['over']], true, false, 'Long standing client, board approved');
+
+        $this->assertNull($out['kind']);
+        $this->assertArrayHasKey('amount', $out['errors']);
+        $this->assertArrayHasKey('limit_exception', $out['errors']);
+    }
+
+    public function test_an_exception_needs_a_real_reason(): void
+    {
+        $out = $this->exceptions()->applyException(['amount' => ['over']], true, true, 'ok');
+
+        $this->assertNull($out['kind']);
+        $this->assertArrayHasKey('amount', $out['errors']);
+        $this->assertArrayHasKey('limit_exception_reason', $out['errors']);
+    }
+
+    public function test_other_errors_are_never_overruled(): void
+    {
+        $out = $this->exceptions()->applyException(['amount' => ['over'], 'disbursement_date' => ['too late']], true, true, 'Long standing client, board approved');
+
+        $this->assertSame('limit', $out['kind']);
+        $this->assertSame(['disbursement_date' => ['too late']], $out['errors']);
+    }
+
+    public function test_asking_for_an_exception_when_nothing_blocks_the_advance_records_none(): void
+    {
+        $this->assertSame(['errors' => [], 'kind' => null], $this->exceptions()->applyException([], true, true, 'Long standing client, board approved'));
+    }
 }
