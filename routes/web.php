@@ -1200,6 +1200,8 @@ Route::middleware('throttle:5,1')->group(function () {
 
     // Unprocessed Returns
     Route::get('/returns/{id}/details', [App\Http\Controllers\ClientReturnsController::class, 'showUnprocessedReturnDetails'])->name('returns.details');
+    Route::post('/ajax/returns/{id}/forward', [App\Http\Controllers\ClientReturnsController::class, 'forwardReturn'])->name('ajax.returns.forward');
+    Route::post('/ajax/returns/forward', [App\Http\Controllers\ClientReturnsController::class, 'forwardReturns'])->name('ajax.returns.forward.many');
     Route::get('/ajax/returns/{id}/units', [App\Http\Controllers\ClientReturnsController::class, 'getUnprocessedReturnUnitsData'])->name('ajax.returns.units');
     Route::get('/ajax/returns/{id}/summary', [App\Http\Controllers\ClientReturnsController::class, 'getUnprocessedReturnSummaryData'])->name('ajax.returns.summary');
     Route::get('/returns/{id}/pdf', [App\Http\Controllers\ClientReturnsController::class, 'downloadUnprocessedPdf'])->name('returns.pdf');

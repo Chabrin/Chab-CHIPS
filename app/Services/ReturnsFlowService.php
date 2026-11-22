@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\DB;
  */
 class ReturnsFlowService
 {
-    const STAGE_GENERATED = 'Generated, not submitted';
+    const STAGE_GENERATED = 'Draft, not forwarded';
     const STAGE_REJECTED = 'Rejected';
     const STAGE_APPROVED = 'Approved, no voucher yet';
     const STAGE_VOUCHER_WAITING = 'Voucher awaiting approval';

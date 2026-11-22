@@ -34,6 +34,7 @@ use App\Traits\PdfPageNumbers;
 class ClientReturnsController extends Controller
 {
     use PdfPageNumbers;
+    use \App\Traits\ChecksMenuAccess;
     use ReturnsRentLinesTrait;
     use ReturnsPayThresholdTrait;
     use ReturnsDeductionsTrait;
@@ -208,6 +209,14 @@ class ClientReturnsController extends Controller
             // Why units of each return are not payable, in words (a master return has no lines of its own)
             $whyNotPayable = $this->notPayableSummaries($returns->where('return_type', '!=', 'MASTERRETURN')->pluck('return_code')->all());
 
+            // Where each return is in its approval: a draft has not been forwarded to the manager yet
+            $items = DB::table('cb_approval_items')
+                ->where('item_type', 'return_summary')
+                ->whereIn('item_id', $returns->pluck('id'))
+                ->get(['item_id', 'status', 'current_level'])
+                ->keyBy('item_id');
+            $lastLevel = $this->returnApprovals->totalLevels();
+
             return response()->json([
                 'success' => true,
                 'count' => $returns->count(),
@@ -215,7 +224,20 @@ class ClientReturnsController extends Controller
                     ->map(fn($code) => ['code' => $code, 'name' => $propertyNames[$code] ?? $code])
                     ->sortBy(fn($p) => strtolower($p['name']))
                     ->values(),
-                'data' => $returns->map(function ($r) use ($propertyNames, $clientNames, $coveredCodes, $whyNotPayable) {
+                'data' => $returns->map(function ($r) use ($propertyNames, $clientNames, $coveredCodes, $whyNotPayable, $items, $lastLevel) {
+                    $isMaster = $r->return_type === 'MASTERRETURN';
+                    $item = $items->get($r->id);
+                    $isDraft = !$isMaster && (int) $r->approved_status === 0 && !$item;
+                    if ((int) $r->approved_status === 1) {
+                        $stage = 'Approved';
+                    } elseif ($isDraft) {
+                        $stage = 'Draft';
+                    } elseif ($item) {
+                        $stage = (int) $item->current_level < $lastLevel ? 'Waiting verification' : 'Waiting approval';
+                    } else {
+                        $stage = 'Waiting approval';
+                    }
+
                     $name = $clientNames[$r->landlord_code] ?? '-';
                     $num = preg_replace('/^LAN-?/i', '', $r->landlord_code ?? '');
                     return [
@@ -240,6 +262,8 @@ class ClientReturnsController extends Controller
                         'prepared_by' => $r->prepared_by ?? '-',
                         'approved_status' => $r->approved_status,
                         'prepared_status' => $r->prepared_status,
+                        'stage' => $stage,
+                        'is_draft' => $isDraft,
                     ];
                 })
             ]);
@@ -1142,8 +1166,7 @@ class ClientReturnsController extends Controller
                 $this->markLandlordAccountRecovered($returnPeriod, $returnYear, $returnMonthNum, $propertyId);
                 $this->linkMoneyRecoveriesToReturns($returnPeriod, $returnYear, $returnMonthNum, $propertyId);
 
-                // STEP 7: CREATE APPROVAL WORKFLOW ITEMS
-                $this->createApprovalWorkflowItems($returnPeriod, $generatedBy, $propertyId);
+                // STEP 7: the returns stay drafts. They go under approval only when the field officer forwards them to the manager.
 
                 Log::info("Processed property", [
                     'property_id' => $propertyId,
@@ -1230,7 +1253,7 @@ class ClientReturnsController extends Controller
             if ($masterReturnCount > 0) {
                 $message .= ", {$masterReturnCount} MASTERRETURN(s)";
             }
-            $message .= " ({$rentInserted} rent + {$advancesInserted} advance + {$recoveriesInserted} recovery + {$collectionsInserted} collection lines)";
+            $message .= " ({$rentInserted} rent + {$advancesInserted} advance + {$recoveriesInserted} recovery + {$collectionsInserted} collection lines). They are drafts: forward them to the manager from the Returns List.";
 
             return response()->json([
                 'success'            => true,
@@ -1330,7 +1353,7 @@ class ClientReturnsController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Mini return ' . $result['return_code'] . ' generated for approval: ' . $result['lines'] . ' line(s), net ' . number_format($result['net_balance'], 2) . '.',
+            'message' => 'Mini return ' . $result['return_code'] . ' generated as a draft. Forward it to the manager when it is ready: ' . $result['lines'] . ' line(s), net ' . number_format($result['net_balance'], 2) . '.',
             'count' => 1,
             'properties_count' => 1,
             'master_count' => 0,
@@ -1375,10 +1398,85 @@ class ClientReturnsController extends Controller
     }
 
     /**
-     * Send the new return summaries for approval, with the approvers of the returns approval workflow.
+     * Forward one return to the manager (AJAX): it goes under approval, at level 1, only now. Needs the Generate Returns
+     * menu, and a user limited to a zone can forward only their own zone's returns.
      */
-    protected function createApprovalWorkflowItems(string $returnPeriod, int $userId, ?int $propertyId = null): int {
-        return $this->returnApprovals->createItems($returnPeriod, $userId, request()->ip(), $propertyId);
+    public function forwardReturn($encryptedId)
+    {
+        if (!$this->menuAllowed('/returns/generate')) {
+            return $this->denied('json');
+        }
+
+        try {
+            [$ok, $message] = $this->forwardOne((int) decrypt($encryptedId));
+
+            return response()->json(['success' => $ok, 'message' => $message], $ok ? 200 : 422);
+        } catch (Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error forwarding a return: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to forward the return'], 500);
+        }
+    }
+
+    /**
+     * Forward several returns at once (AJAX, ids[] of encrypted return ids), each checked on its own. The answer says how
+     * many went and why the others did not.
+     */
+    public function forwardReturns(Request $request)
+    {
+        if (!$this->menuAllowed('/returns/generate')) {
+            return $this->denied('json');
+        }
+
+        $ids = array_slice((array) $request->input('ids', []), 0, 500);
+        $forwarded = 0;
+        $refused = [];
+
+        foreach ($ids as $encrypted) {
+            try {
+                [$ok, $message] = $this->forwardOne((int) decrypt($encrypted));
+            } catch (Exception $e) {
+                $ok = false;
+                $message = 'Could not forward one return.';
+                Log::error('Error forwarding a return: ' . $e->getMessage());
+            }
+            $ok ? $forwarded++ : $refused[$message] = ($refused[$message] ?? 0) + 1;
+        }
+
+        return response()->json([
+            'success' => $forwarded > 0,
+            'forwarded' => $forwarded,
+            'refused' => $refused,
+            'message' => $forwarded . ' return(s) forwarded to the manager.' . ($refused ? ' Not forwarded: ' . implode('; ', array_map(fn($m, $n) => "{$n} x {$m}", array_keys($refused), $refused)) : ''),
+        ], $forwarded > 0 ? 200 : 422);
+    }
+
+    /**
+     * Forward one return for the signed-in user.
+     *
+     * @param int $returnId
+     * @return array [bool done, string message]
+     */
+    protected function forwardOne(int $returnId): array
+    {
+        $return = DB::table('cb_returns_summary')->where('id', $returnId)->first();
+        if (!$return) {
+            return [false, 'Return not found.'];
+        }
+
+        $propertyId = (int) DB::table('sys_pm_properties')->where('reference_number', $return->property_code)->value('id');
+        $refusal = $this->returnApprovals->forwardRefusal($return) ?? ($propertyId ? $this->returnApprovals->zoneRefusal($propertyId) : null);
+        if ($refusal) {
+            return [false, $refusal];
+        }
+
+        try {
+            DB::transaction(fn () => $this->returnApprovals->forward($return, (int) Auth::id(), request()->ip()));
+        } catch (ReturnApprovalException $e) {
+            return [false, $e->getMessage()];
+        }
+
+        return [true, 'Return ' . $return->return_code . ' forwarded to the manager.'];
     }
 
     /**

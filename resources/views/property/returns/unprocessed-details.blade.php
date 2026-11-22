@@ -305,7 +305,7 @@
                                                 <div id="action-buttons-section" style="display: none;" class="mt-3 pt-2 border-top">
                                                     <div class="d-flex gap-2">
                                                         <button class="btn btn-primary btn-sm" id="approve-btn" data-bs-toggle="modal" data-bs-target="#approveModal">
-                                                            <i class="fa fa-check me-1"></i> Approve
+                                                            <i class="fa fa-check me-1"></i> <span class="js-action-label">Approve</span>
                                                         </button>
                                                         <button class="btn btn-danger btn-sm" id="reject-btn" data-bs-toggle="modal" data-bs-target="#rejectModal" style="display: none;">
                                                             <i class="fa fa-times me-1"></i> Reject
@@ -332,6 +332,9 @@
                                     <div class="alert alert-warning">
                                         <i class="fa fa-info-circle me-2"></i><span id="approvals-no-workflow-msg">No approval workflow found</span>
                                     </div>
+                                    <button type="button" class="btn btn-primary btn-sm" id="forward-btn" style="display: none;">
+                                        <i class="fa fa-share me-1"></i> Forward to manager
+                                    </button>
                                 </div>
                             </div><!-- /approvals-content -->
                         </div><!-- /tab-content -->
@@ -386,11 +389,11 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h6 class="modal-title"><i class="fa fa-check-circle me-2 text-success"></i>Approve Return</h6>
+                <h6 class="modal-title"><i class="fa fa-check-circle me-2 text-success"></i><span class="js-action-label">Approve</span> Return</h6>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <p>Are you sure you want to approve this return?</p>
+                <p>Are you sure you want to <span class="js-action-label-lower">approve</span> this return?</p>
                 <div class="mb-3">
                     <label class="form-label">Comments (Optional)</label>
                     <textarea class="form-control" id="approve-comments" rows="3" placeholder="Add any comments..."></textarea>
@@ -399,7 +402,7 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                 <button type="button" class="btn btn-primary" id="confirm-approve-btn">
-                    <i class="fa fa-check me-1"></i> Confirm Approval
+                    <i class="fa fa-check me-1"></i> Confirm <span class="js-action-label">Approval</span>
                 </button>
             </div>
         </div>
@@ -724,6 +727,8 @@
             if (!approvalsLoaded) loadApprovals();
         });
 
+        var actionLabel = 'Approve';
+
         function loadApprovals() {
             $('#approvals-loader').show();
             $('#approvals-main-content').hide();
@@ -738,6 +743,12 @@
                         var data = response.data;
                         renderCompactTimeline(data.timeline);
                         renderCommentsTrail(data.timeline);
+
+                        // The levels before the last one verify; the last one approves
+                        actionLabel = data.action_label || 'Approve';
+                        $('.js-action-label').text(actionLabel);
+                        $('#confirm-approve-btn .js-action-label').text(actionLabel === 'Verify' ? 'Verification' : 'Approval');
+                        $('.js-action-label-lower').text(actionLabel.toLowerCase());
 
                         if (data.can_approve) {
                             $('#action-buttons-section').show();
@@ -763,6 +774,7 @@
                         approvalsLoaded = true;
                     } else {
                         $('#approvals-no-workflow-msg').text(response.message || 'No approval workflow found');
+                        $('#forward-btn').toggle(!!(response.draft && response.can_forward));
                         $('#approvals-no-workflow').show();
                     }
                 },
@@ -859,6 +871,25 @@
             $('#comments-trail').html(html);
         }
 
+        // Forward a draft return to the manager: only then does it go under approval
+        $('#forward-btn').on('click', function() {
+            var $btn = $(this).prop('disabled', true);
+            $.ajax({
+                url: '/ajax/returns/' + encodeURIComponent(currentEncId) + '/forward',
+                method: 'POST',
+                data: { _token: csrfToken },
+                success: function(response) {
+                    $('#approvals-content').prepend('<div class="alert alert-success alert-dismissible fade show" role="alert"><i class="fa fa-check-circle me-2"></i>' + $('<div>').text(response.message).html() + '<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>');
+                    approvalsLoaded = false;
+                    loadApprovals();
+                },
+                error: function(xhr) {
+                    alert((xhr.responseJSON && xhr.responseJSON.message) || 'Failed to forward the return.');
+                    $btn.prop('disabled', false);
+                }
+            });
+        });
+
         // Confirm approve
         $('#confirm-approve-btn').on('click', function() {
             var $btn = $(this);
@@ -885,13 +916,13 @@
                     } else {
                         alert(response.message || 'Failed to approve return');
                     }
-                    $btn.prop('disabled', false).html('<i class="fa fa-check me-1"></i> Confirm Approval');
+                    $btn.prop('disabled', false).html('<i class="fa fa-check me-1"></i> Confirm <span class="js-action-label">' + (actionLabel === 'Verify' ? 'Verification' : 'Approval') + '</span>');
                 },
                 error: function(xhr) {
                     var msg = 'Failed to approve return.';
                     if (xhr.responseJSON && xhr.responseJSON.message) msg = xhr.responseJSON.message;
                     alert(msg);
-                    $btn.prop('disabled', false).html('<i class="fa fa-check me-1"></i> Confirm Approval');
+                    $btn.prop('disabled', false).html('<i class="fa fa-check me-1"></i> Confirm <span class="js-action-label">' + (actionLabel === 'Verify' ? 'Verification' : 'Approval') + '</span>');
                 }
             });
         });

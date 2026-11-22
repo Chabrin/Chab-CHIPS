@@ -480,9 +480,21 @@ class ReturnsApprovalController extends Controller
                 ->first();
 
             if (!$approvalItem) {
+                // A return that has not been forwarded is a draft: it is under no one's approval yet
+                $draft = $this->returnApprovals->forwardRefusal($returnSummary) === null;
+                $canForward = false;
+                if ($draft) {
+                    $propertyId = (int) DB::table('sys_pm_properties')->where('reference_number', $returnSummary->property_code)->value('id');
+                    $canForward = $propertyId && $this->returnApprovals->zoneRefusal($propertyId) === null && $this->canForwardMenu();
+                }
+
                 return response()->json([
                     'success' => false,
-                    'message' => 'No approval workflow found for this return'
+                    'draft' => $draft,
+                    'can_forward' => (bool) $canForward,
+                    'message' => $draft
+                        ? 'This return has not been forwarded to the manager yet, so it is not under approval.'
+                        : 'No approval workflow found for this return'
                 ]);
             }
 
@@ -577,6 +589,7 @@ class ReturnsApprovalController extends Controller
                 'data' => [
                     'approval_item' => $approvalItem,
                     'timeline' => $timeline,
+                    'action_label' => $this->returnApprovals->actionLabel($currentLevel),
                     'can_approve' => $canApprove,
                     'can_reject' => $canReject,
                     'available_reject_levels' => $availableRejectLevels,
@@ -593,6 +606,17 @@ class ReturnsApprovalController extends Controller
             Log::error('Error loading return approvals: ' . $e->getMessage());
             return response()->json(['success' => false, 'message' => 'Failed to load approval data'], 500);
         }
+    }
+
+    /**
+     * Whether the signed-in user holds the Generate Returns menu, which is what lets a user forward a return to the manager.
+     */
+    protected function canForwardMenu(): bool {
+        $subModuleIds = DB::table('cb_sub_modules')->where('sub_module_url', '/returns/generate')->pluck('id');
+        $roleIds = DB::table('cb_role_user')->where('user_id', auth()->id())->pluck('role_id');
+
+        return $subModuleIds->isNotEmpty() && $roleIds->isNotEmpty()
+            && DB::table('cb_sub_module_permissions')->whereIn('sub_module_id', $subModuleIds)->whereIn('role_id', $roleIds)->exists();
     }
 
     /**
@@ -689,7 +713,7 @@ class ReturnsApprovalController extends Controller
                     DB::table('cb_returns_summary')->where('id', $returnSummary->id)
                         ->update(['approved_status' => 2, 'checked_by' => auth()->user()->name]);
 
-                    $message = 'Return approved successfully. Moved to Level ' . ($level + 1);
+                    $message = 'Return verified. Moved to Level ' . ($level + 1) . ' for approval.';
                 }
 
                 DB::commit();

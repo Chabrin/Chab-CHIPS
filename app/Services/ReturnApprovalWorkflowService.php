@@ -432,14 +432,19 @@ class ReturnApprovalWorkflowService
      * @param int $userId the user who generated the returns
      * @param string|null $ipAddress the generating user's address, for the action log
      * @param int|null $propertyId only this property's return, or every return of the period when null
+     * @param int|null $returnId only this one return (with its property), when a single return is forwarded
      * @return int the number of approval items created
      */
-    public function createItems(string $returnPeriod, int $userId, ?string $ipAddress, ?int $propertyId = null): int {
+    public function createItems(string $returnPeriod, int $userId, ?string $ipAddress, ?int $propertyId = null, ?int $returnId = null): int {
         $this->assertZoneManagers($returnPeriod, $propertyId);
 
         $levelCount = $this->totalLevels();
         $propertyFilter = $propertyId ? " AND rs.property_code = (SELECT reference_number FROM sys_pm_properties WHERE id = ?)" : "";
         $filterBindings = $propertyId ? [$propertyId] : [];
+        if ($returnId) {
+            $propertyFilter .= " AND rs.id = ?";
+            $filterBindings[] = $returnId;
+        }
 
         // Replace stale items: same return id, different return code
         $staleIds = "SELECT ai.id FROM cb_approval_items ai
@@ -497,7 +502,7 @@ class ReturnApprovalWorkflowService
                 action_timestamp, ip_address, sequence_number, is_current,
                 created_at, updated_at
             )
-            SELECT MIN(ia.id), ai.id, ?, 0, 1, 'Initiated', 'Return submitted for approval', NOW(), ?, 1, 1, NOW(), NOW()
+            SELECT MIN(ia.id), ai.id, ?, 0, 1, 'Initiated', 'Forwarded to the manager for approval', NOW(), ?, 1, 1, NOW(), NOW()
             FROM cb_item_approvers ia
             JOIN cb_approval_items ai ON ai.id = ia.approval_item_id
             JOIN cb_returns_summary rs ON rs.id = ai.item_id AND ai.item_type = '" . self::ITEM_TYPE . "' AND rs.return_code = ai.item_reference
@@ -512,6 +517,96 @@ class ReturnApprovalWorkflowService
         ", array_merge([$userId, $ipAddress, $returnPeriod], $filterBindings));
 
         return $created;
+    }
+
+    /**
+     * Why a return cannot be forwarded to the manager, or null when it can: it must be a property return that is not
+     * approved or paid and has not been forwarded already. The zone and the menu are checked by the caller.
+     *
+     * @param object $return a cb_returns_summary row
+     * @return string|null
+     */
+    public function forwardRefusal(object $return): ?string {
+        if (($return->return_type ?? null) === 'MASTERRETURN' || empty($return->property_code)) {
+            return 'A merged return is not forwarded: it is approved when every property return in it is approved.';
+        }
+        if ((int) $return->approved_status === 1 || (int) $return->paid_status === 1) {
+            return 'This return is already approved.';
+        }
+        if ($this->isForwarded((int) $return->id)) {
+            return 'This return has already been forwarded.';
+        }
+
+        return null;
+    }
+
+    /**
+     * Why the signed-in user may not forward a property's return, or null when they may: a user limited to a zone can
+     * forward only the returns of properties in their own zone (the same limit as generating).
+     *
+     * @param int $propertyId
+     * @return string|null
+     */
+    public function zoneRefusal(int $propertyId): ?string {
+        if (\App\Models\Client::zoneAccessState() === null) {
+            return null;
+        }
+
+        return \App\Models\Property::whereKey($propertyId)->exists() ? null : 'That property is not in your zone, so you cannot forward its returns.';
+    }
+
+    /**
+     * Whether a return has been forwarded, that is whether it has an approval item.
+     *
+     * @param int $returnId
+     */
+    public function isForwarded(int $returnId): bool {
+        return DB::table('cb_approval_items')->where('item_type', self::ITEM_TYPE)->where('item_id', $returnId)->exists();
+    }
+
+    /**
+     * Forward one return to the manager: it gets its approval item, from level 1, with the forwarding user saved at level 0.
+     * The first person who has to act is the zone manager, so a zone with no manager login refuses it with a message.
+     *
+     * @param object $return a cb_returns_summary row
+     * @param int $userId the user who forwards it
+     * @param string|null $ipAddress
+     * @throws ReturnApprovalException when it cannot be forwarded
+     */
+    public function forward(object $return, int $userId, ?string $ipAddress): void {
+        if ($message = $this->forwardRefusal($return)) {
+            throw new ReturnApprovalException($message);
+        }
+
+        $propertyId = (int) DB::table('sys_pm_properties')->where('reference_number', $return->property_code)->value('id');
+        if (!$propertyId) {
+            throw new ReturnApprovalException('The property of this return was not found.');
+        }
+
+        if ($this->createItems((string) $return->return_period, $userId, $ipAddress, $propertyId, (int) $return->id) === 0) {
+            throw new ReturnApprovalException('This return could not be forwarded.');
+        }
+    }
+
+    /**
+     * What the button of a level says: the levels before the last one verify, the last one approves.
+     *
+     * @param int $level
+     * @return string Verify or Approve
+     */
+    public function actionLabel(int $level): string {
+        return self::labelFor($level, $this->totalLevels());
+    }
+
+    /**
+     * The button word for a level of a workflow with this many levels: Verify before the last level, Approve at it.
+     *
+     * @param int $level
+     * @param int $totalLevels
+     * @return string
+     */
+    public static function labelFor(int $level, int $totalLevels): string {
+        return $level < $totalLevels ? 'Verify' : 'Approve';
     }
 
     /**

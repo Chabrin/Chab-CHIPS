@@ -9,7 +9,7 @@ class ReturnsFlowServiceTest extends TestCase
 {
     public function test_a_return_with_no_approval_item_is_only_generated(): void
     {
-        $this->assertSame('Generated, not submitted', ReturnsFlowService::stageOf(['approved_status' => 0, 'paid_status' => 0]));
+        $this->assertSame('Draft, not forwarded', ReturnsFlowService::stageOf(['approved_status' => 0, 'paid_status' => 0]));
     }
 
     public function test_a_waiting_return_says_which_level_of_how_many(): void
@@ -42,7 +42,7 @@ class ReturnsFlowServiceTest extends TestCase
     {
         $stages = array_keys((new ReturnsFlowService())->stages());
 
-        foreach (['Generated, not submitted', 'Rejected', 'Approved, no voucher yet', 'Voucher awaiting approval', 'Voucher approved', 'Paid', 'awaiting'] as $stage) {
+        foreach (['Draft, not forwarded', 'Rejected', 'Approved, no voucher yet', 'Voucher awaiting approval', 'Voucher approved', 'Paid', 'awaiting'] as $stage) {
             $this->assertContains($stage, $stages);
         }
     }

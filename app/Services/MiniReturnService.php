@@ -70,7 +70,7 @@ class MiniReturnService
     }
 
     /**
-     * Generate a mini return for a property and month, in one database transaction, and send it for approval. A mini
+     * Generate a mini return for a property and month, in one database transaction, as a draft that is forwarded to the manager like any return. A mini
      * return of the same property and month that is not approved yet is replaced, so the new one carries everything
      * still uncollected by any other return.
      *
@@ -127,7 +127,6 @@ class MiniReturnService
             $this->insertAdvancePaymentLines($period, $transactionDate, $userId, $year, $month, (int) $property->id, $code);
             $this->insertCommissionLines($period, $transactionDate, $userId, (int) $property->id, $code);
             $this->insertMainReturnSummariesLegacy($period, $year, $month, $monthName, $preparedBy, (int) $property->id, 'MINIRETURN', $code);
-            $this->approvals->createItems($period, $userId, $ipAddress, (int) $property->id);
 
             $netBalance = (float) DB::table('cb_returns_summary')->where('return_code', $code)->value('net_balance');
             Log::info('MiniReturnService: mini return generated', ['return_code' => $code, 'lines' => $lines, 'net_balance' => $netBalance, 'user_id' => $userId]);

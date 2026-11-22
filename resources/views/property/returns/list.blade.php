@@ -87,12 +87,16 @@
                             </div>
                             <div class="col d-flex justify-content-end align-items-end">
                                 <small class="text-muted me-3" id="result_info" style="display:none;">Found <strong id="result_count">0</strong> records</small>
+                                <button type="button" class="btn btn-primary btn-sm me-3 align-self-end" id="forward_btn" style="display:none;">
+                                    <span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">forward_to_inbox</span> Forward drafts to manager (<span id="draft_count">0</span>)
+                                </button>
                                 <div>
                                     <label for="status_filter" class="form-label mb-1">Approval Status</label>
                                     <select class="form-control form-control-sm" id="status_filter">
                                         <option value="">All</option>
-                                        <option value="Pending">Pending</option>
-                                        <option value="InProgress">InProgress</option>
+                                        <option value="Draft">Draft</option>
+                                        <option value="Waiting verification">Waiting verification</option>
+                                        <option value="Waiting approval">Waiting approval</option>
                                         <option value="Approved">Approved</option>
                                     </select>
                                 </div>
@@ -179,10 +183,11 @@
                 },
                 {
                     data: 'approved_status',
-                    render: function(d) {
-                        if (d == 1) return '<span class="badge badge-light-success">Approved</span>';
-                        if (d == 2) return '<span class="badge badge-light-warning">InProgress</span>';
-                        return '<span class="badge badge-light-danger">Pending</span>';
+                    render: function(d, t, r) {
+                        if (r.stage === 'Approved') return '<span class="badge badge-light-success">Approved</span>';
+                        if (r.stage === 'Draft') return '<span class="badge badge-light-secondary" title="Not forwarded to the manager yet">Draft</span>';
+                        if (r.stage === 'Waiting verification') return '<span class="badge badge-light-warning">Waiting verification</span>';
+                        return '<span class="badge badge-light-info">Waiting approval</span>';
                     }
                 },
                 {
@@ -262,6 +267,7 @@
                         table.clear();
                         table.rows.add(response.data);
                         table.draw();
+                        refreshForwardButton();
                     }
                 },
                 error: function(xhr) {
@@ -276,6 +282,31 @@
                 }
             });
         }
+
+        // Drafts shown now (after the property and status filters) can be forwarded to the manager in one go
+        function draftRows() {
+            return table.rows({ search: 'applied' }).data().toArray().filter(function(r) { return r.is_draft; });
+        }
+        function refreshForwardButton() {
+            var n = draftRows().length;
+            $('#draft_count').text(n);
+            $('#forward_btn').toggle(n > 0);
+        }
+        table.on('draw', refreshForwardButton);
+
+        $('#forward_btn').on('click', function() {
+            var rows = draftRows();
+            if (!rows.length || !confirm('Forward ' + rows.length + ' draft return(s) to the manager for verification?')) { return; }
+            var $btn = $(this).prop('disabled', true);
+            $.ajax({
+                url: '{{ route("ajax.returns.forward.many") }}',
+                type: 'POST',
+                data: { _token: $('meta[name="csrf-token"]').attr('content'), ids: rows.map(function(r) { return r.encrypted_id; }) },
+                success: function(r) { alert(r.message); loadData(); },
+                error: function(xhr) { alert((xhr.responseJSON && xhr.responseJSON.message) || 'Could not forward the returns.'); },
+                complete: function() { $btn.prop('disabled', false); }
+            });
+        });
 
         // Custom search for status filter on column 9
         $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
