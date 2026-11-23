@@ -214,6 +214,7 @@
                                                     <th>Item</th>
                                                     <th>Billing Code</th>
                                                     <th>Default Cycle</th>
+                                                    <th>Advance Payable</th>
                                                     <th>Amount</th>
                                                     <th>% of Rent</th>
                                                     <th style="width:40px;"></th>
@@ -221,7 +222,7 @@
                                             </thead>
                                             <tbody id="selectedInvoiceableItemsBody">
                                                 <tr id="noInvoiceableItemsRow">
-                                                    <td colspan="6" class="text-muted text-center py-3">No items added yet.</td>
+                                                    <td colspan="7" class="text-muted text-center py-3">No items added yet.</td>
                                                 </tr>
                                             </tbody>
                                         </table>
@@ -290,6 +291,10 @@
                     <div class="col-6">
                         <label class="form-label small text-muted">Default Cycle</label>
                         <input type="text" class="form-control form-control-sm" id="modal_item_cycle" readonly>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small text-muted">Advance Payable</label>
+                        <input type="text" class="form-control form-control-sm" id="modal_item_advance" readonly>
                     </div>
                 </div>
                 <div class="mb-1">
@@ -535,6 +540,7 @@
             const item = invoiceableItemOptions.find(i => String(i.id) === String(itemId));
             $('#modal_item_billing_code').val(item ? (item.billing_code || '-') : '');
             $('#modal_item_cycle').val(item ? (item.default_cycle_name || '-') : '');
+            $('#modal_item_advance').val(item ? (item.advance_payable || 'No') : '');
         });
 
         // Amount / % of Rent are mutually exclusive in the modal too
@@ -546,7 +552,7 @@
 
         function resetAddInvoiceableItemModal() {
             $('#modal_item_select').val('');
-            $('#modal_item_billing_code, #modal_item_cycle').val('');
+            $('#modal_item_billing_code, #modal_item_cycle, #modal_item_advance').val('');
             $('input[name="modal_item_choice"]').prop('checked', false);
             $('#modal_item_amount, #modal_item_pct').val('').prop('disabled', true);
             $('#modal_item_select_error').addClass('d-none').text('');
@@ -559,7 +565,7 @@
             const $hidden = $('#invoiceableItemsHiddenInputs');
 
             if (selectedInvoiceableItems.length === 0) {
-                $body.html('<tr id="noInvoiceableItemsRow"><td colspan="6" class="text-muted text-center py-3">No items added yet.</td></tr>');
+                $body.html('<tr id="noInvoiceableItemsRow"><td colspan="7" class="text-muted text-center py-3">No items added yet.</td></tr>');
                 $hidden.empty();
                 return;
             }
@@ -569,6 +575,7 @@
                     <td>${escapeHtml(entry.item_name)}</td>
                     <td>${escapeHtml(entry.billing_code || '-')}</td>
                     <td>${escapeHtml(entry.default_cycle_name || '-')}</td>
+                    <td>${escapeHtml(entry.advance_payable || 'No')}</td>
                     <td>${entry.choice === 'amount' ? escapeHtml(entry.amount) : '-'}</td>
                     <td>${entry.choice === 'percentage' ? escapeHtml(entry.percentage_of_rent) + '%' : '-'}</td>
                     <td>
@@ -619,6 +626,7 @@
                 item_name: item ? item.item_name : '',
                 billing_code: item ? item.billing_code : '',
                 default_cycle_name: item ? item.default_cycle_name : '',
+                advance_payable: item ? (item.advance_payable || 'No') : 'No',
                 choice: choice,
                 amount: amount,
                 percentage_of_rent: percentageOfRent,

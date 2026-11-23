@@ -98,6 +98,7 @@ class ServiceAgreementCloneService
             'item_name' => $row->item->item_name ?? '',
             'billing_code' => $row->item->billing_code ?? '',
             'default_cycle_name' => $row->item->cycle->cycle_name ?? null,
+            'advance_payable' => $row->item->advance_payable ?: 'No',
             'choice' => $row->amount !== null ? 'amount' : ($row->percentage_of_rent !== null ? 'percentage' : null),
             'amount' => $row->amount,
             'percentage_of_rent' => $row->percentage_of_rent,

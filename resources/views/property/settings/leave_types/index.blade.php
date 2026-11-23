@@ -130,6 +130,12 @@
                             <div class="tab-pane fade" id="invoiceable-items" role="tabpanel" aria-labelledby="invoiceable-items-tab">
                                 <div class="d-flex align-items-center mb-3">
                                     <h6 class="mb-0 me-auto">Invoiceable Items</h6>
+                                    <select id="invoiceableAppliesToFilter" class="form-select form-select-sm me-2" style="width:auto;" aria-label="Filter by Applies To">
+                                        <option value="">All items</option>
+                                        <option value="TENANT">Tenant</option>
+                                        <option value="CLIENT">Client</option>
+                                        <option value="BOTH">Both</option>
+                                    </select>
                                     @permission('create_property_settings_items')
                                     <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="addInvoiceableItemBtn">
                                         <span class="material-symbols-outlined">add_circle</span>
@@ -146,6 +152,7 @@
                                                 <th>Billing Code</th>
                                                 <th>Default Cycle</th>
                                                 <th>Commissionable</th>
+                                                <th>Advance Payable</th>
                                                 <th>Fixed Amount</th>
                                                 <th>Amount</th>
                                                 <th>Actions</th>
@@ -480,6 +487,7 @@ $(document).ready(function() {
             { data: 'billing_code' },
             { data: 'cycle_name' },
             { data: 'commissionable' },
+            { data: 'advance_payable' },
             { data: 'fixed_amount' },
             { data: 'amount' },
             {
@@ -509,6 +517,12 @@ $(document).ready(function() {
         order: [[0, 'asc']],
         pageLength: 10,
         responsive: true
+    });
+
+    // Filter the items by who they apply to (column 1): Tenant, Client or Both
+    $('#invoiceableAppliesToFilter').on('change', function() {
+        const value = $(this).val();
+        invoiceableItemsTable.column(1).search(value ? '^' + value + '$' : '', true, false).draw();
     });
 
     // ============ LOAD CYCLES ============
