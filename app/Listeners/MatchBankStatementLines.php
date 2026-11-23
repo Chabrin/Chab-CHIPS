@@ -16,7 +16,7 @@ use Throwable;
  * Failed with the reason and leaves what is already decided or paid as it is, and the run can be started again because
  * only Pending lines are matched and only unpaid Matched lines are paid.
  */
-class MatchBankStatementLines implements ShouldQueue
+class MatchBankStatementLines
 {
     use InteractsWithQueue;
 

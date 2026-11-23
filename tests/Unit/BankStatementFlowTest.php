@@ -325,9 +325,9 @@ class BankStatementFlowTest extends TestCase
         app(BankStatementConfirmationService::class)->confirm($id, self::CONFIRMER);
     }
 
-    public function test_the_listener_is_queued_and_confirming_runs_it_to_match_the_lines(): void
+    public function test_the_listener_is_not_queued_and_confirming_runs_it_to_match_the_lines(): void
     {
-        $this->assertContains(ShouldQueue::class, class_implements(MatchBankStatementLines::class), 'matching must run on the queue');
+        $this->assertNotContains(ShouldQueue::class, class_implements(MatchBankStatementLines::class), 'matching runs inside the confirm request');
 
         $this->setConfirmerRole();
         $this->unit('187G-8', ['Active']);
