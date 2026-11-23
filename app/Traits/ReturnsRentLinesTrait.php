@@ -12,7 +12,8 @@ use Illuminate\Support\Facades\Log;
  * This trait extracts CR lines from sys_pm_debtors_invoices. A rent invoice becomes a RENT CURRENT line with
  * commission_amount and vat_amount worked out from the SLA. Every other invoice (deposit, service charge, water,
  * electricity ...) becomes its own line, named after the item, with no commission or VAT, as in the legacy returns;
- * it is only passed on for what the tenant has actually paid, and a deposit the company holds is left out.
+ * it is only passed on for what the tenant has actually paid, and a deposit the company holds is left out. The exception
+ * is an item set to Advance Payable in the invoiceable items: it is passed on at its full amount, paid or not.
  *
  * Rent is read from open, partly paid and cleared invoices (statuses 1, 8, 9) of the return month. Money that comes in
  * after the month's return is passed on in a later run: the line is what is collected now less what earlier return
@@ -66,7 +67,13 @@ trait ReturnsRentLinesTrait
         // What the tenant has paid of an invoice (never more than the invoice), less what earlier returns already passed
         // on for it: only the difference is passed to the landlord now, so money that comes in late goes out once.
         $collected = "LEAST(i.total_amount, GREATEST(i.total_amount - COALESCE(i.current_balance, i.total_amount), 0))";
-        $payable = "GREATEST({$collected} - prev.returned, 0)";
+        // An item set to Advance Payable (a bill, not rent) is passed on at its full amount before the tenant has paid it,
+        // so what is owed to the landlord is the invoice, not the collection. Only invoices raised in this app qualify: the
+        // legacy ones were already returned by the old system. Later collections then add nothing, because the amount
+        // passed on is subtracted below.
+        $advance = "(NOT {$isRent} AND i.created_by IS NOT NULL AND COALESCE(it.advance_payable, 'No') = 'Yes')";
+        $owed = "CASE WHEN {$advance} THEN i.total_amount ELSE {$collected} END";
+        $payable = "GREATEST({$owed} - prev.returned, 0)";
 
         // A main return takes this month's invoices (rent and bills), plus invoices of earlier months that were raised
         // in this app, already appeared in an earlier return and have been paid further since. A mini return takes only

@@ -7,7 +7,7 @@
     <div id="invoiceableItemsHiddenInputs"></div>
     <div class="table-responsive sla-billing-table">
         <table class="table mb-0">
-            <thead><tr><th scope="col">Charge</th><th scope="col">Billing code</th><th scope="col">Billing cycle</th><th scope="col">How it is charged</th><th scope="col" class="text-end">Value</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+            <thead><tr><th scope="col">Charge</th><th scope="col">Billing code</th><th scope="col">Billing cycle</th><th scope="col">Advance payable</th><th scope="col">How it is charged</th><th scope="col" class="text-end">Value</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
             <tbody id="selectedInvoiceableItemsBody"></tbody>
         </table>
     </div>

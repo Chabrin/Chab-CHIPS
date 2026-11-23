@@ -6,7 +6,7 @@
             <select class="form-select" id="modal_item_select" aria-describedby="modal_item_select_error" disabled><option value="">Loading billing items...</option></select>
             <div class="invalid-feedback" id="modal_item_select_error" role="alert"></div>
             <button type="button" class="btn btn-link p-0 mt-2 d-none" id="slaRetryItems">Try loading items again</button>
-            <dl class="sla-item-metadata"><div><dt>Billing code</dt><dd id="modal_item_billing_code">Select an item</dd></div><div><dt>Billing cycle</dt><dd id="modal_item_cycle">Select an item</dd></div></dl>
+            <dl class="sla-item-metadata"><div><dt>Billing code</dt><dd id="modal_item_billing_code">Select an item</dd></div><div><dt>Billing cycle</dt><dd id="modal_item_cycle">Select an item</dd></div><div><dt>Advance payable</dt><dd id="modal_item_advance">Select an item</dd></div></dl>
             <fieldset><legend class="sla-field-legend">How is this charge calculated?</legend><p class="sla-muted">Choose one method. You can also leave the value unset.</p>
                 <div class="sla-methods">
                     <label class="sla-method-card" for="modal_choice_amount"><input type="radio" name="modal_item_choice" id="modal_choice_amount" value="amount"><span><strong>Fixed amount</strong><small>The same amount each billing cycle.</small></span></label>

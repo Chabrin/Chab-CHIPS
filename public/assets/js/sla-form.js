@@ -28,8 +28,8 @@
                 const method = entry.choice === 'amount' ? 'Fixed amount' : entry.choice === 'percentage' ? '% of rent' : 'Value unset';
                 const value = entry.choice === 'amount' && entry.amount !== null && entry.amount !== '' ? number(entry.amount)
                     : entry.choice === 'percentage' && entry.percentage_of_rent !== null && entry.percentage_of_rent !== '' ? number(entry.percentage_of_rent) + '%' : 'Not set';
-                return `<tr><td>${escape(entry.item_name || 'Billing item')}</td><td>${escape(entry.billing_code || '—')}</td><td>${escape(entry.default_cycle_name || 'Not specified')}</td><td><span class="sla-charge-method">${method}</span></td><td class="text-end">${value}</td><td class="text-end text-nowrap"><button type="button" class="btn btn-link btn-sm sla-edit-item" data-index="${index}" aria-label="Edit ${escape(entry.item_name)}">Edit</button><button type="button" class="btn btn-link btn-sm text-danger sla-remove-item" data-index="${index}" aria-label="Remove ${escape(entry.item_name)}">Remove</button></td></tr>`;
-            }).join('') : '<tr><td colspan="6" class="sla-empty"><strong>No additional charges configured</strong><p>Add a billing item if tenants pay charges in addition to rent.</p><button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#addInvoiceableItemModal">Add your first billing item</button></td></tr>');
+                return `<tr><td>${escape(entry.item_name || 'Billing item')}</td><td>${escape(entry.billing_code || '—')}</td><td>${escape(entry.default_cycle_name || 'Not specified')}</td><td>${escape(entry.advance_payable || 'No')}</td><td><span class="sla-charge-method">${method}</span></td><td class="text-end">${value}</td><td class="text-end text-nowrap"><button type="button" class="btn btn-link btn-sm sla-edit-item" data-index="${index}" aria-label="Edit ${escape(entry.item_name)}">Edit</button><button type="button" class="btn btn-link btn-sm text-danger sla-remove-item" data-index="${index}" aria-label="Remove ${escape(entry.item_name)}">Remove</button></td></tr>`;
+            }).join('') : '<tr><td colspan="7" class="sla-empty"><strong>No additional charges configured</strong><p>Add a billing item if tenants pay charges in addition to rent.</p><button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#addInvoiceableItemModal">Add your first billing item</button></td></tr>');
 
             // A marker lets an empty list survive validation redirects instead of restoring old items.
             let hidden = '<input type="hidden" name="billing_items_present" value="1">';
@@ -67,7 +67,7 @@
                 loading = false;
                 items = items.map(entry => {
                     const item = options.find(option => String(option.id) === String(entry.item_id));
-                    return item ? {...entry, item_name: item.item_name, billing_code: item.billing_code, default_cycle_name: item.default_cycle_name} : entry;
+                    return item ? {...entry, item_name: item.item_name, billing_code: item.billing_code, default_cycle_name: item.default_cycle_name, advance_payable: item.advance_payable || 'No'} : entry;
                 });
                 updateOptions();
                 $select.prop('disabled', !options.length);
@@ -121,6 +121,7 @@
             const item = options.find(option => String(option.id) === String(this.value));
             $('#modal_item_billing_code').text(item ? item.billing_code || 'Not specified' : 'Select an item');
             $('#modal_item_cycle').text(item ? item.default_cycle_name || 'Not specified' : 'Select an item');
+            $('#modal_item_advance').text(item ? item.advance_payable || 'No' : 'Select an item');
             $add.prop('disabled', loading || !item);
             if (item) $('#modal_item_select_error').text('');
             summary();
@@ -155,7 +156,7 @@
                 return;
             }
             const entry = {item_id: itemId, item_name: item.item_name, billing_code: item.billing_code,
-                default_cycle_name: item.default_cycle_name, choice: method === 'unset' ? null : method,
+                default_cycle_name: item.default_cycle_name, advance_payable: item.advance_payable || 'No', choice: method === 'unset' ? null : method,
                 amount: method === 'amount' ? $value.val() : null, percentage_of_rent: method === 'percentage' ? $value.val() : null};
             if (editingIndex === null) items.push(entry);
             else items[editingIndex] = entry;

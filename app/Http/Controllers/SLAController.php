@@ -281,7 +281,7 @@ class SLAController extends Controller
     }
 
     /**
-     * Tenant-facing invoiceable items (applies_to BOTH or TENANT) for the SLA
+     * Tenant-only invoiceable items (applies_to TENANT) for the SLA
      * create/edit form's "Tenant Invoiceable Items" picker — item name,
      * billing code, and the item's default billing cycle name.
      */
@@ -289,13 +289,14 @@ class SLAController extends Controller
     {
         try {
             $items = InvoiceableItem::leftJoin('sys_set_invoiceable_items_cycles as c', 'c.id', '=', 'sys_set_invoiceable_items.default_cycle_id')
-                ->whereIn('applies_to', ['BOTH', 'TENANT'])
+                ->where('applies_to', 'TENANT')
                 ->orderBy('item_name')
                 ->get([
                     'sys_set_invoiceable_items.id',
                     'sys_set_invoiceable_items.item_name',
                     'sys_set_invoiceable_items.billing_code',
                     'c.cycle_name as default_cycle_name',
+                    'sys_set_invoiceable_items.advance_payable',
                 ]);
 
             return response()->json(['items' => $items]);
@@ -728,6 +729,7 @@ class SLAController extends Controller
                         'item_name' => $row->item->item_name ?? '',
                         'billing_code' => $row->item->billing_code ?? '',
                         'default_cycle_name' => $row->item->cycle->cycle_name ?? null,
+                        'advance_payable' => $row->item->advance_payable ?: 'No',
                         'choice' => $row->amount !== null ? 'amount' : ($row->percentage_of_rent !== null ? 'percentage' : null),
                         'amount' => $row->amount,
                         'percentage_of_rent' => $row->percentage_of_rent,
