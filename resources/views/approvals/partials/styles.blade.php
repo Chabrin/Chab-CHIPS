@@ -39,6 +39,9 @@
 
     /* table */
     .sla-table-wrap { padding: 0 6px 6px; }
+    .sla-loading:not([hidden]) { display: block; padding: 18px 14px; color: var(--brand); font-weight: 600; }
+    .sla-table-loading tbody { visibility: hidden; pointer-events: none; }
+    .sla-queue-loading .dt-info, .sla-queue-loading .dt-paging { visibility: hidden; }
     table#sla-table { width: 100% !important; border-collapse: separate; border-spacing: 0; }
     table#sla-table thead th { font-size: 11px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); padding: 14px 14px; border-bottom: 1px solid var(--line-2); background: #fff; white-space: nowrap; }
     table#sla-table tbody td { padding: 14px 14px; border-bottom: 1px solid var(--line-2); vertical-align: middle; background: #fff; transition: background .12s; }

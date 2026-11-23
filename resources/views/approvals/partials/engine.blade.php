@@ -17,6 +17,15 @@ $(function () {
     }
 
     /* ---------- table ---------- */
+    const loading = $('<div class="sla-loading" role="status" aria-live="polite" hidden></div>');
+    $('#sla-table').before(loading);
+    function showLoading(on) {
+        const label = $('#sla-tabs .sla-tab.active').clone().children().remove().end().text().trim();
+        loading.text('Loading ' + (label ? label.toLowerCase() + ' ' : '') + Q.plural + '\u2026').prop('hidden', !on);
+        $('#sla-table').attr('aria-busy', String(on)).toggleClass('sla-table-loading', on);
+        $('#sla-table_wrapper').toggleClass('sla-queue-loading', on);
+    }
+    $('#sla-table').on('preXhr.dt', function () { showLoading(true); });
     const mid = Q.columns.length;
     const columns = [{ data: 'id', orderable: false, render: id => '<input type="checkbox" class="form-check-input row-check" value="' + id + '"' + (selected.has(id) ? ' checked' : '') + '>' }]
         .concat(Q.columns)
@@ -64,11 +73,14 @@ $(function () {
                 }
                 return json.data;
             },
-            error: function (xhr) { toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Could not load ' + Q.plural + '.'); }
+            error: function (xhr) {
+                showLoading(false);
+                toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Could not load ' + Q.plural + '.');
+            }
         },
         columns: columns,
         columnDefs: [{ targets: [0, mid + 1, mid + 2], orderable: false }],
-        drawCallback: function () { syncSelectAll(); }
+        drawCallback: function () { showLoading(false); syncSelectAll(); }
     });
 
     /* ---------- tabs + filters ---------- */

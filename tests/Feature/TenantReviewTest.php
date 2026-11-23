@@ -224,6 +224,130 @@ class TenantReviewTest extends TestCase
         $this->reviews->decide($review, $this->user($actor), $review->revision, $review->stage, $action, $reason);
     }
 
+    private function director(): User
+    {
+        DB::table('josya_users')->insert(['id' => 5, 'name' => 'Testing Director', 'block' => false]);
+        DB::table('cb_roles')->insert(['id' => 5, 'name' => 'directors', 'display_name' => 'Directors']);
+        DB::table('cb_role_user')->insert(['user_id' => 5, 'role_id' => 5, 'user_type' => User::class]);
+        $permissionId = DB::table('cb_permissions')->where('name', 'view_tenant_onboarding')->value('id');
+        DB::table('cb_permission_role')->insert(['permission_id' => $permissionId, 'role_id' => 5]);
+        $pageId = DB::table('cb_sub_modules')->where('sub_module_url', '/approvals/new-tenants')->value('id');
+        DB::table('cb_sub_module_permissions')->insert(['role_id' => 5, 'sub_module_id' => $pageId]);
+        return $this->user(5);
+    }
+
+    public function test_director_can_view_and_approve_without_signing_the_intermediate_steps(): void
+    {
+        $review = $this->review();
+        $director = $this->director();
+        $this->assertTrue($this->reviews->canView($review, $director));
+        $this->assertTrue($this->reviews->canDirectApprove($review, $director));
+        $this->assertFalse($this->reviews->reviewer($review, $director));
+        $this->actingAs($director);
+        $request = \Illuminate\Http\Request::create('/approvals/new-tenants');
+        $request->setUserResolver(fn () => $director);
+        $items = app(\App\Http\Controllers\TenantReviewController::class)->index($request)->getData()['items'];
+        $this->assertSame($review->id, $items->first()->id);
+
+        $this->withoutMiddleware([\App\Http\Middleware\OneLogin::class, \App\Http\Middleware\EnsureStaffPasswordIsCurrent::class, \App\Http\Middleware\AccessChecker::class])->actingAs($director);
+        $this->post('/approvals/new-tenants/'.$review->id.'/decision', [
+            'revision' => 1, 'stage' => 'zone_manager', 'action' => 'direct_approve', 'reason' => 'Test tenant onboarding.',
+        ])->assertRedirect();
+        $this->assertSame('approved', $review->fresh()->stage);
+        $this->assertSame(5, (int) LeaseAgreement::find(1)->current_status_id);
+        $this->assertSame(5, (int) Client::withoutGlobalScopes()->find(1)->current_status_id);
+        $event = $review->events()->where('action', 'direct_approved')->sole();
+        $this->assertSame(5, (int) $event->actor_id);
+        $this->assertSame('director_override', $event->stage);
+        $this->assertSame('Test tenant onboarding.', $event->reason);
+        $this->assertSame(5, (int) $event->snapshot['tenant']['current_status_id']);
+        $this->assertSame(0, $review->events()->where('action', 'signed')->count());
+        $this->assertFalse($this->reviews->canDirectApprove($review->fresh(), $director));
+        $review = $review->fresh();
+        $review->tenant->setRelation('documents', collect())->setRelation('tenantBankDetails', collect())->setRelation('tenantNextOfKin', collect());
+        $source = preg_replace('/^@extends.*\R/', '', file_get_contents(resource_path('views/property/tenant-reviews/show.blade.php')), 1);
+        $html = \Illuminate\Support\Facades\Blade::render($source."\n@yield('content')", [
+            'review' => $review, 'canAct' => false, 'canCorrect' => false, 'canAccounts' => false,
+            'invoices' => collect(), 'inspections' => collect(), 'errors' => new \Illuminate\Support\ViewErrorBag(),
+        ], true);
+        $this->assertStringContainsString('Approved directly by Testing Director.', $html);
+        $this->assertStringContainsString('Bypassed by Director', $html);
+        $this->assertStringContainsString('Direct approval by Director', $html);
+        $this->assertStringNotContainsString('value="direct_approve"', $html);
+    }
+
+    public function test_direct_approval_rejects_other_roles(): void
+    {
+        $review = $this->review();
+        $director = $this->director();
+        foreach ([1, 2, 3, 4] as $id) {
+            $this->assertFalse($this->reviews->canDirectApprove($review, $this->user($id)));
+            $this->withoutMiddleware([\App\Http\Middleware\OneLogin::class, \App\Http\Middleware\EnsureStaffPasswordIsCurrent::class, \App\Http\Middleware\AccessChecker::class])->actingAs($this->user($id));
+            $this->postJson('/approvals/new-tenants/'.$review->id.'/decision', [
+                'revision' => 1, 'stage' => 'zone_manager', 'action' => 'direct_approve', 'reason' => 'Testing.',
+            ])->assertForbidden();
+        }
+        $this->assertSame('zone_manager', $review->fresh()->stage);
+        $this->assertSame(1, $review->events()->count());
+    }
+
+    public function test_director_can_approve_in_production_without_a_testing_flag(): void
+    {
+        $review = $this->review();
+        $director = $this->director();
+        $this->app['env'] = 'production';
+        $this->assertTrue($this->reviews->canView($review, $director));
+        $this->assertTrue($this->reviews->canDirectApprove($review, $director));
+        $this->reviews->decide($review, $director, 1, 'zone_manager', 'direct_approve', 'Director approval.');
+        $this->assertSame('approved', $review->fresh()->stage);
+        $this->assertSame(5, (int) LeaseAgreement::find(1)->current_status_id);
+        $this->assertSame(5, (int) Client::withoutGlobalScopes()->find(1)->current_status_id);
+        $this->assertSame('director_override', $review->events()->where('action', 'direct_approved')->sole()->stage);
+    }
+
+    public function test_direct_approval_requires_a_reason_current_revision_and_approved_sla(): void
+    {
+        $review = $this->review();
+        $director = $this->director();
+        $this->withoutMiddleware([\App\Http\Middleware\OneLogin::class, \App\Http\Middleware\EnsureStaffPasswordIsCurrent::class, \App\Http\Middleware\AccessChecker::class])->actingAs($director);
+        $url = '/approvals/new-tenants/'.$review->id.'/decision';
+        $payload = ['revision' => 1, 'stage' => 'zone_manager', 'action' => 'direct_approve', 'reason' => 'Testing.'];
+        $this->postJson($url, array_replace($payload, ['reason' => ' ']))->assertUnprocessable();
+        $this->postJson($url, array_replace($payload, ['revision' => 2]))->assertUnprocessable();
+        ServiceAgreement::where('id', 1)->update(['current_status_id' => 1]);
+        $this->postJson($url, $payload)->assertUnprocessable();
+        $this->assertSame('zone_manager', $review->fresh()->stage);
+        $this->assertSame(1, (int) Client::withoutGlobalScopes()->find(1)->current_status_id);
+        $this->assertSame(1, $review->events()->count());
+    }
+
+    public function test_direct_approval_requires_an_unblocked_director_with_the_review_module_and_permission(): void
+    {
+        $review = $this->review();
+        $director = $this->director();
+        $director->block = true;
+        $this->assertFalse($this->reviews->canDirectApprove($review, $director));
+        $director->block = false;
+        DB::table('cb_permission_role')->where('role_id', 5)->delete();
+        $this->assertFalse($this->reviews->canView($review, $director));
+        $this->assertFalse($this->reviews->canDirectApprove($review, $director));
+        DB::table('cb_permission_role')->insert(['role_id' => 5,
+            'permission_id' => DB::table('cb_permissions')->where('name', 'view_tenant_onboarding')->value('id')]);
+        DB::table('cb_sub_module_permissions')->where('role_id', 5)->delete();
+        $this->assertFalse($this->reviews->canView($review, $director));
+        $this->assertFalse($this->reviews->canDirectApprove($review, $director));
+    }
+
+    public function test_direct_approval_does_not_reopen_rejected_or_returned_reviews(): void
+    {
+        $review = $this->review();
+        $director = $this->director();
+        foreach (['approved', 'rejected', 'correction'] as $stage) {
+            $review->update(['stage' => $stage]);
+            $this->assertFalse($this->reviews->canDirectApprove($review, $director));
+        }
+    }
+
     public function test_preparation_signs_once_and_final_approval_approves_the_existing_records(): void
     {
         $review = $this->review();
@@ -463,15 +587,17 @@ class TenantReviewTest extends TestCase
         $review = $this->review();
         $review->tenant->setRelation('documents', collect())->setRelation('tenantBankDetails', collect())->setRelation('tenantNextOfKin', collect());
         $source = preg_replace('/^@extends.*\R/', '', file_get_contents(resource_path('views/property/tenant-reviews/show.blade.php')), 1);
-        $render = function (bool $canAct, bool $canCorrect) use ($source, $review) {
+        $render = function (bool $canAct, bool $canCorrect, bool $canDirectApprove = false) use ($source, $review) {
             return \Illuminate\Support\Facades\Blade::render($source."\n@yield('content')", [
-                'review' => $review, 'canAct' => $canAct, 'canCorrect' => $canCorrect, 'canAccounts' => false,
+                'review' => $review, 'canAct' => $canAct, 'canCorrect' => $canCorrect, 'canAccounts' => false, 'canDirectApprove' => $canDirectApprove,
                 'invoices' => collect(), 'inspections' => collect(), 'errors' => new \Illuminate\Support\ViewErrorBag(),
             ], true);
         };
         $html = $render(true, false);
         $this->assertStringContainsString('Sign and send to Assistant Internal Auditor', $html);
         $this->assertStringContainsString('Return to Field Officer', $html);
+        $this->assertStringNotContainsString('value="direct_approve"', $html);
+        $this->assertStringContainsString('Approve tenant and lease directly', $render(false, false, true));
         $review->stage = 'assistant_internal_auditor';
         $this->assertStringContainsString('Approve tenant and lease', $render(true, false));
         $review->stage = 'correction';
@@ -611,6 +737,43 @@ class TenantReviewTest extends TestCase
         $this->withoutMiddleware([\App\Http\Middleware\OneLogin::class, \App\Http\Middleware\EnsureStaffPasswordIsCurrent::class, \App\Http\Middleware\AccessChecker::class])->actingAs($this->user(2));
         $this->postJson('/approvals/new-tenants/'.$review->id.'/decision', ['revision' => 1, 'stage' => 'zone_manager', 'action' => 'approve'])->assertForbidden();
         $this->assertSame('zone_manager', $review->fresh()->stage);
+    }
+
+    public function test_authorized_auditor_sees_recorded_property_on_list_and_review_outside_their_portfolio(): void
+    {
+        $review = $this->review();
+        DB::table('cb_roles')->where('id', 3)->update(['is_global' => false]);
+        Schema::table('sys_set_zones', function (Blueprint $table) {
+            $table->integer('zone_supervisor_id')->nullable();
+        });
+        foreach ([new \App\Models\ClientDocument, new \App\Models\TenantBankDetail,
+            new \App\Models\TenantNextOfKin, new \App\Models\MoveInInspection] as $model) {
+            Schema::create($model->getTable(), function (Blueprint $table) use ($model) {
+                $table->id();
+                foreach ($model->getFillable() as $field) $table->text($field)->nullable();
+            });
+        }
+        $auditor = $this->user(3);
+        $this->actingAs($auditor);
+        $this->assertTrue($this->reviews->canView($review, $auditor));
+        $this->assertFalse($this->reviews->reviewer($review, $auditor));
+        $controller = app(\App\Http\Controllers\TenantReviewController::class);
+        $request = \Illuminate\Http\Request::create('/approvals/new-tenants');
+        $request->setUserResolver(fn () => $auditor);
+
+        foreach ([1, 0] as $active) {
+            DB::table('sys_pm_properties')->where('id', 1)->update([
+                'property_name' => 'Robert Rentals', 'reference_number' => '1055E', 'active' => $active,
+            ]);
+            $this->assertNull(Property::find(1));
+            $items = $controller->index($request)->getData()['items'];
+            $this->assertSame(1, $items->total());
+            $this->assertSame('Robert Rentals', $items->first()->lease->property?->property_name);
+            $detail = $controller->show($request, $review->fresh())->getData()['review'];
+            $this->assertSame('Robert Rentals', $detail->lease->property?->property_name);
+            $this->assertSame('1055E', $detail->lease->property?->reference_number);
+            $this->assertNull(Property::find(1));
+        }
     }
 
     public function test_removing_the_module_blocks_direct_links_and_post_requests(): void

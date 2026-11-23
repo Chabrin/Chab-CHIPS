@@ -8,11 +8,14 @@
     $tenant = $review->tenant;
     $steps = $review->steps();
     $events = $review->events;
+    $directApproval = $events->where('revision', $review->revision)->firstWhere('action', 'direct_approved');
     $signedStages = $events->where('revision', $review->revision)->whereIn('action', ['saved_and_signed', 'corrected_and_signed', 'signed'])->pluck('stage')->all();
     $currentStage = $review->stage === 'correction' ? 'field_officer' : $review->stage;
     $statusTone = match($review->stage) { 'approved' => 'success', 'rejected' => 'danger', 'correction' => 'warning', default => 'pending' };
     $stageLabels = array_column($steps, 'label', 'stage');
-    $actionLabels = ['saved_and_signed' => 'Prepared and signed', 'corrected_and_signed' => 'Corrections signed', 'signed' => 'Signed', 'return' => 'Returned for correction', 'reject' => 'Rejected', 'reconciled' => 'Accounts reconciled'];
+    $stageLabels['director_testing'] = 'Director (testing)';
+    $stageLabels['director_override'] = 'Director';
+    $actionLabels = ['saved_and_signed' => 'Prepared and signed', 'corrected_and_signed' => 'Corrections signed', 'signed' => 'Signed', 'direct_approved' => 'Direct approval by Director', 'return' => 'Returned for correction', 'reject' => 'Rejected', 'reconciled' => 'Accounts reconciled'];
 @endphp
 <div class="page-body tenant-review"><div class="container-fluid">
     <a class="tr-back" href="{{ route('tenant-reviews.index') }}"><span class="material-symbols-outlined" aria-hidden="true">arrow_back</span>New Tenant Approvals</a>
@@ -30,11 +33,12 @@
     </header>
     <section class="tr-panel tr-progress" aria-labelledby="tr-progress-title">
         <div class="tr-section-heading"><h2 id="tr-progress-title">Approval progress</h2><span class="tr-muted">Revision {{ $review->revision }}</span></div>
+        @if($directApproval)<p class="tr-muted">Approved directly by {{ $directApproval->actor->name ?? 'a Director' }}{{ $directApproval->stage === 'director_testing' ? ' for testing' : '' }}. Unsigned workflow steps were bypassed.</p>@endif
         <ol class="tr-steps">@foreach($steps as $step)
             @php
                 $isCurrent = $step['stage'] === $currentStage;
                 $isDone = in_array($step['stage'], $signedStages, true) && !$isCurrent;
-                $stepState = $isCurrent ? ($review->stage === 'correction' ? 'Correction needed' : 'Awaiting review') : ($isDone ? 'Signed' : ($review->stage === 'rejected' ? 'Stopped' : 'Not reached'));
+                $stepState = $isCurrent ? ($review->stage === 'correction' ? 'Correction needed' : 'Awaiting review') : ($isDone ? 'Signed' : ($directApproval ? ($directApproval->stage === 'director_testing' ? 'Bypassed for testing' : 'Bypassed by Director') : ($review->stage === 'rejected' ? 'Stopped' : 'Not reached')));
             @endphp
             <li class="{{ $isCurrent ? 'is-current' : ($isDone ? 'is-complete' : '') }}" @if($isCurrent) aria-current="step" @endif><span class="tr-step-number" aria-hidden="true">@if($isDone)<span class="material-symbols-outlined">check</span>@else{{ $loop->iteration }}@endif</span><div><strong>{{ $step['label'] }}</strong><span>{{ $stepState }}</span></div></li>
         @endforeach</ol>
@@ -67,6 +71,20 @@
             <div class="table-responsive"><table class="table tr-table tr-history-table"><thead><tr><th scope="col">Date &amp; staff member</th><th scope="col">Stage</th><th scope="col">Decision</th><th scope="col">Comments</th></tr></thead><tbody>@forelse($events->sortByDesc('id') as $event)<tr><td><strong>{{ $event->actor->name ?? 'Staff account unavailable' }}</strong><small>{{ $event->created_at?->format('d M Y, H:i') }} · Revision {{ $event->revision }}</small></td><td>{{ $stageLabels[$event->stage] ?? ucfirst(str_replace('_', ' ', $event->stage)) }}</td><td>{{ $actionLabels[$event->action] ?? ucfirst(str_replace('_', ' ', $event->action)) }}</td><td>{{ $event->reason ?: '—' }}</td></tr>@empty<tr><td colspan="4" class="tr-empty">No approval history recorded.</td></tr>@endforelse</tbody></table></div>
         </section>
     </main><aside class="tr-sidebar" aria-label="Review actions">
+        @if($canDirectApprove ?? false)
+        <section class="tr-panel tr-action-card">
+            <div class="tr-section-heading"><h2>Director approval</h2></div>
+            <p class="tr-muted">Approve this tenant and lease directly, skipping the remaining workflow steps. The property's SLA must be approved. Your decision and reason will be recorded.</p>
+            <form method="POST" action="{{ route('tenant-reviews.decide', $review) }}">
+                @csrf
+                <input type="hidden" name="revision" value="{{ $review->revision }}">
+                <input type="hidden" name="stage" value="{{ $review->stage }}">
+                <label for="direct-approval-reason" class="form-label">Direct approval reason</label>
+                <textarea id="direct-approval-reason" name="reason" required class="form-control" rows="3" maxlength="2000">{{ old('reason') }}</textarea>
+                <button name="action" value="direct_approve" class="btn btn-primary mt-3 w-100">Approve tenant and lease directly</button>
+            </form>
+        </section>
+        @endif
         <section class="tr-panel tr-action-card"><div class="tr-section-heading"><h2>{{ $canAct ? 'Your review' : ($canCorrect ? 'Corrections required' : 'Onboarding status') }}</h2></div>
             @if($canAct)
             <p class="tr-muted">Review the tenant details and supporting records before signing.</p>
