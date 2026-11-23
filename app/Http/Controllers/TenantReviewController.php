@@ -19,8 +19,9 @@ class TenantReviewController extends Controller
         abort_if($user->block, 403);
         abort_unless(TenantReviewAccess::allows($user, 'view_tenant_onboarding'), 403);
         $this->workflows->current();
-        $query = TenantReview::with(['tenant', 'lease.property', 'lease.unit', 'workflowVersion'])->orderByDesc('id');
-        if (!$this->reviews->accounts($user)) {
+        // Review access is determined by the workflow below, independently of property assignments.
+        $query = TenantReview::with(['tenant', 'lease.property' => fn ($property) => $property->withoutGlobalScopes(), 'lease.unit', 'workflowVersion'])->orderByDesc('id');
+        if (!$this->reviews->accounts($user) && !$this->reviews->directorApprovalAccess($user)) {
             $roleVersions = $this->workflows->eligibleVersions($user, 'role');
             $zoneVersions = $this->workflows->eligibleVersions($user, 'zone_manager');
             $staffIds = DB::table('sys_user_staff_links')->where('user_id', $user->id)->pluck('staff_id');
@@ -46,20 +47,22 @@ class TenantReviewController extends Controller
     public function show(Request $request, TenantReview $review)
     {
         abort_unless($this->reviews->canView($review, $request->user()), 403);
-        $review->load(['tenant.documents', 'tenant.tenantBankDetails.bank', 'tenant.tenantNextOfKin', 'lease.property', 'lease.unit', 'workflowVersion', 'events.actor']);
+        // Authorized reviewers need the recorded property even when it is outside their portfolio or inactive.
+        $review->load(['tenant.documents', 'tenant.tenantBankDetails.bank', 'tenant.tenantNextOfKin', 'lease.property' => fn ($property) => $property->withoutGlobalScopes(), 'lease.unit', 'workflowVersion', 'events.actor']);
         $invoices = \App\Models\DebtorInvoice::where('lease_id', $review->lease_id)->get();
         $inspections = \App\Models\MoveInInspection::where('tenant_id', $review->tenant_id)->get();
         $canAct = $this->reviews->reviewer($review, $request->user());
+        $canDirectApprove = $this->reviews->canDirectApprove($review, $request->user());
         $canAccounts = $review->accounts_pending && $this->reviews->canReconcile($request->user());
         $canCorrect = $review->stage === 'correction' && (int) $review->prepared_by === (int) $request->user()->id
             && TenantReviewAccess::permissionGranted($request->user(), 'update_tenants');
-        return view('property.tenant-reviews.show', compact('review', 'canAct', 'canAccounts', 'canCorrect', 'invoices', 'inspections'));
+        return view('property.tenant-reviews.show', compact('review', 'canAct', 'canDirectApprove', 'canAccounts', 'canCorrect', 'invoices', 'inspections'));
     }
 
     public function decide(Request $request, TenantReview $review)
     {
         $data = $request->validate(['revision' => 'required|integer', 'stage' => 'required|string',
-            'action' => 'required|in:approve,return,reject', 'reason' => 'nullable|string|max:2000']);
+            'action' => 'required|in:approve,return,reject,direct_approve', 'reason' => 'required_if:action,direct_approve|nullable|string|max:2000']);
         $this->reviews->decide($review, $request->user(), $data['revision'], $data['stage'], $data['action'], $data['reason'] ?? null);
         return back()->with('success', 'Decision recorded.');
     }
