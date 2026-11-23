@@ -179,6 +179,3 @@ Deploy finished. Still needed once (not done by this script):
   - nginx: add the /app and /apps proxy blocks to the HTTPS server, then: sudo nginx -t && sudo systemctl reload nginx
   - Check: open Messages, the pill should say "Live updates connected".
 EOF
-
-
-
