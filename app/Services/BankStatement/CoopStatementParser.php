@@ -56,7 +56,32 @@ class CoopStatementParser extends StatementParser
             'cheque_number' => $this->text($row['CHEQUENUMBER'] ?? null),
             'narration' => $narration,
             'unit_code' => $this->unitCodeCell($code) ?? $this->unitCodeCell(explode('~', (string) $narration)[0]) ?? $this->unitCode($code, $narration),
-            'payer_name' => $this->text($row['ST_NAME'] ?? null),
+            // ST_NAME is not the payer: on a real file it repeats the unit code, so the name comes from NARRATION only
+            'payer_name' => $this->nameInNarration($narration),
         ] + $this->judge($amount, $date, $reference);
+    }
+
+    /**
+     * The payer's name from a narration that carries one in a fixed place: an M-Pesa paybill line
+     * ("UKDBR1QDM2~2547xxxxxxxx~account~MPESAC2B_400200~NAME") or a Pesalink line ("PESALINK~ref~NAME~..."). Any other
+     * narration is free text, where the name cannot be told apart, so it gives null. Shown on the manual match page only.
+     *
+     * @param string|null $narration
+     */
+    private function nameInNarration(?string $narration): ?string {
+        if ($narration === null) {
+            return null;
+        }
+
+        $parts = array_map('trim', explode('~', $narration));
+        $name = null;
+
+        if (count($parts) >= 5 && stripos($parts[3], 'MPESA') === 0) {
+            $name = $parts[4];
+        } elseif (count($parts) >= 3 && strcasecmp($parts[0], 'PESALINK') === 0) {
+            $name = $parts[2];
+        }
+
+        return $name !== null && $name !== '' ? $name : null;
     }
 }

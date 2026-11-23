@@ -110,7 +110,7 @@ class BankStatementParserTest extends TestCase
         $this->assertSame('2026-11-10', $line['posting_date']);
         $this->assertSame(12500.5, $line['amount']);
         $this->assertSame('187G-8', $line['unit_code']);
-        $this->assertSame('Akinyi', $line['payer_name']);
+        $this->assertNull($line['payer_name'], 'ST_NAME is not a payer name');
         $this->assertSame('Pending', $line['match_status']);
     }
 
@@ -119,6 +119,27 @@ class BankStatementParserTest extends TestCase
         $path = $this->sheet([self::COOP_HEADERS, ['R9', '2026-11-10', '', 'ABC', 'Akinyi', '0123', 1000, 'u1', 'CASH', '', 'Rent 76F-F4 Nov']]);
 
         $this->assertSame('76F-F4', (new CoopStatementParser())->parse($path)[0]['unit_code']);
+    }
+
+    public function test_coop_payer_name_comes_from_the_narration_and_never_from_st_name(): void
+    {
+        $path = $this->sheet([
+            self::COOP_HEADERS,
+            ['UKDBR1QDM2', '13-NOV-2026 11:00:00', '', '', '', '0114', 600, 'U', 'IBAPS', '0', 'UKDBR1QDM2~254700000001~01148039906100~MPESAC2B_400200~JANE WANJIKU'],
+            ['UKDG7', '13-NOV-2026 11:00:00', '', '', '', '0114', 600, 'U', 'IBAPS', '0', 'PESALINK~1AP28F6C8~JOHN OTIENO~1450185463418~0068~Payments'],
+            ['UKDG8', '13-NOV-2026 11:00:00', '', '', '', '0114', 600, 'U', 'IBAPS', '0', 'AC56ED52A126 SOME PERSON RENT'],
+            ['UKDG9', '13-NOV-2026 11:00:00', '', '49C-025', '49C-025', '0114', 600, 'U', 'IBAPS', '0', 'UKDG9~1~2~MPESAC2B_400200~OTHER NAME'],
+            ['UKDG10', '13-NOV-2026 11:00:00', '', '49C-025', '49C-025', '0114', 600, 'U', 'IBAPS', '0', 'UKDG10~49C-025~POS'],
+        ]);
+
+        $lines = (new CoopStatementParser())->parse($path);
+
+        $this->assertSame('JANE WANJIKU', $lines[0]['payer_name']);
+        $this->assertSame('JOHN OTIENO', $lines[1]['payer_name']);
+        $this->assertNull($lines[2]['payer_name'], 'free text is not guessed at');
+        $this->assertSame('OTHER NAME', $lines[3]['payer_name']);
+        $this->assertNull($lines[4]['payer_name'], 'ST_NAME holds the unit code, so it is never the payer name');
+        $this->assertNull($lines[0]['unit_code'], 'the name is information only and never a match');
     }
 
     public function test_blank_rows_are_skipped_and_the_header_may_sit_below_a_title_row(): void
