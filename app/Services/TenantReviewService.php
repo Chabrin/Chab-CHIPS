@@ -77,13 +77,21 @@ class TenantReviewService
 
     public function register(Client $tenant, LeaseAgreement $lease, User $user): TenantReview
     {
-        $this->assertPreparer((int) $lease->property_id, $user);
-        $version = app(TenantReviewWorkflowService::class)->current();
-        $review = TenantReview::create(['tenant_id' => $tenant->id, 'lease_id' => $lease->id,
-            'prepared_by' => $user->id, 'stage' => $version->steps[1]['stage'], 'revision' => 1,
-            'workflow_version_id' => $version->id]);
-        $this->record($review, $user, 'saved_and_signed', null, 'field_officer');
-        return $review;
+        return DB::transaction(function () use ($tenant, $lease, $user) {
+            $this->assertPreparer((int) $lease->property_id, $user);
+            $version = app(TenantReviewWorkflowService::class)->current();
+            $review = TenantReview::create(['tenant_id' => $tenant->id, 'lease_id' => $lease->id,
+                'prepared_by' => $user->id, 'stage' => $version->steps[1]['stage'], 'revision' => 1,
+                'workflow_version_id' => $version->id]);
+            if ($this->directorApprovalAccess($user)) {
+                $this->record($review, $user, 'director_prepared_and_signed', null, 'director_override', false);
+                $this->decide($review, $user, $review->revision, $review->stage, 'direct_approve',
+                    'Created, signed and approved directly by Director.');
+                return $review->refresh();
+            }
+            $this->record($review, $user, 'saved_and_signed', null, 'field_officer');
+            return $review;
+        });
     }
 
     public function assertPreparer(int $propertyId, User $user): void
@@ -99,6 +107,7 @@ class TenantReviewService
         }
         app(TenantReviewWorkflowService::class)->current();
         $property = Property::withoutGlobalScopes()->findOrFail($propertyId);
+        if ($this->directorApprovalAccess($user)) return;
         if (!$this->hasRole($user, config('tenant_review.roles.field_officer'))
             || !DB::table('sys_user_staff_links')->where('user_id', $user->id)->where('staff_id', $property->field_officer_id)->exists()) {
             throw ValidationException::withMessages(['property_id' =>
@@ -183,13 +192,14 @@ class TenantReviewService
         $this->record($review, $user, 'corrected_and_signed', null, 'field_officer');
     }
 
-    private function record(TenantReview $review, User $user, string $action, ?string $reason, string $stage): void
+    private function record(TenantReview $review, User $user, string $action, ?string $reason, string $stage, bool $notify = true): void
     {
         $review->unsetRelation('tenant')->unsetRelation('lease');
         $review->events()->create(['actor_id' => $user->id, 'revision' => $review->revision,
             'stage' => $stage, 'action' => $action, 'reason' => $reason,
             'snapshot' => ['tenant' => $review->tenant->getAttributes(), 'lease' => $review->lease->getAttributes()],
             'created_at' => now()]);
+        if (!$notify) return;
         $reviewId = $review->id;
         DB::afterCommit(function () use ($reviewId) {
             try {

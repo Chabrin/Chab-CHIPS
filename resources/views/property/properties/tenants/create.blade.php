@@ -5,6 +5,7 @@
 @endsection
 
 @section('content')
+@php($directorCanApprove = auth()->check() && app(\App\Services\TenantReviewService::class)->directorApprovalAccess(auth()->user()))
 <style>
     /* Individual is the default selection, so hide Company-only fields until
        toggleTenantTypeFields() runs (or immediately, if old('tenant_type') was 3). */
@@ -68,11 +69,11 @@
             <div class="col-sm-12">
                 <div class="card tenant-create-card">
                     <div class="card-header tenant-create-header">
-                        <div><h1>Add New Tenant</h1><p>Complete the sections below. Saving signs the form as the property's assigned Field Officer.</p></div>
+                        <div><h1>Add New Tenant</h1><p>{{ $directorCanApprove ? 'Complete the sections below. Saving signs and approves the tenant and lease directly as Director.' : "Complete the sections below. Saving signs the form as the property's assigned Field Officer." }}</p></div>
                         <div class="tenant-create-actions">
                             <button type="submit" form="unitTenantForm" class="btn btn-primary btn-sm d-flex align-items-center" id="saveButton">
                                 <span class="spinner-border spinner-border-sm me-2 d-none" id="submitSpinner"></span>
-                                <span>Save and Sign</span>
+                                <span>{{ $directorCanApprove ? 'Save, Sign and Approve' : 'Save and Sign' }}</span>
                             </button>
                             <a href="{{ $client ? route('property.clients.show', $client->encrypted_id) : route('property.properties.index') }}" class="btn btn-light btn-sm d-flex align-items-center">
                                 <span class="ms-1">Back</span>
@@ -80,7 +81,9 @@
                         </div>
                     </div>
                     <div class="card-body">
-                        @if(auth()->check() && !app(\App\Services\TenantReviewService::class)->hasRole(auth()->user(), config('tenant_review.roles.field_officer')))
+                        @if($directorCanApprove)
+                        <div class="alert alert-info" role="status">As Director, you can save, sign and approve this tenant directly. The property's SLA must be approved. Your signature and approval will be recorded in the approval history.</div>
+                        @elseif(auth()->check() && !app(\App\Services\TenantReviewService::class)->hasRole(auth()->user(), config('tenant_review.roles.field_officer')))
                         <div class="alert alert-warning" role="status">Your current account does not have the Field Officer role. The property's assigned Field Officer must save and sign this form.</div>
                         @endif
                         <div class="tenant-error-summary" id="tenantFormError" role="alert" tabindex="-1" @if(!$errors->any() && !session('error')) hidden @endif>

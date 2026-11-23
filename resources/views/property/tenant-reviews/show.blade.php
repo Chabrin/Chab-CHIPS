@@ -15,7 +15,7 @@
     $stageLabels = array_column($steps, 'label', 'stage');
     $stageLabels['director_testing'] = 'Director (testing)';
     $stageLabels['director_override'] = 'Director';
-    $actionLabels = ['saved_and_signed' => 'Prepared and signed', 'corrected_and_signed' => 'Corrections signed', 'signed' => 'Signed', 'direct_approved' => 'Direct approval by Director', 'return' => 'Returned for correction', 'reject' => 'Rejected', 'reconciled' => 'Accounts reconciled'];
+    $actionLabels = ['saved_and_signed' => 'Prepared and signed', 'director_prepared_and_signed' => 'Prepared and signed by Director', 'corrected_and_signed' => 'Corrections signed', 'signed' => 'Signed', 'direct_approved' => 'Direct approval by Director', 'return' => 'Returned for correction', 'reject' => 'Rejected', 'reconciled' => 'Accounts reconciled'];
 @endphp
 <div class="page-body tenant-review"><div class="container-fluid">
     <a class="tr-back" href="{{ route('tenant-reviews.index') }}"><span class="material-symbols-outlined" aria-hidden="true">arrow_back</span>New Tenant Approvals</a>

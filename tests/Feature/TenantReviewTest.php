@@ -236,6 +236,151 @@ class TenantReviewTest extends TestCase
         return $this->user(5);
     }
 
+    private function preparingDirector(): User
+    {
+        $director = $this->director();
+        DB::table('cb_permission_role')->insert(['role_id' => 5, 'permission_id' => 2]);
+        return $director;
+    }
+
+    public function test_director_can_create_sign_and_approve_a_tenant_from_the_manual_form(): void
+    {
+        $director = $this->preparingDirector();
+        $unit = Unit::create(['property_id' => 1, 'unit_number' => 'DIRECTOR-1', 'unit_code' => 'TEST-DIRECTOR-1',
+            'rent_amount' => 35000, 'occupancy_status_id' => 31]);
+        $this->withoutMiddleware([\App\Http\Middleware\OneLogin::class, \App\Http\Middleware\EnsureStaffPasswordIsCurrent::class, \App\Http\Middleware\AccessChecker::class])->actingAs($director);
+        $response = $this->postJson(route('units.tenants.store'), [
+            'property_id' => 1, 'unit_id' => $unit->id, 'lease_start_date' => '2026-12-01', 'lease_years' => 1,
+            'frequency' => 'Monthly', 'tenant_type' => 3, 'company_name' => 'Director Created Tenant',
+            'mobile_number' => '+254712345678', 'registered_date' => '2026-11-23',
+        ]);
+        $response->assertOk()->assertJson(['success' => true]);
+        $review = TenantReview::sole();
+        $this->assertSame('approved', $review->stage);
+        $this->assertSame(5, (int) $review->prepared_by);
+        $this->assertSame(5, (int) $review->tenant->current_status_id);
+        $this->assertSame(5, (int) $review->lease->current_status_id);
+        $this->assertSame(['director_prepared_and_signed', 'direct_approved'], $review->events()->pluck('action')->all());
+        $this->assertSame(['director_override'], $review->events()->distinct()->pluck('stage')->all());
+        $this->assertSame(0, DB::table('sys_user_staff_links')->where('user_id', 5)->count());
+    }
+
+    public function test_director_can_submit_multiple_existing_unit_batches_and_approve_each_directly(): void
+    {
+        [$batches, $submitter, $unit, $parsed] = $this->existingUnitUpload();
+        $director = $this->preparingDirector();
+        $this->actingAs($director);
+        $this->app['env'] = 'production';
+        $batch = $batches->stage(Property::find(1), $parsed, 'director-existing.xlsx', 5, 'existing_units');
+        $this->assertSame(['submitted' => 1, 'failed' => 0], $submitter->submit($batch, 5));
+        $review = TenantReview::sole();
+        $this->assertSame('approved', $review->stage);
+        $this->assertSame(5, (int) $review->tenant->current_status_id);
+        $this->assertSame(5, (int) $review->lease->current_status_id);
+        $this->assertSame($unit->id, (int) $review->lease->unit_id);
+        $this->assertSame(26796.0, (float) $unit->fresh()->rent_amount);
+        $this->assertSame(['director_prepared_and_signed', 'direct_approved'], $review->events()->pluck('action')->all());
+
+        $nextUnit = Unit::create(['property_id' => 1, 'unit_number' => 'A3', 'unit_code' => 'TEST-A3',
+            'rent_amount' => 30000, 'occupancy_status_id' => 31]);
+        $parsed['units'][0]['unit_number'] = 'A3';
+        $parsed['individual'][0] = array_replace($parsed['individual'][0], [
+            'unit_number' => 'A3', 'names' => 'Second upload tenant', 'national_id' => 'UPLOAD-TEST-456',
+        ]);
+        $nextBatch = $batches->stage(Property::find(1), $parsed, 'director-existing.xlsx', 5, 'existing_units');
+        $this->assertNotSame($batch->id, $nextBatch->id);
+        $this->assertSame(['submitted' => 1, 'failed' => 0], $submitter->submit($nextBatch, 5));
+        $nextReview = TenantReview::where('id', '!=', $review->id)->sole();
+        $this->assertSame('approved', $nextReview->stage);
+        $this->assertSame($nextUnit->id, (int) $nextReview->lease->unit_id);
+        $this->assertSame(5, (int) $nextReview->tenant->current_status_id);
+        $this->assertSame(5, (int) $nextReview->lease->current_status_id);
+        $this->assertSame('submitted', $batch->fresh()->status);
+        $this->assertSame('submitted', $nextBatch->fresh()->status);
+        $this->assertCount(2, $batches->listFor(Property::find(1)));
+    }
+
+    public function test_director_save_with_unapproved_sla_rolls_back_review_and_signature(): void
+    {
+        $director = $this->preparingDirector();
+        ServiceAgreement::where('id', 1)->update(['current_status_id' => 1]);
+        try {
+            $this->reviews->register(Client::withoutGlobalScopes()->findOrFail(1), LeaseAgreement::findOrFail(1), $director);
+            $this->fail('An approved SLA is required for direct approval at creation.');
+        } catch (ValidationException $error) {
+            $this->assertStringContainsString('Approve the SLA first', $error->getMessage());
+        }
+        $this->assertSame(0, TenantReview::count());
+        $this->assertSame(0, \App\Models\TenantReviewEvent::count());
+        $this->assertSame(1, (int) Client::withoutGlobalScopes()->find(1)->current_status_id);
+    }
+
+    public function test_director_can_submit_multiple_new_unit_batches_with_and_without_tenants(): void
+    {
+        [, , , $parsed] = $this->existingUnitUpload();
+        $director = $this->preparingDirector();
+        $this->actingAs($director);
+        $this->app['env'] = 'production';
+        $model = new \App\Models\ConfirmationLog;
+        Schema::create($model->getTable(), function (Blueprint $table) use ($model) {
+            $table->id();
+            foreach ($model->getFillable() as $field) $table->text($field)->nullable();
+            $table->timestamps();
+        });
+        $lookups = \App\Services\UnitTenantUpload\UnitTenantUploadLookups::fromArray([
+            'unit_types' => ['Normal' => ['id' => 1, 'name' => 'Normal']],
+            'topologies' => ['1 Bedroom' => ['id' => 3, 'name' => '1 Bedroom']],
+        ]);
+        $batches = new \App\Services\UnitTenantUpload\UnitTenantUploadBatchService(
+            new \App\Services\UnitTenantUpload\UnitTenantUploadValidator($lookups), $lookups
+        );
+        $submitter = new \App\Services\UnitTenantUpload\UnitTenantSubmitService($batches, $lookups, app(\App\Services\ServiceAgreementApprovalService::class));
+        $unitData = ['row_no' => 2, 'unit_number' => 'NEW1', 'unit_type' => null, 'usage_type' => null,
+            'topology' => '1 Bedroom', 'rent_amount' => '35000', 'vat_able' => null,
+            'initial_water_reading' => '0', 'unit_category' => null];
+        $parsed['units'] = [$unitData, array_replace($unitData, ['row_no' => 3, 'unit_number' => 'NEW2'])];
+        $parsed['individual'][0]['unit_number'] = 'NEW1';
+        $batch = $batches->stage(Property::find(1), $parsed, 'director-new.xlsx', 5);
+        $result = $submitter->submit($batch, 5);
+        $this->assertSame(['submitted' => 2, 'failed' => 0], $result, $batch->units()->pluck('error')->toJson());
+        $units = Unit::whereIn('unit_number', ['NEW1', 'NEW2'])->get();
+        $this->assertCount(2, $units);
+        $this->assertSame([5, 5], $units->map(fn ($unit) => (int) $unit->current_status_id)->all());
+        $review = TenantReview::sole();
+        $this->assertSame('approved', $review->stage);
+        $this->assertSame(5, (int) $review->tenant->current_status_id);
+        $this->assertSame(5, (int) $review->lease->current_status_id);
+        $this->assertSame('NEW1', $review->lease->unit->unit_number);
+        $this->assertSame(['director_prepared_and_signed', 'direct_approved'], $review->events()->pluck('action')->all());
+        $this->assertSame([5, 5], \App\Models\ConfirmationLog::pluck('confirmed_by')->map(fn ($id) => (int) $id)->all());
+
+        $parsed['units'][0]['unit_number'] = 'NEW3';
+        $parsed['units'][1]['unit_number'] = 'NEW4';
+        $parsed['individual'][0] = array_replace($parsed['individual'][0], [
+            'unit_number' => 'NEW3', 'names' => 'Next batch tenant', 'national_id' => 'UPLOAD-TEST-456',
+        ]);
+        $nextBatch = $batches->stage(Property::find(1), $parsed, 'director-new.xlsx', 5);
+        $this->assertNotSame($batch->id, $nextBatch->id);
+        $this->assertSame(['submitted' => 2, 'failed' => 0], $submitter->submit($nextBatch, 5));
+        $this->assertSame(4, Unit::whereIn('unit_number', ['NEW1', 'NEW2', 'NEW3', 'NEW4'])->where('current_status_id', 5)->count());
+        $nextReview = TenantReview::where('id', '!=', $review->id)->sole();
+        $this->assertSame('approved', $nextReview->stage);
+        $this->assertSame(5, (int) $nextReview->tenant->current_status_id);
+        $this->assertSame(5, (int) $nextReview->lease->current_status_id);
+        $this->assertSame('NEW3', $nextReview->lease->unit->unit_number);
+        $this->assertSame('submitted', $batch->fresh()->status);
+        $this->assertSame('submitted', $nextBatch->fresh()->status);
+        $this->assertCount(2, $batches->listFor(Property::find(1)));
+    }
+
+    public function test_director_still_needs_create_tenants_permission_to_prepare_a_tenant(): void
+    {
+        $director = $this->director();
+        $this->expectException(ValidationException::class);
+        $this->expectExceptionMessage('create_tenants');
+        $this->reviews->assertPreparer(1, $director);
+    }
+
     public function test_director_can_view_and_approve_without_signing_the_intermediate_steps(): void
     {
         $review = $this->review();
