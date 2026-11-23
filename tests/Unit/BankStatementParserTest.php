@@ -80,6 +80,26 @@ class BankStatementParserTest extends TestCase
         $this->assertNull($parser->unitCode('KECYeUNL8Lvb 10-11-2026 0430263787755'));
     }
 
+    public function test_equity_unit_code_is_read_from_ref_num_first_then_tran_particular_then_tran_rmks(): void
+    {
+        $path = $this->sheet([
+            self::EQUITY_HEADERS,
+            [46336, 'S1', 7000, 'CREDIT', 46336, '56G-B9', '', '', '99X-1/Someone/10-11-2026', 'CASH'],
+            [46336, 'S2', 7000, 'CREDIT', 46336, '00KEyXHH7fZIeN', '', '', 'APP|375F-61/Rent/KEyXHH7fZIeN', 'CASH'],
+            [46336, 'S3', 7000, 'CREDIT', 46336, '', '170F-B05', '', 'Chq:009190 SOME LTD', 'CHEQUE'],
+            [46336, 'S4', 7000, 'CREDIT', 46336, '12F-B/S', '', '', 'no code here', 'CASH'],
+            [46336, 'S5', 7000, 'CREDIT', 46336, '00hzO6tCyp9G1r', '', '', 'NAME|UKD9T1SRB7 NAME 0430263787755', 'CASH'],
+        ]);
+
+        $lines = (new EquityStatementParser())->parse($path);
+
+        $this->assertSame('56G-B9', $lines[0]['unit_code'], 'REF_NUM wins over TRAN_PARTICULAR');
+        $this->assertSame('375F-61', $lines[1]['unit_code'], 'a bank reference in REF_NUM sends the search to TRAN_PARTICULAR');
+        $this->assertSame('170F-B05', $lines[2]['unit_code'], 'then to TRAN_RMKS');
+        $this->assertSame('12F-B/S', $lines[3]['unit_code'], 'a code with a slash in REF_NUM is read whole');
+        $this->assertNull($lines[4]['unit_code']);
+    }
+
     public function test_a_debit_line_is_skipped_and_unreadable_rows_are_invalid(): void
     {
         $path = $this->sheet([

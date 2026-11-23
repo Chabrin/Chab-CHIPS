@@ -178,8 +178,10 @@ class BankStatementFlowTest extends TestCase
      */
     private function equityFile(array $rows, string $name = 'nov.xlsx'): UploadedFile {
         $sheetRows = [self::HEADERS];
-        foreach ($rows as [$particular, $reference, $amount]) {
-            $sheetRows[] = [46336, 'S1', $amount, 'CREDIT', 46336, $reference, '', '', $particular, 'CASH'];
+        foreach ($rows as $row) {
+            [$particular, $reference, $amount] = $row;
+            $date = $row[3] ?? 46336;
+            $sheetRows[] = [$date, 'S1', $amount, 'CREDIT', $date, $reference, '', '', $particular, 'CASH'];
         }
 
         $book = new Spreadsheet();
@@ -411,6 +413,32 @@ class BankStatementFlowTest extends TestCase
         $lines = DB::table('cb_equity_statement_lines')->where('upload_id', $second)->orderBy('row_no')->get();
         $this->assertSame('Duplicate', $lines[0]->match_status);
         $this->assertSame('Paid', $lines[1]->match_status);
+    }
+
+    public function test_the_same_unit_paying_the_same_amount_next_month_is_not_a_duplicate_when_the_reference_is_the_unit_code(): void
+    {
+        $this->setConfirmerRole();
+        $this->unit('187G-8', ['Active']);
+        $uploads = app(BankStatementUploadService::class);
+        $confirm = app(BankStatementConfirmationService::class);
+
+        // REF_NUM is the unit code, so it repeats every month; 46336 is 10 Nov 2026 and 46366 is 10 Dec 2026
+        $first = $uploads->upload('equity', $this->equityFile([['187G-8/A', '187G-8', 7000, 46336]], 'nov.xlsx'), self::UPLOADER);
+        $confirm->confirm($first, self::CONFIRMER);
+        $this->assertSame('Paid', DB::table('cb_equity_statement_lines')->where('upload_id', $first)->value('match_status'));
+
+        // The next month, same unit, same amount: a new payment
+        $second = $uploads->upload('equity', $this->equityFile([['187G-8/A', '187G-8', 7000, 46366]], 'dec.xlsx'), self::UPLOADER);
+        $confirm->confirm($second, self::CONFIRMER);
+        $this->assertSame('Paid', DB::table('cb_equity_statement_lines')->where('upload_id', $second)->value('match_status'));
+
+        // The November transaction again in an overlapping file: a duplicate
+        $third = $uploads->upload('equity', $this->equityFile([['187G-8/A', '187G-8', 7000, 46336], ['187G-8/A', '187G-8', 9000, 46336]], 'nov-again.xlsx'), self::UPLOADER);
+        $confirm->confirm($third, self::CONFIRMER);
+        $lines = DB::table('cb_equity_statement_lines')->where('upload_id', $third)->orderBy('row_no')->get();
+        $this->assertSame('Duplicate', $lines[0]->match_status);
+        $this->assertSame('Paid', $lines[1]->match_status, 'a different amount is a different transaction');
+        $this->assertSame(3, DB::table('sys_pm_tenants_payments')->count());
     }
 
     public function test_a_failed_run_can_be_started_again_and_only_pending_lines_are_looked_at(): void

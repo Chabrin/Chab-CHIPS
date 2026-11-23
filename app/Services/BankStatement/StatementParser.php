@@ -215,7 +215,17 @@ abstract class StatementParser
     public function unitCodeCell(?string $cell): ?string {
         $code = strtoupper(trim((string) $cell));
 
-        return preg_match('/^\d+ ?[A-Z]+-[A-Z0-9][A-Z0-9 \/.\-]{0,28}$/', $code) ? $code : null;
+        return self::isUnitCodeCell($code) ? $code : null;
+    }
+
+    /**
+     * Whether a cell holds nothing but a unit code. A reference that is one repeats every month for the same unit, so it
+     * cannot identify a transaction on its own.
+     *
+     * @param string|null $cell
+     */
+    public static function isUnitCodeCell(?string $cell): bool {
+        return (bool) preg_match('/^\d+ ?[A-Z]+-[A-Z0-9][A-Z0-9 \/.\-]{0,28}$/', strtoupper(trim((string) $cell)));
     }
 
     /**

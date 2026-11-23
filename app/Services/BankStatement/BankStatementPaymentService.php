@@ -105,7 +105,11 @@ class BankStatementPaymentService
             $amount = round((float) $line->{$definition['amount']}, 2);
 
             // Checked again inside the transaction: another run or the payments screen may have recorded it since matching
-            if (DB::table('sys_pm_tenants_payments')->where('reference', $reference)->where('amount', $amount)->exists()) {
+            // A reference that is a unit code repeats every month, so for those the date has to match too
+            $recorded = DB::table('sys_pm_tenants_payments')->where('reference', $reference)->where('amount', $amount)
+                ->when(StatementParser::isUnitCodeCell($reference), fn ($query) => $query->whereDate('payment_date', $line->{$definition['date']}));
+
+            if ($recorded->exists()) {
                 DB::table($table)->where('id', $lineId)->update([
                     'match_status' => 'Duplicate',
                     'match_note' => 'This transaction was recorded as a payment while the statement was waiting.',

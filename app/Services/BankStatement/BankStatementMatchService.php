@@ -76,19 +76,19 @@ class BankStatementMatchService
         // A transaction is the reference together with the amount and, in a statement line, the date
         $seen = [];
         $matchedBefore = $references
-            ? DB::table($table)->whereIn($definition['ref'], $references)->where('match_status', 'Matched')->get([$definition['ref'] . ' as ref', $definition['amount'] . ' as amount'])
+            ? DB::table($table)->whereIn($definition['ref'], $references)->where('match_status', 'Matched')->get([$definition['ref'] . ' as ref', $definition['amount'] . ' as amount', $definition['date'] . ' as date'])
             : collect();
         foreach ($matchedBefore as $row) {
-            $seen[$this->transactionKey($row->ref, $row->amount)] = true;
+            $seen[$this->transactionKey($row->ref, $row->amount, $row->date)] = true;
         }
-        $paid = $references ? DB::table('sys_pm_tenants_payments')->whereIn('reference', $references)->get(['reference', 'amount']) : collect();
+        $paid = $references ? DB::table('sys_pm_tenants_payments')->whereIn('reference', $references)->get(['reference', 'amount', 'payment_date']) : collect();
         foreach ($paid as $row) {
-            $seen[$this->transactionKey($row->reference, $row->amount)] = true;
+            $seen[$this->transactionKey($row->reference, $row->amount, $row->payment_date)] = true;
         }
 
         foreach ($chunk as $line) {
             $reference = $line->{$definition['ref']};
-            $key = $this->transactionKey($reference, $line->{$definition['amount']});
+            $key = $this->transactionKey($reference, $line->{$definition['amount']}, $line->{$definition['date']});
             $result = ['match_status' => 'Unmatched', 'match_note' => null, 'unit_id' => null, 'lease_id' => null, 'tenant_id' => null, 'property_id' => null];
 
             if (isset($seen[$key])) {
@@ -123,12 +123,17 @@ class BankStatementMatchService
     }
 
     /**
-     * The identity of one bank transaction for the duplicate check.
+     * The identity of one bank transaction for the duplicate check: the reference and the amount. When the reference is
+     * a unit code (Equity puts it in REF_NUM) it is the same every month, so the date is part of the identity too, or
+     * the same tenant paying the same amount next month would be refused as a duplicate.
      *
      * @param string|null $reference
      * @param mixed $amount
+     * @param mixed $date the transaction date, only used when the reference is a unit code
      */
-    private function transactionKey(?string $reference, $amount): string {
-        return strtoupper(trim((string) $reference)) . '|' . number_format((float) $amount, 2, '.', '');
+    private function transactionKey(?string $reference, $amount, $date = null): string {
+        $key = strtoupper(trim((string) $reference)) . '|' . number_format((float) $amount, 2, '.', '');
+
+        return StatementParser::isUnitCodeCell($reference) ? $key . '|' . substr((string) $date, 0, 10) : $key;
     }
 }
