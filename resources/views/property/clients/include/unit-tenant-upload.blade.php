@@ -1,4 +1,8 @@
 {{-- Units & tenants bulk upload sub-tab: download the template, upload, pick a batch to load its rows below, click a row for details. --}}
+@php($directorCanApproveUpload = auth()->check() && app(\App\Services\TenantReviewService::class)->directorApprovalAccess(auth()->user()))
+@if($directorCanApproveUpload)
+<div class="alert alert-info" role="status">Submitting as Director signs and approves the uploaded tenants and leases directly. New units are approved under an approved SLA. Your decisions are recorded in approval history.</div>
+@endif
 <div class="d-flex justify-content-between align-items-center mb-3">
     <div>
         <label for="utuMode" class="form-label">Upload mode</label>
@@ -17,6 +21,8 @@
         </button>
     </div>
 </div>
+
+<p class="small text-muted">You can upload additional batches for this property at any time. Each file creates a separate batch. Include only the new units or tenants you want to add.</p>
 
 <div class="table-responsive custom-scrollbar">
     <table id="utuBatchesTable" class="display" style="width:100%;">
@@ -42,7 +48,7 @@
         <div class="d-flex gap-2">
             <button type="button" class="btn btn-outline-danger btn-sm" id="utuDeleteBatchBtn">Delete Batch</button>
             <button type="button" class="btn btn-primary btn-sm" id="utuSubmitBatchBtn">
-                <span class="spinner-border spinner-border-sm me-2 d-none" id="utuSubmitSpinner"></span>Submit Batch
+                <span class="spinner-border spinner-border-sm me-2 d-none" id="utuSubmitSpinner"></span>{{ $directorCanApproveUpload ? 'Submit, Sign and Approve' : 'Submit Batch' }}
             </button>
         </div>
     </div>
@@ -115,6 +121,7 @@
     $(document).ready(function() {
         var utuBase = "{{ url('property/unit-tenant-upload') }}";
         var utuToken = '{{ csrf_token() }}';
+        var utuDirectorApproval = @json($directorCanApproveUpload);
         var utuCurrent = null;
         var utuProperty = null;
         var utuEdit = null;
@@ -412,7 +419,10 @@
 
 
         $('#utuSubmitBatchBtn').on('click', function() {
-            Swal.fire({title: 'Submit this batch?', text: utuCurrent.batch.mode === 'existing_units' ? 'Ready rows create pending tenants and leases for existing units and send them for approval. Existing rent and VAT settings are kept. Rows that fail stay staged.' : 'Ready rows create new units, tenants and leases using the entered dates. Rows that fail stay staged.', icon: 'question', showCancelButton: true, confirmButtonColor: '#3598db', confirmButtonText: 'Submit'}).then(function(res) {
+            var submitMessage = utuDirectorApproval
+                ? 'Ready rows are saved, signed and approved directly as Director under an approved SLA. Existing unit rent and VAT are kept. Rows that fail stay staged.'
+                : (utuCurrent.batch.mode === 'existing_units' ? 'Ready rows create pending tenants and leases for existing units and send them for approval. Existing rent and VAT settings are kept. Rows that fail stay staged.' : 'Ready rows create new units, tenants and leases using the entered dates. Rows that fail stay staged.');
+            Swal.fire({title: utuDirectorApproval ? 'Submit and approve this batch?' : 'Submit this batch?', text: submitMessage, icon: 'question', showCancelButton: true, confirmButtonColor: '#3598db', confirmButtonText: utuDirectorApproval ? 'Submit and Approve' : 'Submit'}).then(function(res) {
                 if (!res.isConfirmed) { return; }
                 var bid = utuCurrent.batch.id;
                 $('#utuSubmitSpinner').removeClass('d-none');

@@ -14,6 +14,17 @@ use Illuminate\Validation\ValidationException;
 
 class TenantReviewService
 {
+    public function directorApprovalAccess(User $user): bool
+    {
+        return $this->hasRole($user, 'directors')
+            && TenantReviewAccess::allows($user, 'view_tenant_onboarding');
+    }
+
+    public function canDirectApprove(TenantReview $review, User $user): bool
+    {
+        return $this->directorApprovalAccess($user) && $review->currentStep() !== null;
+    }
+
     public function hasRole(User $user, array|string $names): bool
     {
         return !$user->block && DB::table('cb_role_user as ru')
@@ -60,19 +71,27 @@ class TenantReviewService
     public function canView(TenantReview $review, User $user): bool
     {
         if (!TenantReviewAccess::allows($user, 'view_tenant_onboarding')) return false;
-        if ((int) $review->prepared_by === (int) $user->id || $this->accounts($user)) return true;
+        if ((int) $review->prepared_by === (int) $user->id || $this->accounts($user) || $this->directorApprovalAccess($user)) return true;
         return collect(array_slice($review->steps(), 1))->contains(fn ($step) => $this->matchesStep($review, $user, $step));
     }
 
     public function register(Client $tenant, LeaseAgreement $lease, User $user): TenantReview
     {
-        $this->assertPreparer((int) $lease->property_id, $user);
-        $version = app(TenantReviewWorkflowService::class)->current();
-        $review = TenantReview::create(['tenant_id' => $tenant->id, 'lease_id' => $lease->id,
-            'prepared_by' => $user->id, 'stage' => $version->steps[1]['stage'], 'revision' => 1,
-            'workflow_version_id' => $version->id]);
-        $this->record($review, $user, 'saved_and_signed', null, 'field_officer');
-        return $review;
+        return DB::transaction(function () use ($tenant, $lease, $user) {
+            $this->assertPreparer((int) $lease->property_id, $user);
+            $version = app(TenantReviewWorkflowService::class)->current();
+            $review = TenantReview::create(['tenant_id' => $tenant->id, 'lease_id' => $lease->id,
+                'prepared_by' => $user->id, 'stage' => $version->steps[1]['stage'], 'revision' => 1,
+                'workflow_version_id' => $version->id]);
+            if ($this->directorApprovalAccess($user)) {
+                $this->record($review, $user, 'director_prepared_and_signed', null, 'director_override', false);
+                $this->decide($review, $user, $review->revision, $review->stage, 'direct_approve',
+                    'Created, signed and approved directly by Director.');
+                return $review->refresh();
+            }
+            $this->record($review, $user, 'saved_and_signed', null, 'field_officer');
+            return $review;
+        });
     }
 
     public function assertPreparer(int $propertyId, User $user): void
@@ -88,6 +107,7 @@ class TenantReviewService
         }
         app(TenantReviewWorkflowService::class)->current();
         $property = Property::withoutGlobalScopes()->findOrFail($propertyId);
+        if ($this->directorApprovalAccess($user)) return;
         if (!$this->hasRole($user, config('tenant_review.roles.field_officer'))
             || !DB::table('sys_user_staff_links')->where('user_id', $user->id)->where('staff_id', $property->field_officer_id)->exists()) {
             throw ValidationException::withMessages(['property_id' =>
@@ -102,11 +122,24 @@ class TenantReviewService
             if ($review->revision !== $revision || $review->stage !== $stage) {
                 throw ValidationException::withMessages(['review' => 'This review changed. Refresh before deciding.']);
             }
-            abort_unless($this->reviewer($review, $user), 403);
+            $direct = $action === 'direct_approve';
+            abort_unless($direct ? $this->canDirectApprove($review, $user) : $this->reviewer($review, $user), 403);
             $lease = LeaseAgreement::withoutGlobalScopes()->lockForUpdate()->findOrFail($review->lease_id);
             $tenant = Client::withoutGlobalScopes()->lockForUpdate()->findOrFail($review->tenant_id);
             if ((int) $lease->current_status_id !== 1 || (int) $tenant->current_status_id !== 1) {
                 throw ValidationException::withMessages(['review' => 'The tenant and lease must both be pending.']);
+            }
+            if ($direct) {
+                if (!trim((string) $reason)) {
+                    throw ValidationException::withMessages(['reason' => 'Record a reason for the direct Director approval.']);
+                }
+                $reasonBlocked = $lease->approvalBlockReason();
+                if ($reasonBlocked) throw ValidationException::withMessages(['review' => $reasonBlocked]);
+                $lease->update(['current_status_id' => 5]);
+                $tenant->update(['current_status_id' => 5]);
+                $review->update(['stage' => 'approved']);
+                $this->record($review, $user, 'direct_approved', trim($reason), 'director_override');
+                return;
             }
             if (in_array($action, ['return', 'reject'], true) && !trim((string) $reason)) {
                 throw ValidationException::withMessages(['reason' => 'Give the Field Officer a reason.']);
@@ -159,13 +192,14 @@ class TenantReviewService
         $this->record($review, $user, 'corrected_and_signed', null, 'field_officer');
     }
 
-    private function record(TenantReview $review, User $user, string $action, ?string $reason, string $stage): void
+    private function record(TenantReview $review, User $user, string $action, ?string $reason, string $stage, bool $notify = true): void
     {
         $review->unsetRelation('tenant')->unsetRelation('lease');
         $review->events()->create(['actor_id' => $user->id, 'revision' => $review->revision,
             'stage' => $stage, 'action' => $action, 'reason' => $reason,
             'snapshot' => ['tenant' => $review->tenant->getAttributes(), 'lease' => $review->lease->getAttributes()],
             'created_at' => now()]);
+        if (!$notify) return;
         $reviewId = $review->id;
         DB::afterCommit(function () use ($reviewId) {
             try {

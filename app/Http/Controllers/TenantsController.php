@@ -380,7 +380,9 @@ class TenantsController extends Controller
                 return response()->json(['success' => true, 'redirect' => route('tenant-reviews.show', $review)]);
             }
             return redirect()->route('tenant-reviews.show', $review)
-                ->with('success', 'Tenant saved and signed. '.$review->stageLabel().'.');
+                ->with('success', $review->stage === 'approved'
+                    ? 'Tenant and lease saved, signed and approved directly by Director.'
+                    : 'Tenant saved and signed. '.$review->stageLabel().'.');
         } catch (\Illuminate\Validation\ValidationException $e) {
             DB::rollBack();
             if ($request->expectsJson()) {
