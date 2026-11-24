@@ -1,12 +1,16 @@
 <div class="return-statement">
     @php($settlementAmounts = array_column($settlementRows, 'amount', 'key'))
+    @php($columns = $columns ?? \App\Services\ReturnStatementService::COLUMNS)
+    @php($isRentPart = ($part ?? 'all') === 'rent')
     <section class="border rounded p-3 mb-3" aria-labelledby="return-overview-title">
         <h6 class="mb-2" id="return-overview-title">Return at a glance</h6>
         <dl class="row g-2 mb-0">
+            @unless($isRentPart)
             <div class="col-6 col-lg-3">
                 <dt class="text-muted fw-normal">Service charges</dt>
                 <dd class="fw-semibold mb-0">{{ number_format($totals['service_charge'], 2) }}</dd>
             </div>
+            @endunless
             <div class="col-6 col-lg-3">
                 <dt class="text-muted fw-normal">Commission ({{ number_format($return->commission_rate ?? 0, 2) }}%)</dt>
                 <dd class="fw-semibold mb-0">{{ number_format($summary['commission'], 2) }}</dd>
@@ -25,18 +29,18 @@
         <table class="table table-sm align-middle mb-0 statement-table">
             <colgroup>
                 <col style="width:50px"><col style="width:150px">
-                @foreach(range(1, 10) as $column)<col style="width:90px">@endforeach
+                @foreach(range(1, count($columns) - 3) as $column)<col style="width:90px">@endforeach
                 <col style="width:220px">
             </colgroup>
             <thead><tr>
-                @foreach(\App\Services\ReturnStatementService::COLUMNS as $key => $label)
+                @foreach($columns as $key => $label)
                 <th class="{{ !in_array($key, ['unit_code','tenant_name','remarks']) ? 'text-end' : '' }}">{{ $label }}</th>
                 @endforeach
             </tr></thead>
             <tbody>
                 @forelse($tenantRows as $row)
                 <tr>
-                    @foreach(\App\Services\ReturnStatementService::COLUMNS as $key => $label)
+                    @foreach($columns as $key => $label)
                         @if($key === 'remarks')
                         <td>
                             @if($row['remarks_line_id'])
@@ -59,12 +63,12 @@
                     @endforeach
                 </tr>
                 @empty
-                <tr><td colspan="13" class="text-center text-muted py-4">No tenant lines found for this return.</td></tr>
+                <tr><td colspan="{{ count($columns) }}" class="text-center text-muted py-4">No tenant lines found for this return.</td></tr>
                 @endforelse
             </tbody>
             @if(count($tenantRows))
             <tfoot><tr>
-                @foreach(\App\Services\ReturnStatementService::COLUMNS as $key => $label)
+                @foreach($columns as $key => $label)
                 <td class="{{ isset($totals[$key]) ? 'text-end statement-amount' : '' }}">{{ $key === 'tenant_name' ? 'TOTALS' : (isset($totals[$key]) ? number_format($totals[$key], 2) : '') }}</td>
                 @endforeach
             </tr></tfoot>

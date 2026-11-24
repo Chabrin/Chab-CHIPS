@@ -17,6 +17,10 @@ use Illuminate\Support\Facades\Log;
  *
  * The return code is R + a sequence digit (2 to 9) + period + landlord + property, as in the legacy mini returns: the
  * main return is R1, the first mini return of the month R2, the next R3, and so on.
+ *
+ * A client set to "separate return" has their utilities (anything that is not rent, arrears or a deposit) on a utility
+ * return of their own. One press then makes up to two mini returns with the same digit: the rent mini (R2) for late
+ * rent and the utility mini (RU2) for late bills, each only when it has something in it.
  */
 class MiniReturnService
 {
@@ -39,8 +43,8 @@ class MiniReturnService
     }
 
     /**
-     * The sequence digit of the next mini return of a property and period: the first of 2 to 9 whose return code is
-     * not used yet, or null when all eight are.
+     * The sequence digit of the next mini return of a property and period: the first of 2 to 9 whose rent and utility return
+     * codes are both unused, or null when all eight are used.
      *
      * @param array $usedCodes the return codes already used by mini returns of the property and period
      * @param string $period YYYYMM
@@ -49,7 +53,8 @@ class MiniReturnService
      */
     public static function nextSequence(array $usedCodes, string $period, string $landlordCode, string $propertyCode): ?int {
         for ($sequence = self::FIRST_SEQUENCE; $sequence <= self::LAST_SEQUENCE; $sequence++) {
-            if (!in_array(self::returnCode($sequence, $period, $landlordCode, $propertyCode), $usedCodes, true)) {
+            if (!in_array(self::returnCode($sequence, $period, $landlordCode, $propertyCode), $usedCodes, true)
+                && !in_array(self::utilityReturnCode($sequence, $period, $landlordCode, $propertyCode), $usedCodes, true)) {
                 return $sequence;
             }
         }
@@ -70,6 +75,18 @@ class MiniReturnService
     }
 
     /**
+     * The return code of a utility return: RU, the sequence digit, the period, the landlord and the property.
+     *
+     * @param int $sequence 1 for the main utility return, 2 to 9 for a utility mini return
+     * @param string $period YYYYMM
+     * @param string $landlordCode reference number of the landlord
+     * @param string $propertyCode reference number of the property
+     */
+    public static function utilityReturnCode(int $sequence, string $period, string $landlordCode, string $propertyCode): string {
+        return 'RU' . $sequence . $period . $landlordCode . $propertyCode;
+    }
+
+    /**
      * Generate a mini return for a property and month, in one database transaction, as a draft that is forwarded to the manager like any return. A mini
      * return of the same property and month that is not approved yet is replaced, so the new one carries everything
      * still uncollected by any other return.
@@ -78,7 +95,7 @@ class MiniReturnService
      * @param string $returnsMonth YYYY-MM
      * @param int $userId the user generating it
      * @param string|null $ipAddress for the approval log
-     * @return array return_code, lines (lines inserted before the commission line) and net_balance
+     * @return array return_code (the rent mini, else the utility mini), return_codes (every mini made), lines (lines inserted before the commission line) and net_balance (of all of them)
      * @throws MiniReturnException when the property is unknown, the month's main return is not approved yet, nothing is left to pass on, or all mini return codes of the month are used
      */
     public function generate(int $propertyId, string $returnsMonth, int $userId, ?string $ipAddress): array {
@@ -115,6 +132,7 @@ class MiniReturnService
                 throw new MiniReturnException("{$property->property_name} already has the most mini returns a month can hold ({$this->minis()}) for {$monthLabel}.");
             }
             $code = self::returnCode($sequence, $period, $landlordCode, $property->reference_number);
+            $utilityCode = self::utilityReturnCode($sequence, $period, $landlordCode, $property->reference_number);
 
             $transactionDate = date('d-M-Y', strtotime($returnsMonth . '-05'));
             $preparedBy = DB::table('josya_users')->where('id', $userId)->value('name') ?? 'System';
@@ -124,37 +142,50 @@ class MiniReturnService
                 throw new MiniReturnException("Nothing has come in for {$property->property_name} that is not already on a return, so there is nothing for a mini return.");
             }
 
-            $this->insertAdvancePaymentLines($period, $transactionDate, $userId, $year, $month, (int) $property->id, $code);
-            $this->insertCommissionLines($period, $transactionDate, $userId, (int) $property->id, $code);
-            $this->insertMainReturnSummariesLegacy($period, $year, $month, $monthName, $preparedBy, (int) $property->id, 'MINIRETURN', $code);
+            // The lines went on the rent mini (R), the utility mini (RU), or both, depending on what came in and on the client's setting
+            $codes = DB::table('cb_returns_clients')
+                ->where('return_period', (int) $period)
+                ->where('property_id', $property->id)
+                ->whereIn('return_code', [$code, $utilityCode])
+                ->distinct()
+                ->pluck('return_code')
+                ->all();
 
-            $netBalance = (float) DB::table('cb_returns_summary')->where('return_code', $code)->value('net_balance');
-            Log::info('MiniReturnService: mini return generated', ['return_code' => $code, 'lines' => $lines, 'net_balance' => $netBalance, 'user_id' => $userId]);
+            // Advances and commission belong to the rent mini only
+            if (in_array($code, $codes, true)) {
+                $this->insertAdvancePaymentLines($period, $transactionDate, $userId, $year, $month, (int) $property->id, $code);
+                $this->insertCommissionLines($period, $transactionDate, $userId, (int) $property->id, $code);
+            }
+            $this->insertMainReturnSummariesLegacy($period, $year, $month, $monthName, $preparedBy, (int) $property->id, 'MINIRETURN', $codes);
 
-            return ['return_code' => $code, 'lines' => $lines, 'net_balance' => $netBalance];
+            $netBalance = (float) DB::table('cb_returns_summary')->whereIn('return_code', $codes)->sum('net_balance');
+            Log::info('MiniReturnService: mini return generated', ['return_codes' => $codes, 'lines' => $lines, 'net_balance' => $netBalance, 'user_id' => $userId]);
+
+            // return_code is the rent mini when there is one, else the utility mini; return_codes lists every return made
+            return ['return_code' => in_array($code, $codes, true) ? $code : $utilityCode, 'return_codes' => $codes, 'lines' => $lines, 'net_balance' => $netBalance];
         });
     }
 
     /**
-     * Whether the main return of a property and period is approved, either by itself or through the master return it
-     * was merged into.
+     * Whether the month's return of a property is approved, either by itself or through the merged return it was merged
+     * into. A client with a utility return has two (rent and utility): a mini return waits for both.
      *
      * @param string $period YYYYMM
      * @param string $propertyCode reference number of the property
      */
     protected function mainReturnApproved(string $period, string $propertyCode): bool {
-        return DB::table('cb_returns_summary as rs')
+        $monthly = DB::table('cb_returns_summary as rs')
             ->where('rs.return_period', $period)
             ->where('rs.property_code', $propertyCode)
-            ->where('rs.return_type', 'MAINRETURN')
-            ->where(function ($query) {
-                $query->where('rs.approved_status', 1)->orWhereExists(function ($master) {
-                    $master->select(DB::raw(1))->from('cb_returns_summary as m')
-                        ->whereColumn('m.return_code', 'rs.parent_return_code')
-                        ->where('m.approved_status', 1);
-                });
-            })
-            ->exists();
+            ->whereIn('rs.return_type', ['MAINRETURN', 'UTILITYRETURN']);
+
+        $approved = fn ($query) => $query->where('rs.approved_status', 1)->orWhereExists(function ($master) {
+            $master->select(DB::raw(1))->from('cb_returns_summary as m')
+                ->whereColumn('m.return_code', 'rs.parent_return_code')
+                ->where('m.approved_status', 1);
+        });
+
+        return (clone $monthly)->exists() && !(clone $monthly)->whereNot($approved)->exists();
     }
 
     /**

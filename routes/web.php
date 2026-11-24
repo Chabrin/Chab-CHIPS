@@ -884,6 +884,7 @@ Route::middleware('throttle:5,1')->group(function () {
     Route::get('/property/clients/{encryptedId}/returns-config', [App\Http\Controllers\ClientsController::class, 'getReturnsConfig'])->name('property.clients.returns-config');
     Route::get('/property/clients/{encryptedId}/returns-config/options', [App\Http\Controllers\ClientsController::class, 'getReturnsConfigOptions'])->name('property.clients.returns-config.options');
     Route::get('/property/clients/{encryptedId}/returns-config/{batchId}', [App\Http\Controllers\ClientsController::class, 'getReturnsConfigBatch'])->name('property.clients.returns-config.show');
+    Route::post('/property/clients/{encryptedId}/returns-config/utility-returns', [App\Http\Controllers\ClientsController::class, 'saveUtilityReturns'])->name('property.clients.returns-config.utility-returns');
     Route::post('/property/clients/{encryptedId}/returns-config', [App\Http\Controllers\ClientsController::class, 'storeReturnsConfig'])->name('property.clients.returns-config.store');
     Route::put('/property/clients/{encryptedId}/returns-config/{batchId}', [App\Http\Controllers\ClientsController::class, 'updateReturnsConfig'])->name('property.clients.returns-config.update');
     Route::delete('/property/clients/{encryptedId}/returns-config/{batchId}', [App\Http\Controllers\ClientsController::class, 'deleteReturnsConfig'])->name('property.clients.returns-config.delete');

@@ -1175,6 +1175,29 @@ COPY PERMISSIONS (paste when re-enabling checks):
 
                             <!-- Returns Config Tab -->
                             <div class="tab-pane fade" id="returns-config" role="tabpanel" aria-labelledby="returns-config-tab">
+                                <div class="card border-0 shadow-sm mb-3">
+                                    <div class="card-body">
+                                        <h6 class="mb-1">
+                                            <span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">water_drop</span>
+                                            Utilities on the return
+                                        </h6>
+                                        <small class="text-muted d-block mb-2">Rent, rent arrears and deposits are rent. Service charge, water and electricity bills and every other item are utilities. Applies to all of this client's properties.</small>
+                                        <div id="utilityReturnsOptions">
+                                            <div class="form-check mb-1">
+                                                <input class="form-check-input" type="radio" name="utility_returns" id="utilityReturnsWithRent" value="with_rent" checked>
+                                                <label class="form-check-label" for="utilityReturnsWithRent"><strong>Rent</strong> - one return and one report, utilities inside it</label>
+                                            </div>
+                                            <div class="form-check mb-1">
+                                                <input class="form-check-input" type="radio" name="utility_returns" id="utilityReturnsSeparateReport" value="separate_report">
+                                                <label class="form-check-label" for="utilityReturnsSeparateReport"><strong>Separate report</strong> - one return and one payment, with a rent report and a utility report</label>
+                                            </div>
+                                            <div class="form-check mb-1">
+                                                <input class="form-check-input" type="radio" name="utility_returns" id="utilityReturnsSeparateReturn" value="separate_return">
+                                                <label class="form-check-label" for="utilityReturnsSeparateReturn"><strong>Separate return</strong> - a rent return and a utility return, each paid on its own. Applies to returns generated from now on; an approved month stays as it was.</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                                 <div class="card border-0 shadow-sm">
                                     <div class="card-body">
                                         <div class="row g-3">
@@ -4011,6 +4034,27 @@ COPY PERMISSIONS (paste when re-enabling checks):
             });
         }
 
+        $(document).on('change', '#utilityReturnsOptions input[name="utility_returns"]', function() {
+            var $options = $('#utilityReturnsOptions input[name="utility_returns"]');
+            $options.prop('disabled', true);
+            $.ajax({
+                url: "{{ route('property.clients.returns-config.utility-returns', $client->encrypted_id) }}",
+                type: 'POST',
+                data: { _token: "{{ csrf_token() }}", utility_returns: $(this).val() },
+                dataType: 'json',
+                success: function(response) {
+                    toastr.success(response.message || 'Utility returns setting saved.');
+                },
+                error: function(xhr) {
+                    toastr.error((xhr.responseJSON && (xhr.responseJSON.error || xhr.responseJSON.message)) || 'Failed to save the utility returns setting.');
+                    loadReturnsConfig();
+                },
+                complete: function() {
+                    $options.prop('disabled', false);
+                }
+            });
+        });
+
         function loadReturnsConfig() {
             $.ajax({
                 url: "{{ route('property.clients.returns-config', $client->encrypted_id) }}",
@@ -4018,6 +4062,7 @@ COPY PERMISSIONS (paste when re-enabling checks):
                 dataType: 'json',
                 success: function(response) {
                     returnsConfigBatches = response.data || [];
+                    $('#utilityReturnsOptions input[name="utility_returns"][value="' + (response.utility_returns || 'with_rent') + '"]').prop('checked', true);
                     loadReturnsConfigOptions();
                     renderReturnsBatchCards();
                 },

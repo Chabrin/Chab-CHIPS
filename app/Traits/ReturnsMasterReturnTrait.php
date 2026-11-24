@@ -48,7 +48,25 @@ trait ReturnsMasterReturnTrait
         int $returnYear,
         int $returnMonth
     ): int {
-        $batches = $this->collectMasterBatchAggregates($returnPeriod);
+        // The rent returns of a merge batch are merged into one payment; so are the utility returns of a client who has
+        // them (an RU1 return per property), into a second, utility payment.
+        return $this->generateMasterReturnsOfKind(false, $returnPeriod, $transactionDate, $generatedBy, $returnYear, $returnMonth)
+            + $this->generateMasterReturnsOfKind(true, $returnPeriod, $transactionDate, $generatedBy, $returnYear, $returnMonth);
+    }
+
+    /**
+     * Generate the MASTERRETURNs of one kind for all active merge batches: the merged rent returns, or the merged
+     * utility returns.
+     *
+     * @param bool $utility true to merge the utility returns (UTILITYRETURN), false to merge the main returns
+     * @param string $returnPeriod YYYYMM
+     * @param string $transactionDate
+     * @param int $generatedBy
+     * @param int $returnYear
+     * @param int $returnMonth
+     */
+    protected function generateMasterReturnsOfKind(bool $utility, string $returnPeriod, string $transactionDate, int $generatedBy, int $returnYear, int $returnMonth): int {
+        $batches = $this->collectMasterBatchAggregates($returnPeriod, $utility);
 
         if (empty($batches)) {
             return 0;
@@ -71,8 +89,9 @@ trait ReturnsMasterReturnTrait
             }
 
             // A landlord with two batches gets two merged returns; the second one's code ends -2 so the two never collide
-            $usedCodes = DB::table('cb_returns_summary')->where('return_code', 'like', 'R1' . $returnPeriod . $landlordCode . '%')->pluck('return_code')->all();
-            $masterReturnCode = MergedReturnService::masterCode($returnPeriod, $landlordCode, $usedCodes);
+            $codePrefix = $utility ? 'RU1' : 'R1';
+            $usedCodes = DB::table('cb_returns_summary')->where('return_code', 'like', $codePrefix . $returnPeriod . $landlordCode . '%')->pluck('return_code')->all();
+            $masterReturnCode = MergedReturnService::masterCode($returnPeriod, $landlordCode, $usedCodes, $codePrefix);
 
             // Master totals
             $childNetSum   = (float) $batch->child_net_amount_sum;
@@ -80,7 +99,8 @@ trait ReturnsMasterReturnTrait
             $childCommSum  = (float) $batch->child_commission_sum;
 
             // The landlord-level debits (no property) this merged return takes, up to what the property returns pay
-            $deductionRows = $this->pickMasterDeductionRows((int) $batch->batch_client_id, $returnYear, $returnMonth, $childNetSum);
+            // Deductions come off the rent payment only: the utility payment carries none
+            $deductionRows = $utility ? [] : $this->pickMasterDeductionRows((int) $batch->batch_client_id, $returnYear, $returnMonth, $childNetSum);
             $deductionsTotal = round((float) array_sum(array_column($deductionRows, 'debit_amount')), 2);
 
             $masterNetAmount = round($childNetSum - $deductionsTotal, 2);
@@ -89,7 +109,7 @@ trait ReturnsMasterReturnTrait
                 'SELECT COALESCE(MAX(return_id), 0) + 1 AS next_id FROM cb_returns_summary'
             )->next_id;
 
-            $description = trim(($batch->landlord_name ?? '') . "-{$monthName}-{$returnYear}-MASTER RETURN");
+            $description = trim(($batch->landlord_name ?? '') . "-{$monthName}-{$returnYear}-MASTER RETURN" . ($utility ? ' - Utilities' : ''));
 
             DB::insert("
                 INSERT INTO cb_returns_summary (
@@ -187,9 +207,10 @@ trait ReturnsMasterReturnTrait
 
     /**
      * Pull aggregated child summaries grouped by merge batch for the period.
-     * Skips any batch that resolves to a single MAINRETURN (nothing to merge).
+     * Skips any batch that resolves to a single MAINRETURN (nothing to merge). With $utility the children are the
+     * batch's utility returns (UTILITYRETURN) instead of its main returns.
      */
-    protected function collectMasterBatchAggregates(string $returnPeriod): array
+    protected function collectMasterBatchAggregates(string $returnPeriod, bool $utility = false): array
     {
         return DB::select("
             WITH child_returns AS (
@@ -213,7 +234,7 @@ trait ReturnsMasterReturnTrait
                 JOIN sys_pm_properties p ON p.id = mbi.property_id
                 JOIN cb_returns_summary rs ON rs.property_code = p.reference_number
                                            AND rs.return_period = ?
-                                           AND rs.return_type   = 'MAINRETURN'
+                                           AND rs.return_type   = ?
                                            AND COALESCE(rs.is_merged, FALSE) = FALSE
             )
             SELECT
@@ -238,7 +259,7 @@ trait ReturnsMasterReturnTrait
             GROUP BY cr.batch_id, cr.batch_code, cr.batch_name, cr.batch_client_id, cl.reference_number, cl.names
             HAVING COUNT(*) > 1
             ORDER BY cr.batch_id
-        ", [$returnPeriod]);
+        ", [$returnPeriod, $utility ? 'UTILITYRETURN' : 'MAINRETURN']);
     }
 
     /**
@@ -291,7 +312,7 @@ trait ReturnsMasterReturnTrait
     }
 
     /**
-     * Insert one NETSUM (CR) row per child MAINRETURN onto the master.
+     * Insert one NETSUM (CR) row per child return (main, or utility for a merged utility return) onto the master.
      * Each row carries the child's net_amount, total_debit, total_credit
      * for traceability and downstream rendering.
      */
@@ -348,7 +369,7 @@ trait ReturnsMasterReturnTrait
             LEFT JOIN sys_pm_properties p ON p.reference_number = rs.property_code
             WHERE rs.return_code IN ({$placeholders})
               AND rs.return_period = ?
-              AND rs.return_type   = 'MAINRETURN'
+              AND rs.return_type   IN ('MAINRETURN', 'UTILITYRETURN')
             ORDER BY rs.return_code
         ", array_merge(
             [$masterReturnCode, $returnPeriod, $transactionDate, $masterReturnId, $userId],

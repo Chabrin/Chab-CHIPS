@@ -9,6 +9,7 @@ use App\Services\ErrorDispatcher;
 use App\Services\ReturnApprovalWorkflowService;
 use App\Services\MiniReturnService;
 use App\Services\ReturnStatementService;
+use App\Services\UtilityReturnsService;
 use App\Exports\ReturnStatementExport;
 use App\Exceptions\ReturnApprovalException;
 use App\Exceptions\MiniReturnException;
@@ -46,16 +47,18 @@ class ClientReturnsController extends Controller
     protected MiniReturnService $miniReturns;
     protected ReturnStatementService $statements;
     protected ReturnStatementExport $statementExport;
+    protected UtilityReturnsService $utilityReturns;
 
     /**
      * Inject the service that decides who approves a return, the one that generates mini returns, and the statement
      * figures and Excel export.
      */
-    public function __construct(ReturnApprovalWorkflowService $returnApprovals, MiniReturnService $miniReturns, ReturnStatementService $statements, ReturnStatementExport $statementExport) {
+    public function __construct(ReturnApprovalWorkflowService $returnApprovals, MiniReturnService $miniReturns, ReturnStatementService $statements, ReturnStatementExport $statementExport, UtilityReturnsService $utilityReturns) {
         $this->returnApprovals = $returnApprovals;
         $this->miniReturns = $miniReturns;
         $this->statements = $statements;
         $this->statementExport = $statementExport;
+        $this->utilityReturns = $utilityReturns;
     }
 
     /**
@@ -366,7 +369,7 @@ class ClientReturnsController extends Controller
 
             // Same child lookup as the master return PDF: the listed return codes, else the landlord's main returns of the period
             $children = DB::table('cb_returns_summary')
-                ->where('return_type', 'MAINRETURN')
+                ->whereIn('return_type', ['MAINRETURN', 'UTILITYRETURN'])
                 ->where(fn($q) => $q->whereIn('return_code', $listedCodes)->orWhere(fn($q2) => $q2->where('year', $year)->where('month', $month)))
                 ->get(['return_code', 'landlord_code', 'property_code']);
         }
@@ -414,13 +417,15 @@ class ClientReturnsController extends Controller
 
             $childQuery = DB::table('cb_returns_summary as rs')
                 ->leftJoin('sys_pm_properties as p', 'p.reference_number', '=', 'rs.property_code')
-                ->where('rs.return_type', 'MAINRETURN');
+                ;
 
             if (!empty($childCodes)) {
+                // The codes the merged return lists: main returns, or utility returns for a merged utility return
                 $childQuery->whereIn('rs.return_code', $childCodes);
             } else {
                 // Legacy fallback: no transaction_ref recorded → match by landlord/period
-                $childQuery->where('rs.landlord_code', $return->landlord_code)
+                $childQuery->where('rs.return_type', 'MAINRETURN')
+                    ->where('rs.landlord_code', $return->landlord_code)
                     ->where('rs.year', $return->year)
                     ->where('rs.month', $return->month);
             }
@@ -593,9 +598,7 @@ class ClientReturnsController extends Controller
 
             return response()->json([
                 'success' => true,
-                'statement_html' => $return->return_type === 'MASTERRETURN' ? '' : view('property.processed-returns.partials.statement', array_merge(
-                    $this->buildTenantStatementData($return, $details), ['return' => $return]
-                ))->render(),
+                'statement_html' => $this->statementHtml($return, $details, false),
                 'data' => $details->map(function ($d) {
                     return [
                         'encrypted_id' => encrypt($d->id),
@@ -1210,7 +1213,7 @@ class ClientReturnsController extends Controller
             }
 
             $generatedReturns = ReturnSummary::where('return_period', $returnPeriod)
-                ->where('return_type', 'MAINRETURN')
+                ->whereIn('return_type', ['MAINRETURN', 'UTILITYRETURN'])
                 ->when($requestedPropertyId, function ($query) use ($propertyIds) {
                     $query->whereIn('property_code', DB::table('sys_pm_properties')->whereIn('id', $propertyIds)->select('reference_number'));
                 })
@@ -1353,7 +1356,7 @@ class ClientReturnsController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Mini return ' . $result['return_code'] . ' generated as a draft. Forward it to the manager when it is ready: ' . $result['lines'] . ' line(s), net ' . number_format($result['net_balance'], 2) . '.',
+            'message' => (count($result['return_codes']) > 1 ? 'Mini returns ' : 'Mini return ') . implode(' and ', $result['return_codes']) . ' generated as a draft. Forward it to the manager when it is ready: ' . $result['lines'] . ' line(s), net ' . number_format($result['net_balance'], 2) . '.',
             'count' => 1,
             'properties_count' => 1,
             'master_count' => 0,
@@ -1432,9 +1435,17 @@ class ClientReturnsController extends Controller
         $forwarded = 0;
         $refused = [];
 
+        $alreadyForwarded = [];
+
         foreach ($ids as $encrypted) {
+            // The rent or utility twin of a return forwarded a moment ago in this same request is already on its way
+            if (in_array((int) decrypt($encrypted), $alreadyForwarded, true)) {
+                continue;
+            }
+
             try {
-                [$ok, $message] = $this->forwardOne((int) decrypt($encrypted));
+                [$ok, $message, $done] = array_pad($this->forwardOne((int) decrypt($encrypted)), 3, []);
+                $alreadyForwarded = array_merge($alreadyForwarded, $done);
             } catch (Exception $e) {
                 $ok = false;
                 $message = 'Could not forward one return.';
@@ -1455,7 +1466,7 @@ class ClientReturnsController extends Controller
      * Forward one return for the signed-in user.
      *
      * @param int $returnId
-     * @return array [bool done, string message]
+     * @return array [bool done, string message, int[] ids of every return forwarded (the return and its rent or utility twin)]
      */
     protected function forwardOne(int $returnId): array
     {
@@ -1476,7 +1487,32 @@ class ClientReturnsController extends Controller
             return [false, $e->getMessage()];
         }
 
-        return [true, 'Return ' . $return->return_code . ' forwarded to the manager.'];
+        // A client with a utility return has two returns for the month (rent and utility): they go to the manager together
+        $forwarded = [$return->return_code];
+        $forwardedIds = [(int) $return->id];
+        if (in_array($return->return_type, ['MAINRETURN', 'UTILITYRETURN'], true)) {
+            $siblings = DB::table('cb_returns_summary')
+                ->where('return_period', $return->return_period)
+                ->where('property_code', $return->property_code)
+                ->where('id', '!=', $return->id)
+                ->whereIn('return_type', ['MAINRETURN', 'UTILITYRETURN'])
+                ->get();
+
+            foreach ($siblings as $sibling) {
+                if ($this->returnApprovals->forwardRefusal($sibling) !== null) {
+                    continue;
+                }
+                try {
+                    DB::transaction(fn () => $this->returnApprovals->forward($sibling, (int) Auth::id(), request()->ip()));
+                    $forwarded[] = $sibling->return_code;
+                    $forwardedIds[] = (int) $sibling->id;
+                } catch (ReturnApprovalException $e) {
+                    Log::warning('A sibling return was not forwarded: ' . $e->getMessage());
+                }
+            }
+        }
+
+        return [true, 'Return ' . implode(' and ', $forwarded) . ' forwarded to the manager.', $forwardedIds];
     }
 
     /**
@@ -1739,9 +1775,7 @@ class ClientReturnsController extends Controller
 
             return response()->json([
                 'success' => true,
-                'statement_html' => $return->return_type === 'MASTERRETURN' ? '' : view('property.processed-returns.partials.statement', array_merge(
-                    $this->buildTenantStatementData($return, $lines), ['return' => $return]
-                ))->render(),
+                'statement_html' => $this->statementHtml($return, $lines, true),
                 'count' => $lines->count(),
                 'data' => $lines->map(function ($l) {
                     return [
@@ -1780,9 +1814,9 @@ class ClientReturnsController extends Controller
             $return = ReturnSummary::findOrFail($id);
             $signoff = $this->buildReturnSignoffData($return);
 
-            $allowedTypes = ['MINIRETURN', 'MAINRETURN', 'MASTERRETURN'];
+            $allowedTypes = ['MINIRETURN', 'MAINRETURN', 'UTILITYRETURN', 'MASTERRETURN'];
             if (!in_array($return->return_type, $allowedTypes)) {
-                abort(403, 'PDF download is only available for MINIRETURN, MAINRETURN and MASTERRETURN returns.');
+                abort(403, 'PDF download is only available for main, mini, utility and merged returns.');
             }
 
             if ($return->return_type === 'MASTERRETURN') {
@@ -1812,8 +1846,9 @@ class ClientReturnsController extends Controller
 
             $lines = ReturnClient::forReturn($return->return_code);
 
-            // The same figures as the details page and the Excel file
-            $statement = $this->buildTenantStatementData($return, $lines);
+            // The same figures as the details page and the Excel file; a client who wants two reports can ask for one side
+            $part = $this->requestedStatementPart($return);
+            $statement = $this->buildTenantStatementData($return, $lines, $part);
             $tenantRows = $statement['tenantRows'];
             $totals = $statement['totals'];
             $summary = $statement['summary'];
@@ -1825,7 +1860,7 @@ class ClientReturnsController extends Controller
                 ?: DB::table('sys_pm_clients')->where('reference_number', $return->landlord_code)->value('names');
             $propertyName = $return->property_name
                 ?: DB::table('sys_pm_properties')->where('reference_number', $return->property_code)->value('property_name');
-            $exportInfo = $this->propertyReturnExportInfo($return, $propertyName);
+            $exportInfo = $this->propertyReturnExportInfo($return, $propertyName, $part);
 
             $propertyDisplay = $propertyName
                 ? trim($propertyName . ' - ' . ($return->property_code ?? ''))
@@ -1834,9 +1869,10 @@ class ClientReturnsController extends Controller
                 ? trim($landlordName . ' (' . ($return->landlord_code ?? '') . ')')
                 : ($return->landlord_code ?? '-');
 
-            $data = compact('return', 'tenantRows', 'totals', 'summary', 'summaryRows', 'settlementRows', 'arrears', 'signoff', 'propertyDisplay', 'landlordDisplay', 'exportInfo');
+            $columns = $statement['columns'];
+            $data = compact('return', 'tenantRows', 'totals', 'summary', 'summaryRows', 'settlementRows', 'arrears', 'signoff', 'propertyDisplay', 'landlordDisplay', 'exportInfo', 'part', 'columns');
 
-            $pdf = Pdf::loadView('property.processed-returns.pdf', $data)
+            $pdf = Pdf::loadView($part === ReturnStatementService::PART_UTILITY ? 'property.processed-returns.utility-pdf' : 'property.processed-returns.pdf', $data)
                 ->setPaper('A4', 'landscape')
                 ->setOption(['enable_font_subsetting' => true]);
 
@@ -1873,9 +1909,9 @@ class ClientReturnsController extends Controller
 
             $return = ReturnSummary::findOrFail($id);
 
-            $allowedTypes = ['MINIRETURN', 'MAINRETURN', 'MASTERRETURN'];
+            $allowedTypes = ['MINIRETURN', 'MAINRETURN', 'UTILITYRETURN', 'MASTERRETURN'];
             if (!in_array($return->return_type, $allowedTypes)) {
-                abort(403, 'Excel download is only available for MINIRETURN, MAINRETURN and MASTERRETURN returns.');
+                abort(403, 'Excel download is only available for main, mini, utility and merged returns.');
             }
 
             if ($return->return_type === 'MASTERRETURN') {
@@ -1883,7 +1919,8 @@ class ClientReturnsController extends Controller
 
                 $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
                 $sheet = $spreadsheet->getActiveSheet();
-                $sheet->setTitle('Master Return');
+                $isUtilityMaster = str_starts_with((string) $return->return_code, 'RU');
+                $sheet->setTitle($isUtilityMaster ? 'Master Utility Return' : 'Master Return');
 
                 $sheet->setCellValue('A1', 'CHABRIN AGENCIES LIMITED');
                 $sheet->mergeCells('A1:C1');
@@ -1896,7 +1933,7 @@ class ClientReturnsController extends Controller
                 $sheet->setCellValue('A3', '5th Floor, Room 517, NACICO Plaza Landhies Road, PO Box 16659-00620 Nairobi, Kenya');
                 $sheet->mergeCells('A3:F3');
 
-                $sheet->setCellValue('A5', 'RETURNS FOR THE MONTH OF ' . strtoupper($masterData['monthLabel']));
+                $sheet->setCellValue('A5', 'RETURNS FOR THE MONTH OF ' . strtoupper($masterData['monthLabel']) . ($isUtilityMaster ? ' - UTILITIES' : ''));
                 $sheet->mergeCells('A5:C5');
                 $sheet->getStyle('A5')->getFont()->setBold(true);
 
@@ -2026,15 +2063,14 @@ class ClientReturnsController extends Controller
             $lines = ReturnClient::forReturn($return->return_code);
             $propertyName = $return->property_name
                 ?: DB::table('sys_pm_properties')->where('reference_number', $return->property_code)->value('property_name');
-            $exportInfo = $this->propertyReturnExportInfo($return, $propertyName);
+            $part = $this->requestedStatementPart($return);
+            $exportInfo = $this->propertyReturnExportInfo($return, $propertyName, $part);
             $header = $this->buildReturnHeaderInfo($return);
             $header['title'] = $exportInfo['title'];
-            $spreadsheet = $this->statementExport->build(
-                $return,
-                $this->buildTenantStatementData($return, $lines),
-                $header,
-                $this->buildReturnSignoffData($return)
-            );
+            $statementData = $this->buildTenantStatementData($return, $lines, $part);
+            $spreadsheet = $part === ReturnStatementService::PART_UTILITY
+                ? $this->statementExport->buildUtility($return, $statementData, $header, $this->buildReturnSignoffData($return))
+                : $this->statementExport->build($return, $statementData, $header, $this->buildReturnSignoffData($return));
 
             $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
 
@@ -2059,17 +2095,27 @@ class ClientReturnsController extends Controller
     }
 
     /** @return array{title:string,type:string,filename_stem:string} */
-    private function propertyReturnExportInfo(ReturnSummary $return, ?string $propertyName): array
+    private function propertyReturnExportInfo(ReturnSummary $return, ?string $propertyName, string $part = ReturnStatementService::PART_ALL): array
     {
         $period = date('F Y', mktime(0, 0, 0, (int) $return->month, 1, (int) $return->year));
         $type = 'Main Return';
+        if ($return->return_type === 'UTILITYRETURN') {
+            $type = 'Utility Return';
+        }
         if ($return->return_type === 'MINIRETURN') {
-            $type = 'Mini Return';
-            if (preg_match('/^R([2-9])/i', $return->return_code, $matches)) {
+            $type = str_starts_with($return->return_code, 'RU') ? 'Utility Mini Return' : 'Mini Return';
+            if (preg_match('/^RU?([2-9])/i', $return->return_code, $matches)) {
                 $type .= ' ' . ((int) $matches[1] - MiniReturnService::FIRST_SEQUENCE + 1);
             } else {
                 $type .= ' ' . $return->id;
             }
+        }
+
+        // A client who wants two reports gets a rent report and a utility report of the same return
+        if ($part === ReturnStatementService::PART_RENT) {
+            $type .= ' - Rent Report';
+        } elseif ($part === ReturnStatementService::PART_UTILITY) {
+            $type .= ' - Utility Report';
         }
 
         $property = trim($propertyName ?? '') ?: ($return->property_code ?: 'Property ' . $return->id);
@@ -2092,9 +2138,55 @@ class ClientReturnsController extends Controller
     /**
      * Everything the statement shows for a return (rows, totals, summary, blocks I to O, arrears), from its lines.
      */
-    private function buildTenantStatementData(ReturnSummary $return, $lines): array
+    private function buildTenantStatementData(ReturnSummary $return, $lines, string $part = ReturnStatementService::PART_ALL): array
     {
-        return $this->statements->statement($return, $lines);
+        return $this->statements->statement($return, $lines, null, $part);
+    }
+
+    /**
+     * The part of the statement a download asks for (?part=rent or ?part=utility), only for a client who wants two
+     * reports; anything else is the whole return.
+     */
+    private function requestedStatementPart(ReturnSummary $return): string
+    {
+        $part = request()->query('part');
+
+        if (in_array($part, [ReturnStatementService::PART_RENT, ReturnStatementService::PART_UTILITY], true)
+            && $return->return_type !== 'MASTERRETURN'
+            && !str_starts_with((string) $return->return_code, 'RU')
+            && $this->utilityReturns->modeForReturn($return) === UtilityReturnsService::SEPARATE_REPORT) {
+            return $part;
+        }
+
+        return ReturnStatementService::PART_ALL;
+    }
+
+    /**
+     * The statement shown on the return details pages: one statement, or for a client who wants two reports a rent
+     * report and a utility report in tabs. A merged return has none.
+     *
+     * @param bool $processed whether the page is the processed returns one (its downloads have their own routes)
+     */
+    private function statementHtml(ReturnSummary $return, $lines, bool $processed): string
+    {
+        if ($return->return_type === 'MASTERRETURN') {
+            return '';
+        }
+
+        // A utility return is already the utility side: it has no second report
+        if (!str_starts_with((string) $return->return_code, 'RU') && $this->utilityReturns->modeForReturn($return) === UtilityReturnsService::SEPARATE_REPORT) {
+            return view('property.processed-returns.partials.statement-parts', [
+                'return' => $return,
+                'rentStatement' => $this->buildTenantStatementData($return, $lines, ReturnStatementService::PART_RENT),
+                'utilityStatement' => $this->buildTenantStatementData($return, $lines, ReturnStatementService::PART_UTILITY),
+                'pdfUrl' => route($processed ? 'processed.returns.pdf' : 'returns.pdf', encrypt($return->id)),
+                'excelUrl' => route($processed ? 'processed.returns.excel' : 'returns.excel', encrypt($return->id)),
+            ])->render();
+        }
+
+        return view('property.processed-returns.partials.statement', array_merge(
+            $this->buildTenantStatementData($return, $lines), ['return' => $return]
+        ))->render();
     }
 
     /** Edit a tenant's statement note without changing the return's financial or approval state. */
@@ -2197,12 +2289,12 @@ class ClientReturnsController extends Controller
                 : [];
 
             $childQuery = DB::table('cb_returns_summary as rs')
-                ->leftJoin('sys_pm_properties as p', 'p.reference_number', '=', 'rs.property_code')
-                ->where('rs.return_type', 'MAINRETURN');
+                ->leftJoin('sys_pm_properties as p', 'p.reference_number', '=', 'rs.property_code');
             if (!empty($childCodes)) {
                 $childQuery->whereIn('rs.return_code', $childCodes);
             } else {
-                $childQuery->where('rs.landlord_code', $return->landlord_code)
+                $childQuery->where('rs.return_type', 'MAINRETURN')
+                    ->where('rs.landlord_code', $return->landlord_code)
                     ->where('rs.year', $return->year)
                     ->where('rs.month', $return->month);
             }

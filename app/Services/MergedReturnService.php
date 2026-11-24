@@ -23,9 +23,10 @@ class MergedReturnService
      * @param string $returnPeriod e.g. 202611
      * @param string $landlordCode e.g. LAN-01072
      * @param array $used the return codes already in use (codes that do not belong to this landlord and period are ignored)
+     * @param string $prefix R1 for the merged rent return, RU1 for the merged utility return of a client who has one
      */
-    public static function masterCode(string $returnPeriod, string $landlordCode, array $used): string {
-        $base = 'R1' . $returnPeriod . $landlordCode;
+    public static function masterCode(string $returnPeriod, string $landlordCode, array $used, string $prefix = 'R1'): string {
+        $base = $prefix . $returnPeriod . $landlordCode;
         $code = $base;
         $sequence = 1;
 
@@ -38,7 +39,7 @@ class MergedReturnService
     }
 
     /**
-     * The property returns a merged return covers, with each one's property, net and approval state.
+     * The property returns (main, or utility for a merged utility return) a merged return covers, with each one's property, net and approval state.
      *
      * @param ReturnSummary $master
      * @return Collection of objects: id, return_code, property_code, property_name, net_balance, approved_status, paid_status
@@ -47,7 +48,7 @@ class MergedReturnService
         return DB::table('cb_returns_summary as rs')
             ->leftJoin('sys_pm_properties as p', 'p.reference_number', '=', 'rs.property_code')
             ->where('rs.parent_return_code', $master->return_code)
-            ->where('rs.return_type', 'MAINRETURN')
+            ->whereIn('rs.return_type', ['MAINRETURN', 'UTILITYRETURN'])
             ->orderBy('rs.property_code')
             ->get(['rs.id', 'rs.return_code', 'rs.property_code', 'p.property_name', 'rs.net_balance', 'rs.approved_status', 'rs.paid_status']);
     }

@@ -19,6 +19,7 @@ use App\Models\TenantRecord;
 use App\Services\ErrorDispatcher;
 use App\Services\ClientDraftRequirements;
 use App\Services\NextOfKinContactGuard;
+use App\Services\UtilityReturnsService;
 use App\Models\ClientOtherContact;
 use App\Models\PropertyBankDetail;
 use Illuminate\Support\Facades\DB;
@@ -37,12 +38,15 @@ class ClientsController extends Controller
 
     protected ClientDraftRequirements $draftRequirements;
 
+    protected UtilityReturnsService $utilityReturns;
+
     /**
-     * Inject the next-of-kin contact guard and the required-records check.
+     * Inject the next-of-kin contact guard, the required-records check and the utility returns setting.
      */
-    public function __construct(NextOfKinContactGuard $kinGuard, ClientDraftRequirements $draftRequirements) {
+    public function __construct(NextOfKinContactGuard $kinGuard, ClientDraftRequirements $draftRequirements, UtilityReturnsService $utilityReturns) {
         $this->kinGuard = $kinGuard;
         $this->draftRequirements = $draftRequirements;
+        $this->utilityReturns = $utilityReturns;
     }
 
     /**
@@ -777,7 +781,7 @@ class ClientsController extends Controller
                     ];
                 });
 
-            return response()->json(['data' => $batches]);
+            return response()->json(['data' => $batches, 'utility_returns' => $this->utilityReturns->modeForClient((int) $clientId)]);
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading returns config list: ' . $e->getMessage());
@@ -1073,6 +1077,32 @@ class ClientsController extends Controller
             ErrorDispatcher::dispatch($e);
             Log::error('Error disbanding all returns config: ' . $e->getMessage());
             return response()->json(['error' => 'Failed to disband all merge batches'], 500);
+        }
+    }
+
+    /**
+     * Returns Config: save how this client wants utilities on the return (with rent, separate report, separate return).
+     * The setting is kept on the client and on every record with the same name.
+     */
+    public function saveUtilityReturns(Request $request, $encryptedId)
+    {
+        try {
+            $clientId = Crypt::decrypt($encryptedId);
+            $client = Client::findOrFail($clientId);
+
+            $validated = $request->validate([
+                'utility_returns' => 'required|in:' . implode(',', UtilityReturnsService::MODES),
+            ]);
+
+            $this->utilityReturns->saveForClient($client, $validated['utility_returns']);
+
+            return response()->json(['message' => 'Utility returns setting saved.', 'utility_returns' => $validated['utility_returns']]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw $e;
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error saving utility returns setting: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to save the utility returns setting'], 500);
         }
     }
 
@@ -1925,17 +1955,7 @@ class ClientsController extends Controller
 
     private function getEligibleReturnsMergeProperties(Client $client)
     {
-        $normalizedClientName = $this->normalizeLandlordName((string) $client->names);
-
-        $relatedClientIds = collect([$client->id]);
-        if (!empty($normalizedClientName)) {
-            $relatedClientIds = Client::clients()
-                ->whereRaw(
-                    "REGEXP_REPLACE(TRIM(COALESCE(names, '')), '\\s+', ' ', 'g') = ?",
-                    [$normalizedClientName]
-                )
-                ->pluck('id');
-        }
+        $relatedClientIds = $this->utilityReturns->relatedClientIds($client);
 
         return Property::withInactive()
             ->with('client:id,names,reference_number')

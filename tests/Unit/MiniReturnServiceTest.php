@@ -48,4 +48,18 @@ class MiniReturnServiceTest extends TestCase
 
         $this->assertNull(MiniReturnService::nextSequence($used, '202604', 'LAN-00734', '65G'));
     }
+
+    public function test_a_utility_return_code_is_ru_sequence_period_landlord_property(): void
+    {
+        $this->assertSame('RU1202604LAN-0073465G', MiniReturnService::utilityReturnCode(1, '202604', 'LAN-00734', '65G'));
+        $this->assertSame('RU2202604LAN-0073465G', MiniReturnService::utilityReturnCode(2, '202604', 'LAN-00734', '65G'));
+    }
+
+    public function test_a_digit_used_by_the_utility_mini_is_not_given_to_the_rent_mini_again(): void
+    {
+        // One press makes the rent and the utility mini with the same digit, so a digit is free only when both codes are
+        $this->assertSame(3, MiniReturnService::nextSequence(['RU2202604LAN-0073465G'], '202604', 'LAN-00734', '65G'));
+        $this->assertSame(3, MiniReturnService::nextSequence(['R2202604LAN-0073465G', 'RU2202604LAN-0073465G'], '202604', 'LAN-00734', '65G'));
+        $this->assertSame(4, MiniReturnService::nextSequence(['R2202604LAN-0073465G', 'RU3202604LAN-0073465G'], '202604', 'LAN-00734', '65G'));
+    }
 }

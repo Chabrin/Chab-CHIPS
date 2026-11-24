@@ -341,4 +341,94 @@ class ReturnStatementServiceTest extends TestCase
             $this->assertStringContainsString('return-statement.js', $html);
         }
     }
+
+    public function test_the_rent_report_and_the_utility_report_add_up_to_the_return(): void
+    {
+        $service = app(ReturnStatementService::class);
+        $return = new ReturnSummary(['return_code' => 'R1', 'commission_rate' => 8, 'net_amount' => 121896]);
+        $lines = $this->hawakiShapedLines();
+        $amountPayable = fn(array $rows) => collect($rows)->first(fn($row) => str_starts_with($row['label'], 'M.'))['amount'];
+
+        $whole = $service->statement($return, $lines, collect());
+        $rent = $service->statement($return, $lines, collect(), ReturnStatementService::PART_RENT);
+        $utility = $service->statement($return, $lines, collect(), ReturnStatementService::PART_UTILITY);
+
+        // Service charge 150, water bill 500 and the refund 1,000 (an item with no column is not rent) are the utility side
+        $this->assertSame(1650.0, $utility['summary']['total']);
+        $this->assertSame(150.0, $utility['summary']['service_charge']);
+        $this->assertSame(500.0, $utility['summary']['water_bill']);
+        $this->assertSame(1000.0, $utility['summary']['other_items']);
+
+        // The rent report is the rest, with the commission, VAT and every deduction, and the two foot to the return
+        $this->assertSame(121896.0 - 1650.0, $amountPayable($rent['settlementRows']));
+        $this->assertSame(121896.0, round($amountPayable($rent['settlementRows']) + $utility['summary']['total'], 2));
+        $this->assertSame($amountPayable($whole['settlementRows']), round($amountPayable($rent['settlementRows']) + $utility['summary']['total'], 2));
+        $this->assertNull(collect($rent['settlementRows'])->firstWhere('kind', 'gap'), 'the rent report reaches its own net, so no gap row');
+        $this->assertSame($whole['summary']['commission'], $rent['summary']['commission']);
+
+        // Each report shows only its own columns and rows
+        $this->assertArrayNotHasKey('service_charge', $rent['columns']);
+        $this->assertArrayHasKey('house_deposit_amt', $rent['columns']);
+        $this->assertSame(['unit_code', 'tenant_name', 'elec_bill', 'water_bill', 'service_charge', 'remarks'], array_keys($utility['columns']));
+        $this->assertNotContains('bills', array_column($rent['summaryRows'], 0));
+        $this->assertSame([], $utility['settlementRows']);
+        $this->assertSame(0.0, $rent['totals']['water_bill']);
+        $this->assertSame(500.0, $utility['totals']['water_bill']);
+    }
+
+    public function test_a_utility_return_shows_only_utility_columns(): void
+    {
+        $return = new ReturnSummary(['return_code' => 'RU1202607LAN-00001P1', 'commission_rate' => 0, 'net_amount' => 650]);
+        $lines = collect([
+            $this->line(1, 'Service Charge', 150, ['unit_code' => '001', 'tenant_name' => 'Shop']),
+            $this->line(2, 'Water Bill', 500, ['unit_code' => '001', 'tenant_name' => 'Shop']),
+        ]);
+        $data = app(ReturnStatementService::class)->statement($return, $lines, collect());
+
+        $this->assertSame(['unit_code', 'tenant_name', 'elec_bill', 'water_bill', 'service_charge', 'remarks'], array_keys($data['columns']));
+        $this->assertSame(['bills', 'service_charge', 'other_payments', 'total_income'], array_column($data['summaryRows'], 0));
+        $this->assertSame(650.0, $data['summary']['total_income']);
+        $this->assertSame(650.0, collect($data['settlementRows'])->first(fn($row) => str_starts_with($row['label'], 'M.'))['amount']);
+        $this->assertNull(collect($data['settlementRows'])->firstWhere('kind', 'gap'));
+    }
+
+    public function test_the_excel_of_each_part_has_only_its_own_columns(): void
+    {
+        $service = app(ReturnStatementService::class);
+        $return = new ReturnSummary(['return_code' => 'R1', 'commission_rate' => 8, 'net_amount' => 121896]);
+        $lines = $this->hawakiShapedLines();
+        $header = ['title' => 'Sample - July 2026 - Main Return', 'landlord_label' => 'Landlord', 'property_label' => 'Property', 'period' => 'July 2026'];
+        $labels = function ($sheet) {
+            $row = [];
+            foreach (range('A', 'M') as $col) {
+                $value = $sheet->getCell($col . '8')->getValue();
+                if ($value !== null && $value !== '') {
+                    $row[] = $value;
+                }
+            }
+
+            return $row;
+        };
+
+        // The rent report has no utility columns and its remarks are the last column
+        $rent = app(ReturnStatementExport::class)->build($return, $service->statement($return, $lines, collect(), ReturnStatementService::PART_RENT), $header, []);
+        $rentLabels = $labels($rent->getActiveSheet());
+        $this->assertNotContains('Svc Charge', $rentLabels);
+        $this->assertNotContains('Water Bill', $rentLabels);
+        $this->assertSame('Remarks', end($rentLabels));
+        $this->assertSame('Monthly Rent', $rent->getActiveSheet()->getCell('I8')->getValue());
+        $this->assertStringContainsString('RENT REPORT', $rent->getActiveSheet()->getCell('A1')->getValue());
+
+        // The utility report is its own workbook with only the utility columns
+        $utilityData = $service->statement($return, $lines, collect(), ReturnStatementService::PART_UTILITY);
+        $utility = app(ReturnStatementExport::class)->buildUtility($return, $utilityData, $header, []);
+        $this->assertSame(['Room', 'Tenant', 'Elec Bill', 'Water Bill', 'Svc Charge', 'Remarks'], $labels($utility->getActiveSheet()));
+
+        // A utility return (code RU...) has the utility columns in its normal statement workbook
+        $ru = new ReturnSummary(['return_code' => 'RU1202607LAN-00001P1', 'net_amount' => 650]);
+        $ruLines = collect([$this->line(1, 'Service Charge', 150), $this->line(2, 'Water Bill', 500)]);
+        $ruBook = app(ReturnStatementExport::class)->build($ru, $service->statement($ru, $ruLines, collect()), $header, []);
+        $this->assertSame(['Room', 'Tenant', 'Elec Bill', 'Water Bill', 'Svc Charge', 'Remarks'], $labels($ruBook->getActiveSheet()));
+        $this->assertStringContainsString('UTILITY RETURN STATEMENT', $ruBook->getActiveSheet()->getCell('A1')->getValue());
+    }
 }

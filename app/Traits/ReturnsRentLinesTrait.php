@@ -3,6 +3,7 @@
 namespace App\Traits;
 
 use App\Services\InvoiceBillingService;
+use App\Services\UtilityReturnsService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -26,6 +27,10 @@ use Illuminate\Support\Facades\Log;
  *
  * A mini return (sequence 2 or more) uses the same rules but takes only that late money, for invoices of the return
  * month or earlier, counting every line already passed on, the month's main return included.
+ *
+ * For a client set to "separate return" the utility lines (anything that is not rent, rent arrears or a deposit) go on a
+ * utility return: the code is RU instead of R (RU1 the main utility return, RU2 to RU9 utility minis). One pass numbers
+ * both returns, so an invoice is on exactly one of them.
  */
 trait ReturnsRentLinesTrait
 {
@@ -129,9 +134,15 @@ trait ReturnsRentLinesTrait
                 ORDER BY property_id, date_start DESC NULLS LAST, id DESC
             ) s ON s.property_id = i.property_id
             LEFT JOIN sys_pm_clients c ON c.id = s.client_d
+            LEFT JOIN sys_pm_clients pcl ON pcl.id = p.client_id
         ";
 
-        $returnCode = "'R{$sequence}' || ? || COALESCE(c.reference_number, 'UNKNOWN') || p.reference_number";
+        // A client who wants a separate utility return (sys_pm_clients.utility_returns) has the utilities of their properties
+        // on a return of their own: the code is RU instead of R, so the two returns of a property and month never share
+        // a code. Everyone else is on the R return, as always.
+        // A property whose agreement has no client (landlord UNKNOWN) cannot be approved anyway, so it is not split.
+        $utilityLine = "(c.id IS NOT NULL AND COALESCE(pcl.utility_returns, 'with_rent') = '" . UtilityReturnsService::SEPARATE_RETURN . "' AND " . UtilityReturnsService::utilityItemSql($itemName) . ")";
+        $returnCode = "CASE WHEN {$utilityLine} THEN 'RU{$sequence}' ELSE 'R{$sequence}' END || ? || COALESCE(c.reference_number, 'UNKNOWN') || p.reference_number";
 
         // Frozen on the line, so a statement printed later does not change when the unit's VAT flag does: whether the
         // rent of the line has VAT inside it, and the unit's place on the statement (its last position in an earlier return).
@@ -196,7 +207,7 @@ trait ReturnsRentLinesTrait
                 i.zone_manager_id,
                 i.unit_id,
                 i.tenant_id,
-                ? + DENSE_RANK() OVER (ORDER BY i.property_id) - 1,
+                ? + DENSE_RANK() OVER (ORDER BY i.property_id, CASE WHEN {$utilityLine} THEN 1 ELSE 0 END) - 1,
                 i.id,
                 CASE
                     WHEN {$rentCurrent} THEN 'Rent for {$monthName} {$returnYear}'

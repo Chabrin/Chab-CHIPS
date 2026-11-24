@@ -410,7 +410,7 @@
         $('#excel-link').on('click', function(e) {
             e.preventDefault();
             if (returnStatementHasUnsavedRemarks()) { alert('Save your remarks before downloading the statement.'); return; }
-            var allowed = ['MINIRETURN', 'MAINRETURN', 'MASTERRETURN'];
+            var allowed = ['MINIRETURN', 'MAINRETURN', 'UTILITYRETURN', 'MASTERRETURN'];
             if (allowed.indexOf(currentReturnType) === -1) {
                 Swal.fire({
                     icon: 'error',
@@ -426,7 +426,7 @@
         $('#pdf-link').on('click', function(e) {
             e.preventDefault();
             if (returnStatementHasUnsavedRemarks()) { alert('Save your remarks before downloading the statement.'); return; }
-            var allowed = ['MINIRETURN', 'MAINRETURN', 'MASTERRETURN'];
+            var allowed = ['MINIRETURN', 'MAINRETURN', 'UTILITYRETURN', 'MASTERRETURN'];
             if (allowed.indexOf(currentReturnType) === -1) {
                 Swal.fire({
                     icon: 'error',
