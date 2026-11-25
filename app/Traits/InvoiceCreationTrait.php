@@ -43,6 +43,15 @@ trait InvoiceCreationTrait
      */
     protected function createSingleDebtorInvoice(array $data): DebtorInvoice
     {
+        return DB::transaction(function () use ($data) {
+            // Derive the payee only after a concurrent ownership handover has finished.
+            Property::whereKey($data['property_id'])->lockForUpdate()->firstOrFail();
+            return $this->createSingleDebtorInvoiceForLockedProperty($data);
+        });
+    }
+
+    private function createSingleDebtorInvoiceForLockedProperty(array $data): DebtorInvoice
+    {
         // Returns are keyed by the first of the month, so a one-off raised mid-month still belongs to that month's return.
         $data['returns_period'] = InvoiceBillingService::firstOfMonth($data['returns_period']);
 
@@ -51,9 +60,12 @@ trait InvoiceCreationTrait
         $unit = Unit::find($data['unit_id']);
         $invoiceableItem = InvoiceableItem::find($data['item_type_id']);
         // The SLA on the lease, otherwise the property's current one (almost no lease carries sla_id).
-        $serviceAgreement = $lease ? $lease->resolvedServiceAgreement() : null;
+        $serviceAgreement = $lease ? $lease->resolvedServiceAgreement($data['returns_period']) : null;
 
         $landlordId = $property ? $property->client_id : null;
+        if ($property && ($ownership = app(\App\Services\PropertyOwnershipResolver::class)->agreement($property->id, $data['returns_period']))) {
+            $landlordId = $ownership->client_d;
+        }
 
         // Only one invoice per tenant per month for these recurring item types.
         $singlePerMonthItems = [
@@ -118,7 +130,7 @@ trait InvoiceCreationTrait
             $data, $property, $lease, $unit, $itemName, $landlordId, $totalAmount,
             $commAmount, $commissionPercentage, $isCommissionable, $vatAmount,
             $commissionableAmount, $payableAmount, $vatOnCommission, $referenceNumber, $batchNumber,
-            $invoiceableItem
+            $invoiceableItem, $serviceAgreement
         ) {
             $invoice = DebtorInvoice::create([
                 'date_time' => now(),
@@ -130,7 +142,7 @@ trait InvoiceCreationTrait
                 'lease_id' => $data['lease_id'],
                 'tenant_id' => $data['tenant_id'],
                 'client_id' => $landlordId,
-                'sla_id' => $lease ? $lease->sla_id : null,
+                'sla_id' => $serviceAgreement?->id,
                 'created_by' => Auth::id(),
                 'reference_number' => $referenceNumber,
                 'narration' => $itemName . ' FOR ' . date('F Y', strtotime($data['returns_period'])),
@@ -175,7 +187,7 @@ trait InvoiceCreationTrait
                 'lease_id' => $data['lease_id'],
                 'client_id' => $landlordId,
                 'tenant_id' => $data['tenant_id'],
-                'sla_id' => $lease ? $lease->sla_id : null,
+                'sla_id' => $serviceAgreement?->id,
                 'field_officer_id' => $property ? $property->field_officer_id : null,
                 'zone_supervisor_id' => $property ? $property->zone_supervisor_id : null,
                 'zone_manager_id' => $property ? $property->zone_manager_id : null,

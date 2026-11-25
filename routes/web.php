@@ -75,6 +75,16 @@ use App\Http\Controllers\PayrollMonthlyController;
 
 
 Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
+    Route::get('/property/ownership-transfers', [\App\Http\Controllers\PropertyOwnershipTransferController::class, 'index'])->name('property-transfers.index');
+    Route::get('/property/ownership-transfers/create', [\App\Http\Controllers\PropertyOwnershipTransferController::class, 'create'])->name('property-transfers.create');
+    Route::get('/property/ownership-transfers/banks/{client}', [\App\Http\Controllers\PropertyOwnershipTransferController::class, 'banks'])->name('property-transfers.banks');
+    Route::post('/property/ownership-transfers', [\App\Http\Controllers\PropertyOwnershipTransferController::class, 'store'])->name('property-transfers.store');
+    Route::get('/property/ownership-transfers/{transfer}', [\App\Http\Controllers\PropertyOwnershipTransferController::class, 'show'])->whereNumber('transfer')->name('property-transfers.show');
+    Route::post('/property/ownership-transfers/{transfer}/decision', [\App\Http\Controllers\PropertyOwnershipTransferController::class, 'decide'])->whereNumber('transfer')->name('property-transfers.decide');
+    Route::get('/property/ownership-transfers/{transfer}/documents/{document}', [\App\Http\Controllers\PropertyOwnershipTransferController::class, 'document'])->whereNumber(['transfer', 'document'])->name('property-transfers.document');
+    Route::get('/property/ownership-transfers/{transfer}/statement', [\App\Http\Controllers\PropertyOwnershipTransferController::class, 'statement'])->whereNumber('transfer')->name('property-transfers.statement');
+    Route::get('/property/ownership-transfers/{transfer}/agreements/{side}', [\App\Http\Controllers\PropertyOwnershipTransferController::class, 'agreement'])->whereNumber('transfer')->whereIn('side', ['outgoing', 'incoming'])->name('property-transfers.agreement');
+    Route::get('/property/ownership-transfers/{transfer}/agreements/{side}/documents/{document}', [\App\Http\Controllers\PropertyOwnershipTransferController::class, 'agreementDocument'])->whereNumber(['transfer', 'document'])->whereIn('side', ['outgoing', 'incoming'])->name('property-transfers.agreement-document');
     Route::get('/approvals/new-tenants', [\App\Http\Controllers\TenantReviewController::class, 'index'])->name('tenant-reviews.index');
     Route::get('/approvals/new-tenants/reconciliation', [\App\Http\Controllers\TenantReviewController::class, 'index'])->name('tenant-reviews.reconciliation');
     Route::get('/approvals/setup', [\App\Http\Controllers\TenantReviewController::class, 'setup'])->name('tenant-reviews.setup');

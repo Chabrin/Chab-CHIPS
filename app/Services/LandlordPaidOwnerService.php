@@ -74,7 +74,12 @@ class LandlordPaidOwnerService
             ->get(['i.id', 'i.reference_number', 'i.narration', 'i.total_amount', 'i.current_balance', 'i.tenant_id', 'i.unit_id', 'i.property_id', 'p.property_name', 'u.unit_name', 'c.names as client_names', 'tr.names as record_names']);
 
         $properties = [];
+        $periods = \Illuminate\Support\Facades\Schema::hasTable('property_ownership_transfers')
+            ? DB::table('sys_pm_debtors_invoices')->whereIn('id', $rows->pluck('id'))->pluck('returns_period', 'id') : collect();
         foreach ($rows as $row) {
+            if ($periods->has($row->id)) $row->returns_period = $periods[$row->id];
+            $owner = app(PropertyOwnershipResolver::class)->invoiceClient($row);
+            if ($owner !== null && $owner !== $clientId) continue;
             $properties[$row->property_id]['id'] = (int) $row->property_id;
             $properties[$row->property_id]['name'] = (string) $row->property_name;
 
@@ -115,6 +120,10 @@ class LandlordPaidOwnerService
 
         if (!in_array((int) $invoice->property_id, $this->propertyIds($clientId), true)) {
             throw new ClientAccountException('That invoice is not for one of your properties.');
+        }
+        $owner = app(PropertyOwnershipResolver::class)->invoiceClient($invoice);
+        if ($owner !== null && $owner !== $clientId) {
+            throw new ClientAccountException('Collection rights for this invoice belong to another landlord following an ownership transfer.');
         }
 
         $paidOn = (string) ($data['paid_on'] ?? '');

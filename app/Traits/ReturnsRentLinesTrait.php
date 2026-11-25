@@ -113,6 +113,15 @@ trait ReturnsRentLinesTrait
         // The look-up of earlier lines: a main return leaves out its own period (regeneration replaces those lines); a
         // mini return counts them all, the main return of the month included.
         $previousPeriod = $isMini ? "" : "AND pl.return_period <> ?::integer";
+        $agreementJoin = "LEFT JOIN (
+                SELECT DISTINCT ON (property_id) * FROM sys_pm_service_agreements
+                ORDER BY property_id, date_start DESC NULLS LAST, id DESC
+            ) s ON s.property_id = i.property_id";
+        $owner = 's.client_d';
+        if (\Illuminate\Support\Facades\Schema::hasTable('property_ownership_transfers')) {
+            $agreementJoin = 'LEFT JOIN sys_pm_service_agreements s ON s.id = ' . \App\Services\PropertyOwnershipResolver::returnAgreementSql($month);
+            $owner = "COALESCE(s.client_d, (SELECT ot.from_client_id FROM property_ownership_transfers ot WHERE ot.status = 'completed' AND ot.old_sla_id = s.id ORDER BY ot.effective_date LIMIT 1), p.client_id)";
+        }
         $invoiceJoins = "
             FROM sys_pm_debtors_invoices i
             LEFT JOIN sys_set_invoiceable_items it ON it.id = i.item_type_id
@@ -124,11 +133,8 @@ trait ReturnsRentLinesTrait
                 FROM cb_returns_clients pl
                 WHERE pl.invoice_id = i.id AND pl.dr_cr = 'CR' {$previousPeriod}
             ) prev ON true
-            LEFT JOIN (
-                SELECT DISTINCT ON (property_id) * FROM sys_pm_service_agreements
-                ORDER BY property_id, date_start DESC NULLS LAST, id DESC
-            ) s ON s.property_id = i.property_id
-            LEFT JOIN sys_pm_clients c ON c.id = s.client_d
+            {$agreementJoin}
+            LEFT JOIN sys_pm_clients c ON c.id = {$owner}
         ";
 
         $returnCode = "'R{$sequence}' || ? || COALESCE(c.reference_number, 'UNKNOWN') || p.reference_number";
@@ -189,14 +195,14 @@ trait ReturnsRentLinesTrait
                 CASE WHEN {$isRent} THEN ROUND(({$commission}) * COALESCE(s.vat_per, 16) / 100, 2) ELSE 0 END,
                 CASE WHEN {$isRent} THEN {$commission} ELSE 0 END,
                 i.property_id,
-                COALESCE(s.client_d, 0),
+                COALESCE(c.id, 0),
                 i.zone_id,
                 i.field_officer_id,
                 i.zone_supervisor_id,
                 i.zone_manager_id,
                 i.unit_id,
                 i.tenant_id,
-                ? + DENSE_RANK() OVER (ORDER BY i.property_id) - 1,
+                ? + DENSE_RANK() OVER (ORDER BY i.property_id, c.id) - 1,
                 i.id,
                 CASE
                     WHEN {$rentCurrent} THEN 'Rent for {$monthName} {$returnYear}'

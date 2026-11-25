@@ -14,6 +14,10 @@ Schedule::command('hr:check-expiring-contracts')
 Schedule::command('hr:check-expiring-permits')
     ->dailyAt('08:00')->timezone('Africa/Nairobi')->withoutOverlapping();
 
+// Also catches transfers approved after the start of their effective date.
+Schedule::command('property-transfers:remind-due')
+    ->everyFiveMinutes()->timezone('Africa/Nairobi')->withoutOverlapping();
+
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');

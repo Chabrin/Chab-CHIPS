@@ -13,6 +13,9 @@
                             @endunless
                         </h5>
                         <div class="ms-auto d-flex gap-2">
+                            @if(\App\Services\PropertyTransferAccess::allows(auth()->user(), 'view'))
+                            <a class="btn btn-outline-primary btn-sm" href="{{ route('property-transfers.index', ['property_id' => $property->id]) }}">Ownership / transfer history</a>
+                            @endif
                             @if($property->active)
                             <a href="{{ route('property.clients.show', Crypt::encrypt($property->client->id)) }}" class="btn btn-light btn-sm d-flex align-items-center">
                                 <span class="material-symbols-outlined">arrow_back</span>

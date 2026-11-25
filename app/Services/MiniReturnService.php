@@ -111,6 +111,12 @@ class MiniReturnService
                 ->pluck('return_code')
                 ->all();
             $sequence = self::nextSequence($used, $period, $landlordCode, $property->reference_number);
+            // Runoff arrears can belong to a former landlord. Reserve one free sequence across the whole property.
+            if (\Illuminate\Support\Facades\Schema::hasTable('property_ownership_transfers')
+                && \App\Models\PropertyOwnershipTransfer::where('property_id', $property->id)->where('status', 'completed')->exists()) {
+                $occupied = array_map(fn ($value) => (int) substr($value, 1, 1), $used);
+                $sequence = collect(range(2, 9))->first(fn ($value) => !in_array($value, $occupied, true));
+            }
             if ($sequence === null) {
                 throw new MiniReturnException("{$property->property_name} already has the most mini returns a month can hold ({$this->minis()}) for {$monthLabel}.");
             }
@@ -124,14 +130,19 @@ class MiniReturnService
                 throw new MiniReturnException("Nothing has come in for {$property->property_name} that is not already on a return, so there is nothing for a mini return.");
             }
 
-            $this->insertAdvancePaymentLines($period, $transactionDate, $userId, $year, $month, (int) $property->id, $code);
-            $this->insertCommissionLines($period, $transactionDate, $userId, (int) $property->id, $code);
-            $this->insertMainReturnSummariesLegacy($period, $year, $month, $monthName, $preparedBy, (int) $property->id, 'MINIRETURN', $code);
+            $codes = DB::table('cb_returns_clients')->where('property_id', $property->id)->where('return_period', $period)
+                ->where('return_code', 'like', 'R' . $sequence . '%')->distinct()->pluck('return_code')->all();
+            foreach ($codes as $generatedCode) {
+                $this->insertAdvancePaymentLines($period, $transactionDate, $userId, $year, $month, (int) $property->id, $generatedCode);
+                $this->insertCommissionLines($period, $transactionDate, $userId, (int) $property->id, $generatedCode);
+                $this->insertMainReturnSummariesLegacy($period, $year, $month, $monthName, $preparedBy, (int) $property->id, 'MINIRETURN', $generatedCode);
+            }
+            $code = in_array($code, $codes, true) ? $code : $codes[0];
 
             $netBalance = (float) DB::table('cb_returns_summary')->where('return_code', $code)->value('net_balance');
             Log::info('MiniReturnService: mini return generated', ['return_code' => $code, 'lines' => $lines, 'net_balance' => $netBalance, 'user_id' => $userId]);
 
-            return ['return_code' => $code, 'lines' => $lines, 'net_balance' => $netBalance];
+            return ['return_code' => $code, 'return_codes' => $codes, 'lines' => $lines, 'net_balance' => $netBalance];
         });
     }
 

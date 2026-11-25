@@ -522,6 +522,9 @@ class PropertiesController extends Controller
         try {
             $id = Crypt::decrypt($encryptedId);
             $property = Property::findOrFail($id);
+            if ((int) $request->input('client_id') !== (int) $property->client_id) {
+                throw \Illuminate\Validation\ValidationException::withMessages(['client_id' => 'Use Property Actions → Transfer Ownership to change the landlord. The handover must preserve the old SLA and financial history.']);
+            }
     
             $validated = $request->validate([
                 'client_id' => 'required|integer|exists:sys_pm_clients,id',

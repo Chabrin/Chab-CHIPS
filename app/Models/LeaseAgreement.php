@@ -78,7 +78,10 @@ class LeaseAgreement extends Model
      * The service agreement this lease depends on: the one linked on the lease, otherwise the
      * property's most recent one (latest start date), the same rule used across the app.
      */
-    public function resolvedServiceAgreement(): ?ServiceAgreement {
+    public function resolvedServiceAgreement(?string $asOf = null): ?ServiceAgreement {
+        if ($this->property_id && ($ownership = app(\App\Services\PropertyOwnershipResolver::class)->agreement((int) $this->property_id, $asOf ?? today()->toDateString()))) {
+            return $ownership;
+        }
         $own = $this->sla_id ? ServiceAgreement::find($this->sla_id) : null;
         if ($own) {
             return $own;

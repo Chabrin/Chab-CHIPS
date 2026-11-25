@@ -510,7 +510,8 @@ class RecoveryService
         if ((int) $invoice->tenant_id !== (int) $data['tenant_id'] || (int) $invoice->unit_id !== (int) $data['unit_id'] || (int) $invoice->property_id !== (int) $data['property_id']) {
             throw new ClientAccountException('The invoice does not belong to that tenant, unit and property.');
         }
-        if ($this->landlordOf((int) $data['property_id']) !== (int) $data['client_id']) {
+        $invoiceOwner = app(PropertyOwnershipResolver::class)->invoiceClient($invoice) ?? $this->landlordOf((int) $data['property_id']);
+        if ($invoiceOwner !== (int) $data['client_id']) {
             throw new ClientAccountException('The property does not belong to that client.');
         }
         if (!in_array((int) $invoice->current_status_id, [1, self::INVOICE_PARTIAL], true)) {
@@ -714,7 +715,8 @@ class RecoveryService
      * @param array $reason the recovery's reason
      */
     protected function debitClientLedger(Recovery $recovery, object $invoice, float $amount, int $userId, array $reason): void {
-        $clientId = $this->landlordOf((int) $recovery->property_id) ?: (int) $recovery->client_id;
+        $clientId = app(PropertyOwnershipResolver::class)->invoiceClient($invoice)
+            ?? ($this->landlordOf((int) $recovery->property_id) ?: (int) $recovery->client_id);
         $codes = DB::table('sys_pm_clients as c')
             ->crossJoin('sys_pm_properties as p')
             ->where('c.id', $clientId)

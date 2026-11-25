@@ -29,6 +29,12 @@ trait ReturnsSummaryTrait
     protected function insertMainReturnSummariesLegacy(string $returnPeriod, int $returnYear, int $returnMonthNum, string $monthName, string $preparedByName, ?int $propertyId = null, string $returnType = 'MAINRETURN', ?string $returnCode = null): int {
         $propertyFilter = $propertyId ? " AND rc.property_id = ?" : "";
         $codeFilter = $returnCode !== null ? " AND rc.return_code = ?" : "";
+        $ownershipRateFilter = '';
+        if (\Illuminate\Support\Facades\Schema::hasTable('property_ownership_transfers')) {
+            $ownershipRateFilter = "AND (NOT EXISTS (SELECT 1 FROM property_ownership_transfers ot WHERE ot.property_id = rc.property_id AND ot.status = 'completed')
+                OR ((sla.client_d = rc.client_id OR EXISTS (SELECT 1 FROM property_ownership_transfers ot WHERE ot.old_sla_id = sla.id AND ot.from_client_id = rc.client_id AND ot.status = 'completed'))
+                    AND (sla.date_start IS NULL OR sla.date_start::date <= TO_DATE('{$returnPeriod}', 'YYYYMM'))))";
+        }
 
         // The rent lines already carry their commission and VAT, and insertCommissionLines adds a DR 'COMMISSION' line
         // that repeats the same two totals for the printed return. That line is left out of every total below, or the
@@ -65,7 +71,7 @@ trait ReturnsSummaryTrait
                 ? AS return_period,
                 ? AS return_type,
                 COALESCE(
-                    (SELECT sla.commission_percentage FROM sys_pm_service_agreements sla WHERE sla.property_id = rc.property_id ORDER BY sla.date_start DESC NULLS LAST, sla.id DESC LIMIT 1),
+                    (SELECT sla.commission_percentage FROM sys_pm_service_agreements sla WHERE sla.property_id = rc.property_id {$ownershipRateFilter} ORDER BY sla.date_start DESC NULLS LAST, sla.id DESC LIMIT 1),
                     CASE WHEN SUM(rc.commission_amount) > 0
                               AND SUM(CASE WHEN rc.dr_cr = 'CR' THEN rc.net_amount ELSE 0 END) > 0
                         THEN ROUND(SUM(rc.commission_amount) / SUM(CASE WHEN rc.dr_cr = 'CR' THEN rc.net_amount ELSE 0 END) * 100, 2)

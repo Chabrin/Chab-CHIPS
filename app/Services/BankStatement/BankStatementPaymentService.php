@@ -161,7 +161,9 @@ class BankStatementPaymentService
             throw new BankStatementException('Lease ' . $leaseId . ' no longer exists.');
         }
 
-        $property = DB::table('sys_pm_properties')->where('id', $lease->property_id)->first(['client_id', 'zone_id', 'field_officer_id', 'zone_supervisor_id', 'zone_manager_id']);
+        $property = DB::table('sys_pm_properties')->where('id', $lease->property_id)->lockForUpdate()->first(['client_id', 'zone_id', 'field_officer_id', 'zone_supervisor_id', 'zone_manager_id']);
+        // A handover may have changed the operational lease links while the property lock was waiting.
+        $lease = DB::table('sys_pm_lease_agreements')->where('id', $leaseId)->first(['id', 'client_id', 'property_id', 'unit_id', 'tenant_id', 'zone_id']);
 
         return [
             'client_id' => $lease->client_id ?: ($property->client_id ?? null),
