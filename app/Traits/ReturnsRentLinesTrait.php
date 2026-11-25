@@ -125,7 +125,8 @@ trait ReturnsRentLinesTrait
         $owner = 's.client_d';
         if (\Illuminate\Support\Facades\Schema::hasTable('property_ownership_transfers')) {
             $agreementJoin = 'LEFT JOIN sys_pm_service_agreements s ON s.id = ' . \App\Services\PropertyOwnershipResolver::returnAgreementSql($month);
-            $owner = "COALESCE(s.client_d, (SELECT ot.from_client_id FROM property_ownership_transfers ot WHERE ot.status = 'completed' AND ot.old_sla_id = s.id ORDER BY ot.effective_date LIMIT 1), p.client_id)";
+            // Only a completed handover supplies a missing SLA owner. Otherwise keep main's UNKNOWN-owner behaviour.
+            $owner = "COALESCE(s.client_d, (SELECT ot.from_client_id FROM property_ownership_transfers ot WHERE ot.status = 'completed' AND ot.old_sla_id = s.id ORDER BY ot.effective_date LIMIT 1))";
         }
         $invoiceJoins = "
             FROM sys_pm_debtors_invoices i
@@ -206,7 +207,7 @@ trait ReturnsRentLinesTrait
                 CASE WHEN {$isRent} THEN ROUND(({$commission}) * COALESCE(s.vat_per, 16) / 100, 2) ELSE 0 END,
                 CASE WHEN {$isRent} THEN {$commission} ELSE 0 END,
                 i.property_id,
-                COALESCE(c.id, 0),
+                COALESCE({$owner}, 0),
                 i.zone_id,
                 i.field_officer_id,
                 i.zone_supervisor_id,

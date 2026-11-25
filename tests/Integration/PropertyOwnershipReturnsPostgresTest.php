@@ -17,6 +17,7 @@ use App\Traits\ReturnsRentLinesTrait;
 use App\Traits\ReturnsSummaryTrait;
 use Dotenv\Dotenv;
 use Illuminate\Support\Facades\DB;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 /** Opt-in native SQL verification. All tables and sequences exist only in this connection's temporary schema. */
@@ -122,6 +123,32 @@ class PropertyOwnershipReturnsPostgresTest extends TestCase
         $this->assertSame(1, (int) DB::table('sys_pm_debtors_invoices')->where('id', 1)->value('client_id'));
         $this->assertSame(12.0, (float) DB::table('cb_returns_summary')->where('property_code', 'P1')->value('commission_rate'));
         $this->assertSame(1, (int) DB::table('cb_returns_clients')->where('invoice_id', 3)->value('client_id'));
+    }
+
+    public static function unchangedPropertyAgreements(): array
+    {
+        return [
+            'no SLA' => [false, null, 0],
+            'SLA without owner' => [true, null, 0],
+            'SLA referencing missing client' => [true, 999, 999],
+            'normal SLA' => [true, 1, 1],
+        ];
+    }
+
+    #[DataProvider('unchangedPropertyAgreements')]
+    public function test_untransferred_property_keeps_mains_sla_and_unknown_owner_rules(bool $hasAgreement, ?int $clientId, int $expectedClientId): void
+    {
+        if ($hasAgreement) {
+            DB::table('sys_pm_service_agreements')->where('id', 3)->update(['client_d' => $clientId]);
+        } else {
+            DB::table('sys_pm_service_agreements')->where('id', 3)->delete();
+        }
+        $this->generate();
+        $line = DB::table('cb_returns_clients')->where('invoice_id', 3)->sole();
+        $this->assertSame($expectedClientId, (int) $line->client_id);
+        $ownerCode = $clientId === 1 && $hasAgreement ? 'LAN-OLD' : 'UNKNOWN';
+        $this->assertSame('R1202612'.$ownerCode.'P2', $line->return_code);
+        $this->assertSame('MAINRETURN', DB::table('cb_returns_summary')->where('return_code', $line->return_code)->value('return_type'));
     }
 
     public function test_retained_arrears_generate_a_separate_return_for_the_former_landlord(): void
