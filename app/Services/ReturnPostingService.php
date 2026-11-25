@@ -129,7 +129,7 @@ class ReturnPostingService
             return false;
         }
 
-        $children = ReturnSummary::where('parent_return_code', $masterCode)->where('return_type', 'MAINRETURN')->get();
+        $children = ReturnSummary::where('parent_return_code', $masterCode)->whereIn('return_type', ['MAINRETURN', 'UTILITYRETURN'])->get();
 
         if ($children->isEmpty() || $children->contains(fn ($c) => (int) $c->approved_status !== 1)) {
             return false;

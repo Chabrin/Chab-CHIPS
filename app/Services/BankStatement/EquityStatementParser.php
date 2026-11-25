@@ -4,11 +4,11 @@ namespace App\Services\BankStatement;
 
 /**
  * The Equity Bank statement template: TRAN_DATE, SECURITY NO., TRAN_AMT, TRAN_TYPE, VALUE_DATE, REF_NUM, TRAN_RMKS,
- * SECURITY NO 2, TRAN_PARTICULAR, MODE OF PAYMENT. On a real file REF_NUM holds the unit code for cash and agent deposits
- * (it repeats the start of TRAN_PARTICULAR); app payments carry it inside TRAN_PARTICULAR ("APP|375F-61/Rent/..."), a
- * cheque in TRAN_RMKS, and M-Pesa paybill lines carry none. The payer writes the unit code first in TRAN_PARTICULAR, for example
- * "187G-8/Akinyi/KECYeUNL8Lvb/KECYeUNL8Lvb/10-11-2026" (unit code, payer, bank reference twice, date). Only CREDIT lines
- * are payments.
+ * SECURITY NO 2, TRAN_PARTICULAR, MODE OF PAYMENT. The unit code is read from REF_NUM, the reference number, which holds
+ * it for cash and agent deposits (TRAN_PARTICULAR repeats it at the start, for example
+ * "187G-8/Akinyi/KECYeUNL8Lvb/KECYeUNL8Lvb/10-11-2026"). Where REF_NUM is a bank reference instead, app payments carry
+ * the code inside TRAN_PARTICULAR ("APP|375F-61/Rent/...") and a cheque in TRAN_RMKS, so those are searched next, in that
+ * order. M-Pesa paybill lines carry none. Only CREDIT lines are payments.
  */
 class EquityStatementParser extends StatementParser
 {
@@ -45,7 +45,9 @@ class EquityStatementParser extends StatementParser
         $date = $this->date($row['TRAN_DATE'] ?? null);
         // A cheque has no REF_NUM; the bank's own transaction number in SECURITY NO. stands in for it
         $reference = $this->text($row['REF_NUM'] ?? null) ?? $this->text($row['SECURITY NO.'] ?? null);
-        $unitCode = $this->unitCode($particular, $this->text($row['TRAN_RMKS'] ?? null));
+        // The unit code is the reference number (REF_NUM); only when that is a bank reference instead (app payments,
+        // cheques) are TRAN_PARTICULAR and then TRAN_RMKS searched
+        $unitCode = $this->unitCodeCell($this->text($row['REF_NUM'] ?? null)) ?? $this->unitCode($particular, $this->text($row['TRAN_RMKS'] ?? null));
 
         $judged = $this->judge($amount, $date, $reference);
         if ($judged['match_status'] === 'Pending' && $type !== null && strtoupper($type) !== 'CREDIT') {

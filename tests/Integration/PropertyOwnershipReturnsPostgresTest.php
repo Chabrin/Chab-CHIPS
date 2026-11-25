@@ -11,6 +11,8 @@ use App\Models\ReturnSummary;
 use App\Models\ServiceAgreement;
 use App\Models\TenantRecord;
 use App\Models\Unit;
+use App\Services\MiniReturnService;
+use App\Services\ReturnApprovalWorkflowService;
 use App\Traits\ReturnsRentLinesTrait;
 use App\Traits\ReturnsSummaryTrait;
 use Dotenv\Dotenv;
@@ -62,7 +64,7 @@ class PropertyOwnershipReturnsPostgresTest extends TestCase
         }
         DB::statement('CREATE TEMP TABLE property_ownership_transfers (id bigint, property_id bigint, from_client_id bigint, status text, effective_date date, old_sla_id bigint, new_sla_id bigint) ON COMMIT DROP');
         DB::statement('CREATE TEMP TABLE property_transfer_invoice_assignments (id bigint, invoice_id bigint, effective_date date, sla_id bigint) ON COMMIT DROP');
-        DB::statement('CREATE TEMP TABLE sys_pm_clients (id bigint, reference_number text) ON COMMIT DROP');
+        DB::statement('CREATE TEMP TABLE sys_pm_clients (id bigint, reference_number text, utility_returns text) ON COMMIT DROP');
         DB::table('sys_pm_clients')->insert([['id' => 1, 'reference_number' => 'LAN-OLD'], ['id' => 2, 'reference_number' => 'LAN-NEW']]);
         DB::table('sys_pm_properties')->insert([['id' => 1, 'client_id' => 2, 'reference_number' => 'P1', 'property_name' => 'Transferred'], ['id' => 2, 'client_id' => 1, 'reference_number' => 'P2', 'property_name' => 'Unchanged']]);
         DB::table('sys_pm_units')->insert([['id' => 1, 'unit_code' => 'P1-1', 'vat_able' => 'No'], ['id' => 2, 'unit_code' => 'P2-1', 'vat_able' => 'No']]);
@@ -132,5 +134,93 @@ class PropertyOwnershipReturnsPostgresTest extends TestCase
         $this->assertSame('R1202612LAN-OLDP1', $late->return_code);
         $this->assertSame(2, DB::table('cb_returns_summary')->where('property_code', 'P1')->count());
         $this->assertSame(2, (int) DB::table('cb_returns_clients')->where('invoice_id', 2)->value('client_id'));
+    }
+
+    private function seedSeparateUtilities(): void
+    {
+        DB::table('property_transfer_invoice_assignments')->delete();
+        DB::table('sys_pm_clients')->where('id', 2)->update(['utility_returns' => 'separate_return']);
+        DB::table('sys_set_invoiceable_items')->insert(['id' => 2, 'item_name' => 'Service Charge', 'advance_payable' => 'No']);
+        foreach ([4 => [1, '2026-11-01'], 5 => [2, '2026-12-01']] as $id => [$owner, $period]) {
+            DB::table('sys_pm_debtors_invoices')->insert([
+                'id' => $id, 'property_id' => 1, 'unit_id' => 1, 'tenant_id' => 10, 'lease_id' => 1,
+                'client_id' => $owner, 'sla_id' => $owner, 'item_type_id' => 2, 'debtor_type_id' => '2',
+                'current_status_id' => 9, 'returns_period' => $period, 'total_amount' => 100,
+                'current_balance' => 0, 'created_by' => 1, 'reference_number' => 'UTILITY-'.$id,
+            ]);
+            DB::table('cb_returns_clients')->insert([
+                'invoice_id' => $id, 'return_code' => 'R1202611LAN-OLDP1', 'property_id' => 1,
+                'client_id' => $owner, 'return_period' => 202611, 'dr_cr' => 'CR', 'net_amount' => 50,
+            ]);
+        }
+    }
+
+    public function test_separate_utility_returns_preserve_each_owners_arrears_and_distinct_return_ids(): void
+    {
+        $this->seedSeparateUtilities();
+        $this->generate();
+        $returns = DB::table('cb_returns_summary')->where('property_code', 'P1')->get()->keyBy('return_code');
+        $this->assertCount(4, $returns);
+        $this->assertCount(4, $returns->pluck('return_id')->unique());
+        foreach (['OLD' => 10, 'NEW' => 12] as $owner => $commission) {
+            $rent = $returns['R1202612LAN-'.$owner.'P1'];
+            $utility = $returns['RU1202612LAN-'.$owner.'P1'];
+            $this->assertSame('MAINRETURN', $rent->return_type);
+            $this->assertSame('UTILITYRETURN', $utility->return_type);
+            $this->assertSame((float) $commission, (float) $utility->commission_rate);
+            $this->assertSame(0.0, (float) $utility->commission_amount);
+        }
+    }
+
+    public function test_minis_include_both_owners_and_utility_returns_and_reserve_used_utility_sequences(): void
+    {
+        $this->seedSeparateUtilities();
+        DB::statement('CREATE TEMP TABLE josya_users (id bigint, name text) ON COMMIT DROP');
+        DB::table('sys_pm_debtors_invoices')->where('id', 2)->update(['current_balance' => 0]);
+        DB::table('cb_returns_clients')->insert([
+            'invoice_id' => 2, 'return_code' => 'R1202612LAN-NEWP1', 'property_id' => 1,
+            'client_id' => 2, 'return_period' => 202612, 'dr_cr' => 'CR', 'net_amount' => 50,
+        ]);
+        DB::table('cb_returns_summary')->insert([
+            'return_code' => 'RU2202612LAN-NEWP1', 'return_period' => 202612,
+            'property_code' => 'P1', 'return_type' => 'MINIRETURN', 'return_id' => 100,
+        ]);
+        // Exercise native generation and summaries; record deduction dispatch without unrelated ledger fixtures.
+        $service = new class(new ReturnApprovalWorkflowService) extends MiniReturnService
+        {
+            public array $deductionCodes = [];
+
+            public array $commissionCodes = [];
+
+            protected function mainReturnApproved(string $period, string $propertyCode): bool
+            {
+                return true;
+            }
+
+            protected function deleteUnapprovedMinis(string $period, string $propertyCode): void {}
+
+            protected function insertAdvancePaymentLines(string $returnPeriod, string $transactionDate, int $generatedBy, int $returnYear, int $returnMonth, ?int $propertyId = null, ?string $returnCode = null, bool $batchProperty = false): int
+            {
+                $this->deductionCodes[] = $returnCode;
+
+                return 0;
+            }
+
+            protected function insertCommissionLines(string $returnPeriod, string $transactionDate, int $generatedBy, ?int $propertyId = null, ?string $returnCode = null): int
+            {
+                $this->commissionCodes[] = $returnCode;
+
+                return 0;
+            }
+        };
+        $result = $service->generate(1, '2026-12', 1, null);
+        $rentCodes = ['R3202612LAN-OLDP1', 'R3202612LAN-NEWP1'];
+        $allCodes = array_merge($rentCodes, ['RU3202612LAN-OLDP1', 'RU3202612LAN-NEWP1']);
+        $this->assertEqualsCanonicalizing($allCodes, $result['return_codes']);
+        $this->assertEqualsCanonicalizing($rentCodes, $service->deductionCodes);
+        $this->assertEqualsCanonicalizing($rentCodes, $service->commissionCodes);
+        $this->assertSame('R3202612LAN-NEWP1', $result['return_code']);
+        $this->assertSame(4, DB::table('cb_returns_summary')->whereIn('return_code', $allCodes)->count());
+        $this->assertSame(4, DB::table('cb_returns_summary')->whereIn('return_code', $allCodes)->distinct()->count('return_id'));
     }
 }

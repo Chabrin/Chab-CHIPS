@@ -27,6 +27,14 @@ class ReturnStatementService
         'monthly_rent' => 'Monthly Rent', 'remarks' => 'Remarks',
     ];
 
+    // The parts of a statement: the whole return, its rent side, or its utility side (a client who wants two reports)
+    public const PART_ALL = 'all';
+    public const PART_RENT = 'rent';
+    public const PART_UTILITY = 'utility';
+
+    // The tenant columns that hold utilities; the rent report leaves them out and the utility report shows only them
+    public const UTILITY_COLUMNS = ['elec_bill', 'water_bill', 'service_charge'];
+
     // The existing return-line remarks column is varchar(50).
     public const REMARKS_LIMIT = 50;
 
@@ -38,22 +46,113 @@ class ReturnStatementService
 
     /**
      * Everything the statement shows: the tenant rows and column totals, the summary A to H, the blocks I to O, and the
-     * arrears details.
+     * arrears details. A part limits it to one side of the return: the rent report (rent, arrears, deposits, commission,
+     * VAT and every deduction) or the utility report (service charge, water and electricity bills and any other item).
+     * The two parts always add up to the whole return.
      *
      * @param ReturnSummary $return
      * @param Collection $lines the return's lines
      * @param Collection|null $ledgerGaps ledger debits tagged to the return that have no line; looked up when null
+     * @param string $part PART_ALL, PART_RENT or PART_UTILITY
      * @return array
      */
-    public function statement(ReturnSummary $return, Collection $lines, ?Collection $ledgerGaps = null): array {
+    public function statement(ReturnSummary $return, Collection $lines, ?Collection $ledgerGaps = null, string $part = self::PART_ALL): array {
+        if ($part === self::PART_UTILITY) {
+            return $this->utilityStatement($lines);
+        }
+
+        $storedNet = null;
+        if ($part === self::PART_RENT) {
+            $utilityLines = $lines->filter(fn($line) => $this->isUtilityLine($line));
+            $lines = $lines->reject(fn($line) => $this->isUtilityLine($line))->values();
+            // What the rent side must come to: the stored net less the utility side
+            $storedNet = $return->net_amount === null ? null : round((float) $return->net_amount - (float) $utilityLines->sum(fn($line) => (float) ($line->net_amount ?? 0)), 2);
+        } else {
+            $part = self::PART_ALL;
+        }
+
         $data = $this->build($lines);
         $data['tenantRows'] = $this->includeMissingRooms($return, $lines, $data['tenantRows']);
         $data['summary'] = $this->summary($return, $lines, $data['totals']);
-        $data['summaryRows'] = $this->summaryRows($return);
-        $data['settlementRows'] = $this->settlement($return, $lines, $data['summary'], $ledgerGaps ?? $this->ledgerGaps($return, $lines));
+        $data['summaryRows'] = $this->summaryRows($return, $part);
+        $data['settlementRows'] = $this->settlement($return, $lines, $data['summary'], $ledgerGaps ?? $this->ledgerGaps($return, $lines), $storedNet);
         $data['arrears'] = $this->arrearsDetails($return, $lines);
+        $data['part'] = $part;
+        $data['columns'] = $this->columnsFor($part);
+
+        // A utility return (code RU...) holds only utilities: show only their columns and summary rows
+        if ($part === self::PART_ALL && str_starts_with((string) $return->return_code, 'RU')) {
+            $data['columns'] = $this->columnsFor(self::PART_UTILITY);
+            $data['summaryRows'] = array_values(array_filter($data['summaryRows'], fn($row) => in_array($row[0], ['bills', 'service_charge', 'other_payments', 'total_income'], true)));
+        }
 
         return $data;
+    }
+
+    /**
+     * The utility report of a return: one row per room with the electricity bill, water bill and service charge, and
+     * their total. It has no commission, deductions or amount payable: those are on the rent report.
+     *
+     * @param Collection $lines the return's lines (all of them; the rent lines are left out here)
+     * @return array
+     */
+    private function utilityStatement(Collection $lines): array {
+        $data = $this->build($lines->filter(fn($line) => $this->isUtilityLine($line))->values());
+        $totals = $data['totals'];
+        $other = round((float) ($totals['other_payments'] ?? 0), 2);
+        $total = round($totals['elec_bill'] + $totals['water_bill'] + $totals['service_charge'] + $other, 2);
+
+        return [
+            'tenantRows' => $data['tenantRows'],
+            'totals' => $totals,
+            'summary' => ['elec_bill' => $totals['elec_bill'], 'water_bill' => $totals['water_bill'], 'service_charge' => $totals['service_charge'], 'other_items' => $other, 'total' => $total],
+            'summaryRows' => [
+                ['elec_bill', 'Electricity bills', 'plain'],
+                ['water_bill', 'Water bills', 'plain'],
+                ['service_charge', 'Service charge', 'plain'],
+                ['other_items', 'Other items', 'plain'],
+                ['total', 'Total utilities', 'closing'],
+            ],
+            'settlementRows' => [],
+            'arrears' => [],
+            'part' => self::PART_UTILITY,
+            'columns' => $this->columnsFor(self::PART_UTILITY),
+        ];
+    }
+
+    /**
+     * The tenant columns a part shows.
+     *
+     * @param string $part PART_ALL, PART_RENT or PART_UTILITY
+     * @return array column key => label
+     */
+    public function columnsFor(string $part): array {
+        return match ($part) {
+            self::PART_UTILITY => array_intersect_key(self::COLUMNS, array_flip(['unit_code', 'tenant_name', 'elec_bill', 'water_bill', 'service_charge', 'remarks'])),
+            self::PART_RENT => array_diff_key(self::COLUMNS, array_flip(self::UTILITY_COLUMNS)),
+            default => self::COLUMNS,
+        };
+    }
+
+    /**
+     * Whether a line belongs to the utility side of a return: a credit that is a utility bill (electricity, water,
+     * service charge) or any other credit item that is not rent, arrears or a deposit. Debits, the opening balance, the
+     * rent VAT added back and a merged return's property sums are never utility. It agrees with
+     * UtilityReturnsService::isUtilityItemName, which generation uses to decide the same thing.
+     *
+     * @param object $line a return line
+     */
+    public function isUtilityLine($line): bool {
+        $role = $this->roleOf($line, false);
+
+        if ($role === 'other_income') {
+            // Named by its description (or its type); a line with no name stays with the rent, as it does when returns are generated
+            $description = trim((string) ($line->entry_description ?? ''));
+
+            return UtilityReturnsService::isUtilityItemName($description !== '' ? $description : (string) ($line->entry_type ?? ''));
+        }
+
+        return $role === 'column' && in_array($this->columnFor($line), self::UTILITY_COLUMNS, true);
     }
 
     /** Add display-only rooms to draft main returns; never invent financial transactions. */
@@ -263,10 +362,11 @@ class ReturnStatementService
      * The summary lines A to H in print order: key, label and kind (plain, less, strong, add, closing).
      *
      * @param ReturnSummary $return
+     * @param string $part PART_ALL, or PART_RENT to leave out the utility rows
      * @return array
      */
-    public function summaryRows(ReturnSummary $return): array {
-        return [
+    public function summaryRows(ReturnSummary $return, string $part = self::PART_ALL): array {
+        $rows = [
             ['rent_current', 'A. Total rent current', 'plain'],
             ['rent_arrears', 'B. Add total rent arrears', 'plain'],
             ['rent_vat', 'Less VAT on rent (' . InvoiceBillingService::VAT_RATE . '%)', 'less'],
@@ -283,6 +383,9 @@ class ReturnStatementService
             ['other_payments', 'Add other payments / deposits', 'add'],
             ['total_income', 'H. Total income', 'closing'],
         ];
+
+        // The rent report has no utility rows: they are on the utility report
+        return $part === self::PART_RENT ? array_values(array_filter($rows, fn($row) => !in_array($row[0], ['bills', 'service_charge', 'other_payments'], true))) : $rows;
     }
 
     /**
@@ -296,9 +399,10 @@ class ReturnStatementService
      * @param Collection $lines
      * @param array $summary the summary from summary()
      * @param Collection $ledgerGaps ledger debits tagged to the return that have no line
+     * @param float|null $storedNet the net the lines must reach when it is not the return's own (the rent report: the net less the utilities)
      * @return array
      */
-    public function settlement(ReturnSummary $return, Collection $lines, array $summary, Collection $ledgerGaps): array {
+    public function settlement(ReturnSummary $return, Collection $lines, array $summary, Collection $ledgerGaps, ?float $storedNet = null): array {
         $perLine = $this->commissionOnRentLines($lines);
         $recoveries = [];
         $opening = [];
@@ -319,7 +423,7 @@ class ReturnStatementService
         $recoveriesTotal = round(array_sum(array_column($recoveries, 4)), 2);
         $openingTotal = round(array_sum(array_column($opening, 4)), 2);
         $nettIncome = round($summary['total_income'] - $recoveriesTotal, 2);
-        $stored = $return->net_amount ?? null;
+        $stored = $storedNet ?? $return->net_amount ?? null;
 
         // Ledger debits tagged to this return whose line is missing (lost when the old returns were loaded) are listed
         // only when the lines alone do not reach the stored net and the gaps bring them to it; otherwise they are not

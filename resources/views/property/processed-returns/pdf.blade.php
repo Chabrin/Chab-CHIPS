@@ -31,7 +31,7 @@
     @endphp
 
     @include('pdf.partials.letterhead', [
-        'title' => 'RETURN STATEMENT',
+        'title' => ($part ?? 'all') === 'rent' ? 'RENT REPORT' : (str_starts_with((string) $return->return_code, 'RU') ? 'UTILITY RETURN STATEMENT' : 'RETURN STATEMENT'),
         'period' => $exportInfo['title'],
         'metaLines' => ['Return ID: ' . $return->return_code, 'Printed: ' . date('d M Y, H:i')],
     ])
@@ -61,62 +61,56 @@
         </tr>
     </table>
 
+    @php
+        // The tenant columns this report shows (a rent report or a utility return leaves some out); widths are shares of the table
+        $columns = $columns ?? \App\Services\ReturnStatementService::COLUMNS;
+        $widths = ['unit_code' => 5, 'tenant_name' => 14, 'payable' => 6.5, 'rent_arrears' => 8, 'vat' => 5.5, 'house_deposit_amt' => 6.5,
+            'elec_deposit_amt' => 6, 'water_deposit_amt' => 6, 'elec_bill' => 6.5, 'water_bill' => 6.5, 'service_charge' => 6.5, 'monthly_rent' => 7.5, 'remarks' => 15];
+        $total = array_sum(array_intersect_key($widths, $columns)) ?: 100;
+        $moneyColumns = ['payable', 'monthly_rent'];
+        $totalKey = ['house_deposit_amt' => 'house_deposit', 'elec_deposit_amt' => 'elec_deposit', 'water_deposit_amt' => 'water_deposit'];
+    @endphp
     <table class="txn">
         <thead>
             <tr>
-                <th class="" style="width: 5%;">ROOM</th>
-                <th class="" style="width: 14%;">TENANT</th>
-                <th class="r" style="width: 6.5%;">PAYABLE</th>
-                <th class="r" style="width: 8%;">ARREARS / PREPAYMENTS</th>
-                <th class="r" style="width: 5.5%;">VAT</th>
-                <th class="r" style="width: 6.5%;">HOUSE DEP.</th>
-                <th class="r" style="width: 6%;">ELEC DEP.</th>
-                <th class="r" style="width: 6%;">WATER DEP.</th>
-                <th class="r" style="width: 6.5%;">ELEC BILL</th>
-                <th class="r" style="width: 6.5%;">WATER BILL</th>
-                <th class="r" style="width: 6.5%;">SVC CHARGE</th>
-                <th class="r" style="width: 7.5%;">MONTHLY RENT</th>
-                <th class="" style="width: 15%;">REMARKS</th>
+                @foreach($columns as $key => $label)
+                <th class="{{ in_array($key, ['unit_code', 'tenant_name', 'remarks']) ? '' : 'r' }}" style="width: {{ round($widths[$key] * 100 / $total, 1) }}%;">{{ strtoupper($label) }}</th>
+                @endforeach
             </tr>
         </thead>
         <tbody>
             @forelse($tenantRows as $row)
             <tr class="{{ $loop->even ? 'alt' : '' }}">
-                <td>{{ $row['unit_code'] ?: '-' }}</td>
-                <td>{{ $row['tenant_name'] }}</td>
-                <td class="r">{{ $money($row['payable'] ?? 0) }}</td>
-                <td class="r">{{ $amt($row['rent_arrears']) }}</td>
-                <td class="r">{{ $amt($row['vat']) }}</td>
-                <td class="r">{{ $amt($row['house_deposit_amt']) }}</td>
-                <td class="r">{{ $amt($row['elec_deposit_amt']) }}</td>
-                <td class="r">{{ $amt($row['water_deposit_amt']) }}</td>
-                <td class="r">{{ $amt($row['elec_bill']) }}</td>
-                <td class="r">{{ $amt($row['water_bill']) }}</td>
-                <td class="r">{{ $amt($row['service_charge']) }}</td>
-                <td class="r">{{ $money($row['monthly_rent'] ?? 0) }}</td>
-                <td class="remarks">{{ $row['remarks'] ?? '' }}</td>
+                @foreach($columns as $key => $label)
+                    @if($key === 'unit_code')
+                    <td>{{ $row['unit_code'] ?: '-' }}</td>
+                    @elseif($key === 'tenant_name')
+                    <td>{{ $row['tenant_name'] }}</td>
+                    @elseif($key === 'remarks')
+                    <td class="remarks">{{ $row['remarks'] ?? '' }}</td>
+                    @else
+                    <td class="r">{{ in_array($key, $moneyColumns) ? $money($row[$key] ?? 0) : $amt($row[$key] ?? 0) }}</td>
+                    @endif
+                @endforeach
             </tr>
             @empty
             <tr>
-                <td colspan="13" class="empty">No tenant lines found for this return.</td>
+                <td colspan="{{ count($columns) }}" class="empty">No tenant lines found for this return.</td>
             </tr>
             @endforelse
 
             @if(count($tenantRows) > 0)
             <tr class="totals">
-                <td></td>
-                <td>TOTALS</td>
-                <td class="r">{{ $money($totals['payable']) }}</td>
-                <td class="r">{{ $amt($totals['rent_arrears']) }}</td>
-                <td class="r">{{ $amt($totals['vat']) }}</td>
-                <td class="r">{{ $amt($totals['house_deposit']) }}</td>
-                <td class="r">{{ $amt($totals['elec_deposit']) }}</td>
-                <td class="r">{{ $amt($totals['water_deposit']) }}</td>
-                <td class="r">{{ $amt($totals['elec_bill']) }}</td>
-                <td class="r">{{ $amt($totals['water_bill']) }}</td>
-                <td class="r">{{ $amt($totals['service_charge']) }}</td>
-                <td class="r">{{ $money($totals['monthly_rent']) }}</td>
-                <td></td>
+                @foreach($columns as $key => $label)
+                    @if($key === 'tenant_name')
+                    <td>TOTALS</td>
+                    @elseif(in_array($key, ['unit_code', 'remarks']))
+                    <td></td>
+                    @else
+                    @php($sum = $totals[$totalKey[$key] ?? $key] ?? 0)
+                    <td class="r">{{ in_array($key, $moneyColumns) ? $money($sum) : $amt($sum) }}</td>
+                    @endif
+                @endforeach
             </tr>
             @endif
         </tbody>

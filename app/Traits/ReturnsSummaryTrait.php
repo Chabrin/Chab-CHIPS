@@ -22,13 +22,14 @@ trait ReturnsSummaryTrait
      * @param string $monthName
      * @param string $preparedByName name of the user who generated the returns
      * @param int|null $propertyId Optional: summarise a single property only
-     * @param string $returnType MAINRETURN or MINIRETURN
-     * @param string|null $returnCode Optional: summarise the lines of this one return code only (a mini return)
+     * @param string $returnType MAINRETURN or MINIRETURN; the main utility return (code RU1...) is always UTILITYRETURN
+     * @param string|array|null $returnCode Optional: summarise the lines of this return code, or of these codes, only (a mini return)
      * @return int Summaries inserted
      */
-    protected function insertMainReturnSummariesLegacy(string $returnPeriod, int $returnYear, int $returnMonthNum, string $monthName, string $preparedByName, ?int $propertyId = null, string $returnType = 'MAINRETURN', ?string $returnCode = null): int {
+    protected function insertMainReturnSummariesLegacy(string $returnPeriod, int $returnYear, int $returnMonthNum, string $monthName, string $preparedByName, ?int $propertyId = null, string $returnType = 'MAINRETURN', string|array|null $returnCode = null): int {
         $propertyFilter = $propertyId ? " AND rc.property_id = ?" : "";
-        $codeFilter = $returnCode !== null ? " AND rc.return_code = ?" : "";
+        $returnCodes = $returnCode === null ? null : array_values((array) $returnCode);
+        $codeFilter = $returnCodes !== null ? " AND rc.return_code IN (" . implode(', ', array_fill(0, count($returnCodes), '?')) . ")" : "";
         $ownershipRateFilter = '';
         if (\Illuminate\Support\Facades\Schema::hasTable('property_ownership_transfers')) {
             $ownershipRateFilter = "AND (NOT EXISTS (SELECT 1 FROM property_ownership_transfers ot WHERE ot.property_id = rc.property_id AND ot.status = 'completed')
@@ -67,9 +68,9 @@ trait ReturnsSummaryTrait
                 COALESCE(
                     (SELECT pp.property_name FROM sys_pm_properties pp WHERE pp.id = rc.property_id LIMIT 1),
                     rc.property_code
-                ) || '-{$monthName} {$returnYear}' AS return_description,
+                ) || '-{$monthName} {$returnYear}' || CASE WHEN rc.return_code LIKE 'RU%' THEN ' - Utilities' ELSE '' END AS return_description,
                 ? AS return_period,
-                ? AS return_type,
+                CASE WHEN rc.return_code LIKE 'RU1%' THEN 'UTILITYRETURN' ELSE ? END AS return_type,
                 COALESCE(
                     (SELECT sla.commission_percentage FROM sys_pm_service_agreements sla WHERE sla.property_id = rc.property_id {$ownershipRateFilter} ORDER BY sla.date_start DESC NULLS LAST, sla.id DESC LIMIT 1),
                     CASE WHEN SUM(rc.commission_amount) > 0
@@ -116,8 +117,8 @@ trait ReturnsSummaryTrait
         if ($propertyId) {
             $bindings[] = $propertyId;
         }
-        if ($returnCode !== null) {
-            $bindings[] = $returnCode;
+        foreach ($returnCodes ?? [] as $code) {
+            $bindings[] = $code;
         }
 
         return DB::affectingStatement($q3, $bindings);

@@ -19,7 +19,7 @@
     @endphp
 
     @include('pdf.partials.letterhead', [
-        'title' => 'MASTER RETURN',
+        'title' => str_starts_with((string) $return->return_code, 'RU') ? 'MASTER UTILITY RETURN' : 'MASTER RETURN',
         'period' => $monthLabel,
         'metaLines' => ['Return ID: ' . $return->return_code, 'Printed: ' . date('d M Y, H:i')],
     ])

@@ -47,4 +47,13 @@ class MergedReturnServiceTest extends TestCase
         $this->assertStringStartsWith('R1', $code);
         $this->assertLessThanOrEqual(50, strlen($code));
     }
+
+    public function test_the_merged_utility_return_has_its_own_code_and_suffixes(): void
+    {
+        $this->assertSame('RU1202611LAN-01072', MergedReturnService::masterCode('202611', 'LAN-01072', [], 'RU1'));
+        // The merged rent return of the same landlord and period does not count against it, and the other way round
+        $this->assertSame('RU1202611LAN-01072', MergedReturnService::masterCode('202611', 'LAN-01072', ['R1202611LAN-01072'], 'RU1'));
+        $this->assertSame('R1202611LAN-01072', MergedReturnService::masterCode('202611', 'LAN-01072', ['RU1202611LAN-01072'], 'R1'));
+        $this->assertSame('RU1202611LAN-01072-2', MergedReturnService::masterCode('202611', 'LAN-01072', ['RU1202611LAN-01072'], 'RU1'));
+    }
 }

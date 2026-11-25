@@ -5,6 +5,7 @@ namespace App\Traits;
 use App\Models\AdvanceSchedule;
 use App\Models\ClientAdvance;
 use App\Models\LandlordAccount;
+use App\Services\UtilityReturnsService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -298,9 +299,11 @@ trait ReturnsDeductionsTrait
                 ?
             FROM cb_money_recoveries mr
             JOIN LATERAL (
+                -- A recovery is a deduction: it goes on the rent return, never on a utility return (RU)
                 SELECT return_code, return_id, property_code
                 FROM cb_returns_clients
-                WHERE return_period = ? AND property_id = mr.property_id
+                WHERE return_period = ? AND property_id = mr.property_id AND return_code NOT LIKE 'RU%'
+                ORDER BY id
                 LIMIT 1
             ) rc_base ON true
             WHERE mr.transaction_class = 'DR'
@@ -345,6 +348,10 @@ trait ReturnsDeductionsTrait
             $bindings[] = $propertyId;
         }
 
+        // A collected bill belongs on the utility return (RU) of a client who has one. When the property has no utility
+        // line this month the utility return takes its code from the rent return's, and the summary step creates it.
+        $wantsUtility = "(COALESCE(pcl.utility_returns, 'with_rent') = '" . UtilityReturnsService::SEPARATE_RETURN . "' AND " . UtilityReturnsService::utilityItemSql('mr.transaction_type') . ")";
+
         $collectionsInserted = DB::affectingStatement("
             INSERT INTO cb_returns_clients (
                 return_code, return_period, transaction_number, transaction_date,
@@ -357,7 +364,7 @@ trait ReturnsDeductionsTrait
                 server_time, user_id
             )
             SELECT
-                rc_base.return_code,
+                CASE WHEN {$wantsUtility} AND rc_base.return_code NOT LIKE 'RU%' AND rc_base.return_code NOT LIKE '%UNKNOWN%' THEN 'RU' || SUBSTRING(rc_base.return_code FROM 2) ELSE rc_base.return_code END,
                 ?::integer,
                 COALESCE(mr.transaction_number, ''),
                 ?,
@@ -384,10 +391,14 @@ trait ReturnsDeductionsTrait
                 NOW(),
                 ?
             FROM cb_money_recoveries mr
+            LEFT JOIN sys_pm_properties mp ON mp.id = mr.property_id
+            LEFT JOIN sys_pm_clients pcl ON pcl.id = mp.client_id
             JOIN LATERAL (
+                -- Prefer the return of the kind the item belongs to (utility or rent)
                 SELECT return_code, return_id, property_code
                 FROM cb_returns_clients
                 WHERE return_period = ? AND property_id = mr.property_id
+                ORDER BY CASE WHEN (return_code LIKE 'RU%') = {$wantsUtility} THEN 0 ELSE 1 END, id
                 LIMIT 1
             ) rc_base ON true
             WHERE mr.transaction_class = 'CR'
@@ -450,23 +461,37 @@ trait ReturnsDeductionsTrait
     ): void {
         $propertyFilter = $propertyId ? "AND mr.property_id = ?" : "";
 
-        $bindings = [$returnYear, $returnMonth, $returnPeriod];
+        // Placeholders in the order they appear: the period of the return looked up, year, month, the period of the exists check, property
+        $bindings = [$returnPeriod, $returnYear, $returnMonth, $returnPeriod];
         if ($propertyId) {
             $bindings[] = $propertyId;
         }
 
+        // A property can have a rent return and a utility return: link to the rent return when there is one. A recovery
+        // is a deduction, so it links only to a rent return (it waits when the property has only a utility return).
         DB::statement("
             UPDATE cb_money_recoveries mr
-            SET return_id = rs.id,
+            SET return_id = (
+                    SELECT rs.id
+                    FROM cb_returns_summary rs
+                    JOIN sys_pm_properties p ON p.reference_number = rs.property_code
+                    WHERE p.id = mr.property_id
+                      AND rs.return_period = ?
+                      AND rs.approved_status = 0
+                      AND (mr.transaction_class <> 'DR' OR rs.return_code NOT LIKE 'RU%')
+                    ORDER BY (rs.return_code LIKE 'RU%'), rs.id
+                    LIMIT 1
+                ),
                 is_locked = true
-            FROM cb_returns_summary rs
-            JOIN sys_pm_properties p ON p.reference_number = rs.property_code
             WHERE mr.year  = ?
               AND mr.month = ?
               AND mr.return_id IS NULL
-              AND mr.property_id = p.id
-              AND rs.return_period = ?
-              AND rs.approved_status = 0
+              AND EXISTS (
+                    SELECT 1 FROM cb_returns_summary rs2
+                    JOIN sys_pm_properties p2 ON p2.reference_number = rs2.property_code
+                    WHERE p2.id = mr.property_id AND rs2.return_period = ? AND rs2.approved_status = 0
+                      AND (mr.transaction_class <> 'DR' OR rs2.return_code NOT LIKE 'RU%')
+              )
               {$propertyFilter}
         ", $bindings);
 

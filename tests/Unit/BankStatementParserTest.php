@@ -80,6 +80,26 @@ class BankStatementParserTest extends TestCase
         $this->assertNull($parser->unitCode('KECYeUNL8Lvb 10-11-2026 0430263787755'));
     }
 
+    public function test_equity_unit_code_is_read_from_ref_num_first_then_tran_particular_then_tran_rmks(): void
+    {
+        $path = $this->sheet([
+            self::EQUITY_HEADERS,
+            [46336, 'S1', 7000, 'CREDIT', 46336, '56G-B9', '', '', '99X-1/Someone/10-11-2026', 'CASH'],
+            [46336, 'S2', 7000, 'CREDIT', 46336, '00KEyXHH7fZIeN', '', '', 'APP|375F-61/Rent/KEyXHH7fZIeN', 'CASH'],
+            [46336, 'S3', 7000, 'CREDIT', 46336, '', '170F-B05', '', 'Chq:009190 SOME LTD', 'CHEQUE'],
+            [46336, 'S4', 7000, 'CREDIT', 46336, '12F-B/S', '', '', 'no code here', 'CASH'],
+            [46336, 'S5', 7000, 'CREDIT', 46336, '00hzO6tCyp9G1r', '', '', 'NAME|UKD9T1SRB7 NAME 0430263787755', 'CASH'],
+        ]);
+
+        $lines = (new EquityStatementParser())->parse($path);
+
+        $this->assertSame('56G-B9', $lines[0]['unit_code'], 'REF_NUM wins over TRAN_PARTICULAR');
+        $this->assertSame('375F-61', $lines[1]['unit_code'], 'a bank reference in REF_NUM sends the search to TRAN_PARTICULAR');
+        $this->assertSame('170F-B05', $lines[2]['unit_code'], 'then to TRAN_RMKS');
+        $this->assertSame('12F-B/S', $lines[3]['unit_code'], 'a code with a slash in REF_NUM is read whole');
+        $this->assertNull($lines[4]['unit_code']);
+    }
+
     public function test_a_debit_line_is_skipped_and_unreadable_rows_are_invalid(): void
     {
         $path = $this->sheet([
@@ -110,7 +130,7 @@ class BankStatementParserTest extends TestCase
         $this->assertSame('2026-11-10', $line['posting_date']);
         $this->assertSame(12500.5, $line['amount']);
         $this->assertSame('187G-8', $line['unit_code']);
-        $this->assertSame('Akinyi', $line['payer_name']);
+        $this->assertNull($line['payer_name'], 'ST_NAME is not a payer name');
         $this->assertSame('Pending', $line['match_status']);
     }
 
@@ -119,6 +139,27 @@ class BankStatementParserTest extends TestCase
         $path = $this->sheet([self::COOP_HEADERS, ['R9', '2026-11-10', '', 'ABC', 'Akinyi', '0123', 1000, 'u1', 'CASH', '', 'Rent 76F-F4 Nov']]);
 
         $this->assertSame('76F-F4', (new CoopStatementParser())->parse($path)[0]['unit_code']);
+    }
+
+    public function test_coop_payer_name_comes_from_the_narration_and_never_from_st_name(): void
+    {
+        $path = $this->sheet([
+            self::COOP_HEADERS,
+            ['UKDBR1QDM2', '13-NOV-2026 11:00:00', '', '', '', '0114', 600, 'U', 'IBAPS', '0', 'UKDBR1QDM2~254700000001~01148039906100~MPESAC2B_400200~JANE WANJIKU'],
+            ['UKDG7', '13-NOV-2026 11:00:00', '', '', '', '0114', 600, 'U', 'IBAPS', '0', 'PESALINK~1AP28F6C8~JOHN OTIENO~1450185463418~0068~Payments'],
+            ['UKDG8', '13-NOV-2026 11:00:00', '', '', '', '0114', 600, 'U', 'IBAPS', '0', 'AC56ED52A126 SOME PERSON RENT'],
+            ['UKDG9', '13-NOV-2026 11:00:00', '', '49C-025', '49C-025', '0114', 600, 'U', 'IBAPS', '0', 'UKDG9~1~2~MPESAC2B_400200~OTHER NAME'],
+            ['UKDG10', '13-NOV-2026 11:00:00', '', '49C-025', '49C-025', '0114', 600, 'U', 'IBAPS', '0', 'UKDG10~49C-025~POS'],
+        ]);
+
+        $lines = (new CoopStatementParser())->parse($path);
+
+        $this->assertSame('JANE WANJIKU', $lines[0]['payer_name']);
+        $this->assertSame('JOHN OTIENO', $lines[1]['payer_name']);
+        $this->assertNull($lines[2]['payer_name'], 'free text is not guessed at');
+        $this->assertSame('OTHER NAME', $lines[3]['payer_name']);
+        $this->assertNull($lines[4]['payer_name'], 'ST_NAME holds the unit code, so it is never the payer name');
+        $this->assertNull($lines[0]['unit_code'], 'the name is information only and never a match');
     }
 
     public function test_blank_rows_are_skipped_and_the_header_may_sit_below_a_title_row(): void
