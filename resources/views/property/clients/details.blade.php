@@ -1184,18 +1184,19 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                         <small class="text-muted d-block mb-2">Rent, rent arrears and deposits are rent. Service charge, water and electricity bills and every other item are utilities. Applies to all of this client's properties.</small>
                                         <div id="utilityReturnsOptions">
                                             <div class="form-check mb-1">
-                                                <input class="form-check-input" type="radio" name="utility_returns" id="utilityReturnsWithRent" value="with_rent" checked>
+                                                <input class="form-check-input" type="radio" name="utility_returns" id="utilityReturnsWithRent" value="with_rent" @checked(\App\Services\UtilityReturnsService::normalise($client->utility_returns) === 'with_rent')>
                                                 <label class="form-check-label" for="utilityReturnsWithRent"><strong>Rent</strong> - one return and one report, utilities inside it</label>
                                             </div>
                                             <div class="form-check mb-1">
-                                                <input class="form-check-input" type="radio" name="utility_returns" id="utilityReturnsSeparateReport" value="separate_report">
+                                                <input class="form-check-input" type="radio" name="utility_returns" id="utilityReturnsSeparateReport" value="separate_report" @checked(\App\Services\UtilityReturnsService::normalise($client->utility_returns) === 'separate_report')>
                                                 <label class="form-check-label" for="utilityReturnsSeparateReport"><strong>Separate report</strong> - one return and one payment, with a rent report and a utility report</label>
                                             </div>
                                             <div class="form-check mb-1">
-                                                <input class="form-check-input" type="radio" name="utility_returns" id="utilityReturnsSeparateReturn" value="separate_return">
+                                                <input class="form-check-input" type="radio" name="utility_returns" id="utilityReturnsSeparateReturn" value="separate_return" @checked(\App\Services\UtilityReturnsService::normalise($client->utility_returns) === 'separate_return')>
                                                 <label class="form-check-label" for="utilityReturnsSeparateReturn"><strong>Separate return</strong> - a rent return and a utility return, each paid on its own. Applies to returns generated from now on; an approved month stays as it was.</label>
                                             </div>
                                         </div>
+                                        <small id="utilityReturnsSaveStatus" class="text-muted d-block mt-2" role="status" aria-live="polite">Changes save automatically.</small>
                                     </div>
                                 </div>
                                 <div class="card border-0 shadow-sm">
@@ -1942,7 +1943,6 @@ COPY PERMISSIONS (paste when re-enabling checks):
         var editingReturnsBatchId = null;
         var propertiesLoaded = false;
         var relatedPropertiesLoaded = false;
-        var returnsConfigLoaded = false;
         var unitsLoaded = false;
         var tenantsLoaded = false;
         var propertiesDropdownLoaded = false;
@@ -2709,10 +2709,7 @@ COPY PERMISSIONS (paste when re-enabling checks):
 
         $('#returns-config-tab').on('click', function() {
             loadReturnsBatchBanks();
-            if (!returnsConfigLoaded) {
-                loadReturnsConfig();
-                returnsConfigLoaded = true;
-            }
+            loadReturnsConfig();
         });
 
         $('#btnCreateReturnsBatchInline').on('click', function() {
@@ -4034,8 +4031,41 @@ COPY PERMISSIONS (paste when re-enabling checks):
             });
         }
 
+        // Keep the saved choice separate from pending UI changes and older GET responses.
+        var utilityReturnsSavedMode = @json(\App\Services\UtilityReturnsService::normalise($client->utility_returns));
+        var utilityReturnsSaving = false;
+        var utilityReturnsRevision = 0;
+        var returnsConfigRequest = 0;
+
+        function showUtilityReturnsMode(mode) {
+            $('#utilityReturnsOptions input[name="utility_returns"]').each(function() {
+                $(this).prop('checked', this.value === mode);
+            });
+        }
+
+        function utilityReturnsStatus(message, failed) {
+            $('#utilityReturnsSaveStatus').text(message).toggleClass('text-danger', !!failed).toggleClass('text-muted', !failed);
+        }
+
+        $(window).on('beforeunload', function(event) {
+            if (utilityReturnsSaving) {
+                event.preventDefault();
+                event.originalEvent.returnValue = '';
+            }
+        });
+
+        $(window).on('pageshow', function(event) {
+            if (event.originalEvent.persisted) {
+                loadReturnsConfig();
+            }
+        });
+
         $(document).on('change', '#utilityReturnsOptions input[name="utility_returns"]', function() {
             var $options = $('#utilityReturnsOptions input[name="utility_returns"]');
+            if (utilityReturnsSaving) return;
+            utilityReturnsSaving = true;
+            utilityReturnsRevision++;
+            utilityReturnsStatus('Saving… Please wait before leaving this page.');
             $options.prop('disabled', true);
             $.ajax({
                 url: "{{ route('property.clients.returns-config.utility-returns', $client->encrypted_id) }}",
@@ -4043,30 +4073,48 @@ COPY PERMISSIONS (paste when re-enabling checks):
                 data: { _token: "{{ csrf_token() }}", utility_returns: $(this).val() },
                 dataType: 'json',
                 success: function(response) {
+                    utilityReturnsSavedMode = response.utility_returns;
+                    showUtilityReturnsMode(utilityReturnsSavedMode);
+                    utilityReturnsStatus('Saved. This setting applies to all of this client\'s properties.');
                     toastr.success(response.message || 'Utility returns setting saved.');
                 },
                 error: function(xhr) {
+                    showUtilityReturnsMode(utilityReturnsSavedMode);
+                    utilityReturnsStatus('Save could not be confirmed. Reopen Returns Config to check the saved choice, then try again.', true);
                     toastr.error((xhr.responseJSON && (xhr.responseJSON.error || xhr.responseJSON.message)) || 'Failed to save the utility returns setting.');
-                    loadReturnsConfig();
                 },
                 complete: function() {
+                    utilityReturnsSaving = false;
                     $options.prop('disabled', false);
                 }
             });
         });
 
         function loadReturnsConfig() {
+            var request = ++returnsConfigRequest;
+            var revision = utilityReturnsRevision;
+            var startedDuringSave = utilityReturnsSaving;
             $.ajax({
                 url: "{{ route('property.clients.returns-config', $client->encrypted_id) }}",
                 type: 'GET',
+                cache: false,
                 dataType: 'json',
                 success: function(response) {
+                    if (request !== returnsConfigRequest) return;
                     returnsConfigBatches = response.data || [];
-                    $('#utilityReturnsOptions input[name="utility_returns"][value="' + (response.utility_returns || 'with_rent') + '"]').prop('checked', true);
+                    if (!startedDuringSave && !utilityReturnsSaving && revision === utilityReturnsRevision) {
+                        utilityReturnsSavedMode = response.utility_returns || 'with_rent';
+                        showUtilityReturnsMode(utilityReturnsSavedMode);
+                        utilityReturnsStatus('Saved. This setting applies to all of this client\'s properties.');
+                    }
                     loadReturnsConfigOptions();
                     renderReturnsBatchCards();
                 },
                 error: function(xhr) {
+                    if (request !== returnsConfigRequest) return;
+                    if (!startedDuringSave && !utilityReturnsSaving && revision === utilityReturnsRevision) {
+                        utilityReturnsStatus('Could not refresh the saved setting. Reopen Returns Config to retry.', true);
+                    }
                     console.error('Error loading returns config:', xhr.responseText);
                     toastr.error('Failed to load returns merge configuration.');
                 }
