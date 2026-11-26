@@ -250,8 +250,8 @@ class UnitTenantSubmitService
     }
 
     /**
-     * Last check right before creating a pair: the unit number and the tenant's ID, passport and
-     * registration number must still be free. Takes the upload lock first so two submits can't race.
+     * Last check right before creating a pair: the unit must still be free and any matching
+     * tenant identifiers must have consistent details. The upload lock prevents concurrent submits racing.
      *
      * @param TempBatchUnit $unitRow
      * @param TempBatchTenant|null $tenantRow
@@ -276,17 +276,9 @@ class UnitTenantSubmitService
             return null;
         }
 
-        $taken = [
-            'National ID' => $tenantRow->national_id && TenantRecord::whereRaw('LOWER(national_id) = ?', [mb_strtolower($tenantRow->national_id)])->exists(),
-            'Passport No' => $tenantRow->passport_no && TenantRecord::whereRaw('LOWER(passport_number) = ?', [mb_strtolower($tenantRow->passport_no)])->exists(),
-            'Registration Number' => $tenantRow->registration_number && Client::withAll()->where('type_id', 2)->whereRaw('LOWER(company_registration_number) = ?', [mb_strtolower($tenantRow->registration_number)])->exists(),
-        ];
-
-        foreach ($taken as $label => $exists) {
-            if ($exists) {
-                throw new DomainException("{$label} already belongs to an existing tenant");
-            }
-        }
+        $identity = $tenantRow->toArray();
+        $errors = UnitTenantUploadIdentity::errors($identity, UnitTenantUploadIdentity::loadExisting([$identity]));
+        if ($errors) throw new DomainException(implode('; ', $errors));
         return $unit;
     }
 
@@ -328,7 +320,8 @@ class UnitTenantSubmitService
     }
 
     /**
-     * Create the tenant (Client + TenantRecord + contacts) from a staged row.
+     * Create a separate unit account (Client + TenantRecord + contacts), even for an existing person.
+     * Each account retains its own lease, approval and billing history; existing accounts are never overwritten.
      *
      * @param TempBatchTenant $row
      * @param Property $property

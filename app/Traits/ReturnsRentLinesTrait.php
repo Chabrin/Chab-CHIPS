@@ -15,6 +15,8 @@ use Illuminate\Support\Facades\Log;
  * electricity ...) becomes its own line, named after the item, with no commission or VAT, as in the legacy returns;
  * it is only passed on for what the tenant has actually paid, and a deposit the company holds is left out. The exception
  * is an item set to Advance Payable in the invoiceable items: it is passed on at its full amount, paid or not.
+ * Migrated service charges follow that setting in their original month's main return, less matching historical
+ * service-charge lines, including older lines without an invoice link. They are never swept into later months.
  *
  * Rent is read from open, partly paid and cleared invoices (statuses 1, 8, 9) of the return month. Money that comes in
  * after the month's return is passed on in a later run: the line is what is collected now less what earlier return
@@ -72,13 +74,34 @@ trait ReturnsRentLinesTrait
         // What the tenant has paid of an invoice (never more than the invoice), less what earlier returns already passed
         // on for it: only the difference is passed to the landlord now, so money that comes in late goes out once.
         $collected = "LEAST(i.total_amount, GREATEST(i.total_amount - COALESCE(i.current_balance, i.total_amount), 0))";
-        // An item set to Advance Payable (a bill, not rent) is passed on at its full amount before the tenant has paid it,
-        // so what is owed to the landlord is the invoice, not the collection. Only invoices raised in this app qualify: the
-        // legacy ones were already returned by the old system. Later collections then add nothing, because the amount
-        // passed on is subtracted below.
-        $advance = "(NOT {$isRent} AND i.created_by IS NOT NULL AND COALESCE(it.advance_payable, 'No') = 'Yes')";
+        // Migrated service-charge invoices name the item in the narration instead of item_type_id.
+        // Use the catalogue setting only when it identifies one unambiguous service-charge item.
+        $serviceNames = ['SERVICE CHARGE', 'SERVICE CHARGES'];
+        $serviceItems = DB::table('sys_set_invoiceable_items')
+            ->whereRaw('UPPER(TRIM(item_name)) IN (?, ?)', $serviceNames)->get(['advance_payable']);
+        $legacyDefaultAdvance = $serviceItems->count() === 1 && $serviceItems->first()->advance_payable === 'Yes' ? 'TRUE' : 'FALSE';
+        $isService = "UPPER(TRIM({$itemName})) IN ('SERVICE CHARGE', 'SERVICE CHARGES')";
+        $legacyService = "(i.created_by IS NULL AND {$isService})";
+        // Legacy bills are eligible in their own main return only. Never sweep old migrated bills into later runs.
+        $legacyAdvance = $isMini ? 'FALSE' : "({$legacyService} AND i.returns_period::date = {$month}
+            AND CASE WHEN i.item_type_id IS NULL THEN {$legacyDefaultAdvance} ELSE COALESCE(it.advance_payable, 'No') = 'Yes' END)";
+        if (! $isMini) {
+            $duplicate = DB::table('sys_pm_debtors_invoices as i')
+                ->leftJoin('sys_set_invoiceable_items as it', 'it.id', '=', 'i.item_type_id')
+                ->whereRaw($legacyAdvance)->where('i.total_amount', '>', 0)
+                ->where('i.debtor_type_id', '2')->whereIn('i.current_status_id', [1, 8, 9])
+                ->whereNotNull('i.property_id')->whereNotNull('i.unit_id')->whereNotNull('i.tenant_id')->whereNotNull('i.lease_id')
+                ->when($propertyId, fn ($query) => $query->where('i.property_id', $propertyId))
+                ->select('i.property_id', 'i.unit_id', 'i.tenant_id')
+                ->groupBy('i.property_id', 'i.unit_id', 'i.tenant_id')->havingRaw('COUNT(*) > 1')->first();
+            if ($duplicate) {
+                throw new \RuntimeException("Duplicate legacy service-charge invoices for property {$duplicate->property_id}, unit {$duplicate->unit_id}, tenant {$duplicate->tenant_id}. Reconcile them before generating this month's return.");
+            }
+        }
+        // Advance payable means the full invoice is due to the landlord before collection.
+        $advance = "((NOT {$isRent} AND i.created_by IS NOT NULL AND COALESCE(it.advance_payable, 'No') = 'Yes') OR {$legacyAdvance})";
         $owed = "CASE WHEN {$advance} THEN i.total_amount ELSE {$collected} END";
-        $payable = "GREATEST({$owed} - prev.returned, 0)";
+        $payable = "GREATEST({$owed} - CASE WHEN {$legacyAdvance} THEN legacy_prev.returned ELSE prev.returned END, 0)";
 
         // A main return takes this month's invoices (rent and bills), plus invoices of earlier months that were raised
         // in this app, already appeared in an earlier return and have been paid further since. A mini return takes only
@@ -139,6 +162,18 @@ trait ReturnsRentLinesTrait
                 FROM cb_returns_clients pl
                 WHERE pl.invoice_id = i.id AND pl.dr_cr = 'CR' {$previousPeriod}
             ) prev ON true
+            LEFT JOIN LATERAL (
+                SELECT COALESCE(SUM(pl.net_amount), 0) AS returned
+                FROM cb_returns_clients pl
+                WHERE {$legacyAdvance}
+                  AND pl.property_id = i.property_id AND pl.unit_id = i.unit_id AND pl.tenant_id = i.tenant_id
+                  AND pl.dr_cr = 'CR'
+                  AND (UPPER(TRIM(COALESCE(pl.entry_type, ''))) IN ('SERVICE CHARGE', 'SERVICE CHARGES')
+                    OR UPPER(TRIM(COALESCE(pl.entry_description, ''))) IN ('SERVICE CHARGE', 'SERVICE CHARGES'))
+                  AND (pl.invoice_id = i.id
+                    OR NULLIF(pl.transaction_ref, '') = NULLIF(i.reference_number, '')
+                    OR pl.return_period = TO_CHAR(i.returns_period::date, 'YYYYMM')::integer)
+            ) legacy_prev ON true
             {$agreementJoin}
             LEFT JOIN sys_pm_clients c ON c.id = {$owner}
             LEFT JOIN sys_pm_clients pcl ON pcl.id = p.client_id
@@ -163,7 +198,7 @@ trait ReturnsRentLinesTrait
             AND NOT EXISTS (
                 SELECT 1 FROM cb_returns_summary rs
                 WHERE rs.return_code = {$returnCode}
-                  AND rs.approved_status = 1
+                  AND (rs.approved_status = 1 OR rs.paid_status = 1)
             )
         ";
 

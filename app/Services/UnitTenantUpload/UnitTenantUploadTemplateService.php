@@ -233,18 +233,21 @@ class UnitTenantUploadTemplateService
         $lines = [
             'Units & tenants upload — ' . $property->reference_number . ' - ' . $property->property_name,
             '',
-            'Yellow headers are optional; all other columns are required.',
+            'Yellow headers are optional; all other columns are required unless an exception below applies.',
             'Fill the units sheet first. unit_number and unit_code on the tenant sheets fill themselves and are locked.',
             'unit_code on the units sheet fills itself and is locked: ' . $property->reference_number . '-<unit_number>. Units have no separate name; the unit code is the unit\'s identifier.',
             'A unit with a tenant goes on individual_tenants OR corporate_tenants, never both. Leave the other row blank.',
             'A unit with no tenant row is created vacant.',
-            'Individuals need a National ID or a Passport number (either one).',
+            'Regular individuals need a mobile number and a National ID or Passport number. Select tenant_type OWNERS or CARETAKER for accounts exempt from these details.',
             'unit_number, National ID, passport and registration number: letters A-Z, digits, spaces and - / . only (no accents or other symbols).',
             'Pick dropdown values from the list; leave blank where optional. unit_type blank = Normal.',
             'vat_able: select Yes if VAT applies, or No if it does not (blank = No). Older files may use 1 = Yes or 0 = No.',
             'Other contact name and phone are optional on individual_tenants.',
             'lease_start_date and lease_end_date format: YYYY-MM-DD. Leave lease_end_date blank for an open-ended lease (no end date); fill it for a fixed-term lease.',
             'Do not rename sheets, add or delete rows. Maximum ' . UnitTenantUploadColumns::MAX_ROWS . ' units per file.',
+            'tenant_type is optional for regular tenants: blank = INDIVIDUAL on individual_tenants or COMPANY on corporate_tenants.',
+            'For owners and caretakers, select OWNERS or CARETAKER in tenant_type. Only these accounts may omit mobile_no and National ID/passport.',
+            'To open the tenant_type dropdown, click a cell below its heading and press Alt + Down Arrow.',
         ];
 
         foreach ($lines as $i => $line) {
@@ -253,6 +256,7 @@ class UnitTenantUploadTemplateService
 
         $sheet->getStyle('A1')->getFont()->setBold(true);
         $sheet->getColumnDimension('A')->setWidth(110);
+        $sheet->getStyle('A1:A'.count($lines))->getAlignment()->setWrapText(true);
     }
 
     /**
