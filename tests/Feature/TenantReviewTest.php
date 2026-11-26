@@ -95,7 +95,9 @@ class TenantReviewTest extends TestCase
             '2026_11_19_120000_add_mode_to_temp_upload_batches.php'] as $migration) {
             (require database_path('migrations/'.$migration))->up();
         }
-        $lookups = \App\Services\UnitTenantUpload\UnitTenantUploadLookups::fromArray([]);
+        $lookups = \App\Services\UnitTenantUpload\UnitTenantUploadLookups::fromArray([
+            'tenant_types' => ['OWNERS' => ['id' => 4, 'name' => 'OWNERS'], 'CARETAKER' => ['id' => 3, 'name' => 'CARETAKER']],
+        ]);
         $batches = new \App\Services\UnitTenantUpload\UnitTenantUploadBatchService(
             new \App\Services\UnitTenantUpload\UnitTenantUploadValidator($lookups), $lookups
         );
@@ -137,6 +139,133 @@ class TenantReviewTest extends TestCase
         $this->assertSame(['submitted' => 0, 'failed' => 1], $submitter->submit($batch, 1));
         $this->assertSame(1, Client::withoutGlobalScopes()->count());
         $this->assertStringContainsString('pending onboarding', $batch->units()->sole()->error);
+    }
+
+    public function test_upload_accepts_an_active_tenant_from_another_property_as_a_separate_unit_account(): void
+    {
+        [$batches, $submitter, $unit, $parsed] = $this->existingUnitUpload();
+        $otherProperty = Property::withoutEvents(fn () => Property::create(['zone_id' => 1]));
+        $existing = Client::withoutGlobalScopes()->findOrFail(1);
+        $existing->update(['type_id' => 2, 'names' => 'Mr. Upload test', 'mobile_number' => '+254712345678',
+            'property_id' => $otherProperty->id, 'current_status_id' => 5]);
+        $profile = \App\Models\TenantRecord::create(['id' => 1, 'tenant_type' => 'INDIVIDUAL',
+            'names' => 'Mr. Upload test', 'phone' => '+254712345678', 'national_id' => 'UPLOAD-TEST-123']);
+        LeaseAgreement::find(1)->update(['property_id' => $otherProperty->id, 'current_status_id' => 5]);
+        $before = [$existing->fresh()->getAttributes(), $profile->fresh()->getAttributes(), LeaseAgreement::find(1)->getAttributes()];
+
+        $batch = $batches->stage(Property::find(1), $parsed, 'existing.xlsx', 1, 'existing_units');
+        $this->actingAs($this->user(1));
+        $this->assertSame(['submitted' => 1, 'failed' => 0], $submitter->submit($batch, 1));
+
+        $review = TenantReview::sole();
+        $this->assertNotSame(1, (int) $review->tenant_id);
+        $this->assertSame($unit->id, (int) $review->lease->unit_id);
+        $this->assertSame(1, (int) $review->lease->property_id);
+        $this->assertNull($review->lease->linked_lease_id);
+        $this->assertSame(2, \App\Models\TenantRecord::where('national_id', 'UPLOAD-TEST-123')->count());
+        $this->assertSame($before, [$existing->fresh()->getAttributes(), $profile->fresh()->getAttributes(), LeaseAgreement::find(1)->getAttributes()]);
+    }
+
+    public function test_upload_accepts_several_units_for_one_person_with_independent_leases_and_approvals(): void
+    {
+        [$batches, $submitter, , $parsed] = $this->existingUnitUpload();
+        foreach (['A3', 'A4'] as $index => $number) {
+            Unit::create(['property_id' => 1, 'unit_number' => $number, 'unit_code' => 'TEST-'.$number,
+                'rent_amount' => 15000 + $index * 1000, 'occupancy_status_id' => 31]);
+            $parsed['units'][] = ['row_no' => $index + 3, 'unit_number' => $number];
+            $parsed['individual'][] = array_replace($parsed['individual'][0], ['row_no' => $index + 3, 'unit_number' => $number]);
+        }
+        $batch = $batches->stage(Property::find(1), $parsed, 'multi-unit.xlsx', 1, 'existing_units');
+        $this->actingAs($this->user(1));
+        $this->assertSame(['submitted' => 3, 'failed' => 0], $submitter->submit($batch, 1));
+        $this->assertSame(3, TenantReview::count());
+        $this->assertCount(3, $batch->tenants()->pluck('tenant_id')->unique());
+        $this->assertCount(3, $batch->tenants()->pluck('lease_id')->unique());
+        $this->assertSame(3, \App\Models\TenantRecord::where('national_id', 'UPLOAD-TEST-123')->count());
+        foreach (TenantReview::with(['tenant', 'lease'])->get() as $review) {
+            $this->assertSame((int) $review->tenant->unit_id, (int) $review->lease->unit_id);
+            $this->assertSame((float) Unit::find($review->lease->unit_id)->rent_amount, (float) $review->tenant->rent_amount);
+            $this->assertNull($review->lease->linked_lease_id);
+        }
+    }
+
+    public function test_owner_and_caretaker_uploads_save_without_mobile_or_identity_documents(): void
+    {
+        [$batches, $submitter, , $parsed] = $this->existingUnitUpload();
+        $parsed['individual'][0] = array_replace($parsed['individual'][0], [
+            'tenant_type' => 'OWNERS', 'mobile_no' => null, 'national_id' => null,
+        ]);
+        Unit::create(['property_id' => 1, 'unit_number' => 'A3', 'unit_code' => 'TEST-A3', 'occupancy_status_id' => 31]);
+        $parsed['units'][] = ['row_no' => 3, 'unit_number' => 'A3'];
+        $parsed['individual'][] = array_replace($parsed['individual'][0], [
+            'row_no' => 3, 'unit_number' => 'A3', 'tenant_type' => 'CARETAKER', 'names' => 'Caretaker test',
+        ]);
+        $batch = $batches->stage(Property::find(1), $parsed, 'exceptions.xlsx', 1, 'existing_units');
+        $this->actingAs($this->user(1));
+        $this->assertSame(['submitted' => 2, 'failed' => 0], $submitter->submit($batch, 1));
+        $this->assertSame(2, TenantReview::count());
+        foreach (\App\Models\TenantRecord::all() as $record) {
+            $this->assertNull($record->phone);
+            $this->assertNull($record->national_id);
+            $this->assertNull($record->passport_number);
+            $this->assertContains($record->tenant_type, ['OWNERS', 'CARETAKER']);
+        }
+    }
+
+    public function test_identity_conflicts_introduced_after_staging_block_submission(): void
+    {
+        [$batches, $submitter, $unit, $parsed] = $this->existingUnitUpload();
+        $batch = $batches->stage(Property::find(1), $parsed, 'existing.xlsx', 1, 'existing_units');
+        \App\Models\TenantRecord::create(['id' => 1, 'names' => 'Someone else',
+            'phone' => '0799999999', 'national_id' => 'UPLOAD-TEST-123']);
+        $this->assertSame(['submitted' => 0, 'failed' => 1], $submitter->submit($batch, 1));
+        $this->assertSame(0, TenantReview::count());
+        $this->assertSame(31, (int) $unit->fresh()->occupancy_status_id);
+        $this->assertStringContainsString('name, mobile number differs', $batch->tenants()->sole()->error);
+    }
+
+    public function test_other_staged_units_for_the_same_person_are_allowed_but_conflicting_details_are_blocked(): void
+    {
+        [$batches, , , $parsed] = $this->existingUnitUpload();
+        $batches->stage(Property::find(1), $parsed, 'first.xlsx', 1, 'existing_units');
+        Unit::create(['property_id' => 1, 'unit_number' => 'A3', 'unit_code' => 'TEST-A3', 'occupancy_status_id' => 31]);
+        $parsed['units'][0]['unit_number'] = 'A3';
+        $parsed['individual'][0]['unit_number'] = 'A3';
+        $this->assertSame([], $batches->validateUpload(Property::find(1), $parsed, 'existing_units'));
+        $parsed['individual'][0]['names'] = 'Someone else';
+        $errors = $batches->validateUpload(Property::find(1), $parsed, 'existing_units');
+        $this->assertStringContainsString('name differs', $errors[0]['message']);
+    }
+
+    public function test_new_units_upload_accepts_one_tenant_for_multiple_units(): void
+    {
+        $this->existingUnitUpload();
+        $lookups = \App\Services\UnitTenantUpload\UnitTenantUploadLookups::fromArray([
+            'topologies' => ['Single Room' => ['id' => 1, 'name' => 'Single Room']],
+            'unit_types' => ['Normal' => ['id' => 1, 'name' => 'Normal']],
+        ]);
+        $batches = new \App\Services\UnitTenantUpload\UnitTenantUploadBatchService(
+            new \App\Services\UnitTenantUpload\UnitTenantUploadValidator($lookups), $lookups
+        );
+        // Unit approval has its own tests; isolate it here from the tenancy identity checks.
+        $approvals = \Mockery::mock(\App\Services\ServiceAgreementApprovalService::class);
+        $approvals->shouldReceive('approveNewUnits')->twice()->andReturn([]);
+        $submitter = new \App\Services\UnitTenantUpload\UnitTenantSubmitService($batches, $lookups, $approvals);
+        $parsed = ['units' => [], 'individual' => [], 'corporate' => []];
+        foreach (['B1', 'B2'] as $index => $number) {
+            $row = $index + 2;
+            $parsed['units'][] = ['row_no' => $row, 'unit_number' => $number, 'topology' => 'Single Room',
+                'rent_amount' => '10000', 'initial_water_reading' => '0'];
+            $parsed['individual'][] = array_replace(array_fill_keys(array_keys(\App\Services\UnitTenantUpload\UnitTenantUploadColumns::INDIVIDUAL), null), [
+                'row_no' => $row, 'unit_number' => $number, 'names' => 'Multi unit tenant', 'mobile_no' => '0712345678',
+                'national_id' => 'MULTI-123', 'lease_start_date' => '2026-12-01',
+            ]);
+        }
+        $batch = $batches->stage(Property::find(1), $parsed, 'new-units.xlsx', 1);
+        $this->actingAs($this->user(1));
+        $this->assertSame(['submitted' => 2, 'failed' => 0], $submitter->submit($batch, 1));
+        $this->assertSame(2, TenantReview::count());
+        $this->assertCount(2, $batch->tenants()->pluck('tenant_id')->unique());
     }
 
     public function test_existing_unit_template_lists_available_units_and_round_trips_only_filled_tenants(): void

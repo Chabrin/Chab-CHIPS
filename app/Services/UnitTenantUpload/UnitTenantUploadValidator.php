@@ -2,8 +2,6 @@
 
 namespace App\Services\UnitTenantUpload;
 
-use App\Models\Client;
-use App\Models\TenantRecord;
 use App\Models\Unit;
 use Illuminate\Support\Facades\DB;
 
@@ -57,15 +55,6 @@ class UnitTenantUploadValidator
      */
     public function loadExisting(int $propertyId, array $unitRows, array $tenantRows, bool $existingUnits = false): array
     {
-        $values = fn(string $field) => array_values(array_unique(array_map('mb_strtolower', array_filter(array_column($tenantRows, $field)))));
-        $found = function ($query, string $column, array $lowered) {
-            if (!$lowered) {
-                return [];
-            }
-
-            return $query->whereRaw('LOWER(' . $column . ') IN (' . implode(',', array_fill(0, count($lowered), '?')) . ')', $lowered)->pluck($column)->all();
-        };
-
         $matches = [];
         if ($existingUnits) {
             foreach (Unit::where('property_id', $propertyId)->get() as $unit) {
@@ -77,14 +66,12 @@ class UnitTenantUploadValidator
             'existing_mode' => $existingUnits,
             'existing_units' => $matches,
             'unit_numbers' => $this->set(Unit::where('property_id', $propertyId)->pluck('unit_number')->all()),
-            'national_ids' => $this->set($found(TenantRecord::query(), 'national_id', $values('national_id'))),
-            'passports' => $this->set($found(TenantRecord::query(), 'passport_number', $values('passport_no'))),
-            'registrations' => $this->set($found(Client::withAll()->where('type_id', 2), 'company_registration_number', $values('registration_number'))),
+            'tenant_identities' => UnitTenantUploadIdentity::loadExisting($tenantRows),
         ];
     }
 
     /**
-     * Units and tenant identifiers already waiting in another staged upload (value => batch id).
+     * Units and matching tenant details already waiting in another staged upload.
      * Only used when a new file is uploaded; submitting or editing a batch ignores other batches.
      *
      * @param int $propertyId
@@ -104,20 +91,11 @@ class UnitTenantUploadValidator
             }
             return $map;
         };
-        $values = fn(string $field) => array_values(array_unique(array_map('mb_strtolower', array_filter(array_column($tenantRows, $field)))));
-        $tenantMap = function (string $column, array $lowered) use ($staged, $byValue) {
-            if (!$lowered) {
-                return [];
-            }
-
-            return $byValue($staged('temp_batch_tenants')->whereRaw('LOWER(r.' . $column . ') IN (' . implode(',', array_fill(0, count($lowered), '?')) . ')', $lowered)->get(['r.' . $column . ' as value', 'b.id as batch_id'])->all(), $column);
-        };
-
         return [
             'staged_units' => $byValue($staged('temp_batch_units')->where('b.property_id', $propertyId)->get(['r.unit_number as value', 'b.id as batch_id'])->all(), 'unit_number'),
-            'staged_national_ids' => $tenantMap('national_id', $values('national_id')),
-            'staged_passports' => $tenantMap('passport_no', $values('passport_no')),
-            'staged_registrations' => $tenantMap('registration_number', $values('registration_number')),
+            'staged_identities' => UnitTenantUploadIdentity::matchingQuery($staged('temp_batch_tenants'), [
+                'r.national_id' => 'national_id', 'r.passport_no' => 'passport_no', 'r.registration_number' => 'registration_number',
+            ], $tenantRows)->get(['r.*'])->map(fn ($row) => (array) $row)->all(),
         ];
     }
 
@@ -150,9 +128,7 @@ class UnitTenantUploadValidator
             'unit_numbers' => $count($unitRows, 'unit_number'),
             'unit_row_no' => $unitRowNo,
             'tenant_units' => $count($tenantRows, 'unit_number'),
-            'national_ids' => $count($tenantRows, 'national_id'),
-            'passports' => $count($tenantRows, 'passport_no'),
-            'registrations' => $count($tenantRows, 'registration_number'),
+            'tenant_identities' => $tenantRows,
         ];
     }
 
@@ -237,7 +213,8 @@ class UnitTenantUploadValidator
         $errors = [];
         $isCompany = ($row['sheet'] ?? '') === 'corporate';
 
-        $required = ['unit_number', 'lease_start_date', 'mobile_no'];
+        $required = ['unit_number', 'lease_start_date'];
+        if (!$this->optionalContactDetails($row)) $required[] = 'mobile_no';
         $required = array_merge($required, $isCompany
             ? ['company_name', 'registration_number', 'contact_phone', 'contact_name']
             : ['names']);
@@ -299,7 +276,10 @@ class UnitTenantUploadValidator
             }
         }
 
-        $errors = array_merge($errors, $isCompany ? $this->companyErrors($row, $context, $existing) : $this->individualErrors($row, $context, $existing));
+        $errors = array_merge($errors, $isCompany ? $this->companyErrors($row) : $this->individualErrors($row));
+        $errors = array_merge($errors, UnitTenantUploadIdentity::errors($row, array_merge(
+            $context['tenant_identities'], $existing['tenant_identities'] ?? [], $existing['staged_identities'] ?? []
+        )));
 
         return $errors;
     }
@@ -308,15 +288,13 @@ class UnitTenantUploadValidator
      * Individual-only tenant rules.
      *
      * @param array $row
-     * @param array $context
-     * @param array $existing
      * @return array
      */
-    private function individualErrors(array $row, array $context, array $existing): array
+    private function individualErrors(array $row): array
     {
         $errors = [];
 
-        if (!$this->filled($row['national_id'] ?? null) && !$this->filled($row['passport_no'] ?? null)) {
+        if (!$this->optionalContactDetails($row) && !$this->filled($row['national_id'] ?? null) && !$this->filled($row['passport_no'] ?? null)) {
             $errors[] = 'National ID or Passport No required';
         }
 
@@ -328,7 +306,7 @@ class UnitTenantUploadValidator
             $errors[] = "Title '{$row['title']}' must be one of: " . implode(', ', $this->lookups->names('titles'));
         }
 
-        foreach ([['national_id', 'national_ids', 'National ID'], ['passport_no', 'passports', 'Passport No']] as [$field, $key, $label]) {
+        foreach (['national_id' => 'National ID', 'passport_no' => 'Passport No'] as $field => $label) {
             $value = $this->norm($row[$field] ?? null);
             if ($value === '') {
                 continue;
@@ -336,15 +314,6 @@ class UnitTenantUploadValidator
             if (!preg_match(self::IDENTIFIER_PATTERN, trim((string) $row[$field]))) {
                 $errors[] = "{$label} '{$row[$field]}' may only contain letters A-Z, digits, spaces and - / . +";
                 continue;
-            }
-            if (($context[$key][$value] ?? 0) > 1) {
-                $errors[] = "{$label} '{$row[$field]}' is used by more than one row";
-            }
-            if (isset($existing[$key][$value])) {
-                $errors[] = "{$label} '{$row[$field]}' already belongs to an existing tenant";
-            }
-            if (isset($existing['staged_' . $key][$value])) {
-                $errors[] = "{$label} '{$row[$field]}' is already in staged upload #{$existing['staged_' . $key][$value]}; submit or cancel that upload first";
             }
         }
 
@@ -355,11 +324,9 @@ class UnitTenantUploadValidator
      * Company-only tenant rules.
      *
      * @param array $row
-     * @param array $context
-     * @param array $existing
      * @return array
      */
-    private function companyErrors(array $row, array $context, array $existing): array
+    private function companyErrors(array $row): array
     {
         $errors = [];
         $value = $this->norm($row['registration_number'] ?? null);
@@ -368,17 +335,13 @@ class UnitTenantUploadValidator
             return ["Registration Number '{$row['registration_number']}' may only contain letters A-Z, digits, spaces and - / . +"];
         }
 
-        if ($value !== '' && ($context['registrations'][$value] ?? 0) > 1) {
-            $errors[] = "Registration Number '{$row['registration_number']}' is used by more than one row";
-        }
-        if ($value !== '' && isset($existing['registrations'][$value])) {
-            $errors[] = "Registration Number '{$row['registration_number']}' already belongs to an existing tenant";
-        }
-        if ($value !== '' && isset($existing['staged_registrations'][$value])) {
-            $errors[] = "Registration Number '{$row['registration_number']}' is already in staged upload #{$existing['staged_registrations'][$value]}; submit or cancel that upload first";
-        }
-
         return $errors;
+    }
+
+    private function optionalContactDetails(array $row): bool
+    {
+        $type = strtoupper($this->lookups->name('tenant_types', $row['tenant_type'] ?? null) ?? '');
+        return in_array($type, ['OWNERS', 'CARETAKER'], true);
     }
 
     /**

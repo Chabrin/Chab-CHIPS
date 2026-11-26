@@ -14,7 +14,7 @@ class UnitTenantUploadValidatorTest extends TestCase
             'unit_types' => ['Normal' => ['id' => 1, 'name' => 'Normal'], 'Owner Occupied' => ['id' => 2, 'name' => 'Owner Occupied']],
             'usage_types' => ['Residential' => ['id' => 2, 'name' => 'Residential']],
             'topologies' => ['1 Bedroom' => ['id' => 3, 'name' => '1 Bedroom'], 'SR' => ['id' => 8, 'name' => 'Single Room']],
-            'tenant_types' => ['INDIVIDUAL' => ['id' => 1, 'name' => 'INDIVIDUAL'], 'COMPANY' => ['id' => 2, 'name' => 'COMPANY'], 'OWNERS' => ['id' => 4, 'name' => 'OWNERS']],
+            'tenant_types' => ['INDIVIDUAL' => ['id' => 1, 'name' => 'INDIVIDUAL'], 'COMPANY' => ['id' => 2, 'name' => 'COMPANY'], 'OWNERS' => ['id' => 4, 'name' => 'OWNERS'], 'CARETAKER' => ['id' => 3, 'name' => 'CARETAKER']],
             'categories' => [],
             'countries' => ['Kenya' => ['id' => 1, 'name' => 'Kenya']],
             'genders' => ['MALE' => ['id' => 1, 'name' => 'MALE'], 'FEMALE' => ['id' => 2, 'name' => 'FEMALE']],
@@ -119,6 +119,59 @@ class UnitTenantUploadValidatorTest extends TestCase
         $this->assertNull($passportOnly['tenants'][10]);
     }
 
+    public function test_only_owner_and_caretaker_tenant_types_can_omit_mobile_and_identity_documents(): void
+    {
+        foreach (['OWNERS', ' caretaker '] as $type) {
+            foreach ([[null, null], [null, '0712345678'], ['123', null]] as [$id, $phone]) {
+                $result = $this->check([1 => $this->unit()], [10 => $this->individual([
+                    'tenant_type' => $type, 'national_id' => $id, 'mobile_no' => $phone,
+                ])]);
+                $this->assertNull($result['tenants'][10]);
+            }
+        }
+        foreach ([null, 'INDIVIDUAL', 'Unknown'] as $type) {
+            $result = $this->check([1 => $this->unit(['unit_type' => 'Owner Occupied'])], [10 => $this->individual([
+                'tenant_type' => $type, 'national_id' => null, 'mobile_no' => null,
+            ])]);
+            $this->assertStringContainsString('mobile_no required', $result['tenants'][10]);
+            $this->assertStringContainsString('National ID or Passport No required', $result['tenants'][10]);
+        }
+    }
+
+    public function test_same_person_can_occupy_multiple_units_in_one_upload(): void
+    {
+        $result = $this->check([
+            1 => $this->unit(), 2 => $this->unit(['unit_number' => 'A2', 'row_no' => 3]),
+        ], [
+            10 => $this->individual(),
+            11 => $this->individual(['unit_number' => 'A2', 'row_no' => 3, 'names' => 'MR. JANE', 'mobile_no' => '+254 712-345-678']),
+        ]);
+        $this->assertNull($result['tenants'][10]);
+        $this->assertNull($result['tenants'][11]);
+    }
+
+    public function test_repeated_identifiers_with_conflicting_names_phones_or_documents_are_rejected(): void
+    {
+        foreach ([['names' => 'Another person'], ['mobile_no' => '0799999999'], ['passport_no' => 'P2']] as $change) {
+            $result = $this->check([
+                1 => $this->unit(), 2 => $this->unit(['unit_number' => 'A2', 'row_no' => 3]),
+            ], [
+                10 => $this->individual(['passport_no' => 'P1']),
+                11 => $this->individual($change + ['unit_number' => 'A2', 'row_no' => 3, 'passport_no' => 'P1']),
+            ]);
+            $this->assertStringContainsString('matches another tenant', $result['tenants'][10]);
+            $this->assertStringContainsString('matches another tenant', $result['tenants'][11]);
+        }
+    }
+
+    public function test_passport_matches_cannot_hide_conflicting_national_ids(): void
+    {
+        $result = $this->check([1 => $this->unit()], [10 => $this->individual(['passport_no' => 'P1'])], [
+            'tenant_identities' => [$this->individual(['national_id' => '999', 'passport_no' => 'P1'])],
+        ]);
+        $this->assertStringContainsString('National ID differs', $result['tenants'][10]);
+    }
+
     public function test_tenant_type_must_fit_its_sheet(): void
     {
         $wrongIndividual = $this->check([1 => $this->unit()], [10 => $this->individual(['tenant_type' => 'COMPANY'])]);
@@ -179,20 +232,25 @@ class UnitTenantUploadValidatorTest extends TestCase
         $this->assertStringContainsString('Lease End Date must be after the Lease Start Date', $before['tenants'][10]);
     }
 
-    public function test_existing_identifiers_are_reported(): void
+    public function test_existing_or_staged_identifiers_are_accepted_only_when_identity_details_agree(): void
     {
-        $result = $this->check([1 => $this->unit()], [10 => $this->individual()], ['national_ids' => ['123' => true]]);
-
-        $this->assertStringContainsString('already belongs to an existing tenant', $result['tenants'][10]);
+        foreach (['tenant_identities', 'staged_identities'] as $source) {
+            $matching = $this->check([1 => $this->unit()], [10 => $this->individual()], [$source => [$this->individual()]]);
+            $this->assertNull($matching['tenants'][10]);
+            $conflicting = $this->check([1 => $this->unit()], [10 => $this->individual()], [$source => [$this->individual(['names' => 'Someone else'])]]);
+            $this->assertStringContainsString('name differs', $conflicting['tenants'][10]);
+        }
     }
 
     public function test_corporate_required_fields_and_duplicate_registration(): void
     {
         $missing = $this->check([1 => $this->unit()], [10 => $this->corporate(['company_name' => null, 'contact_name' => null])]);
-        $existing = $this->check([1 => $this->unit()], [10 => $this->corporate()], ['registrations' => ['r1' => true]]);
+        $existing = $this->check([1 => $this->unit()], [10 => $this->corporate()], ['tenant_identities' => [$this->corporate(['company_name' => 'Another company'])]]);
+        $matching = $this->check([1 => $this->unit()], [10 => $this->corporate()], ['tenant_identities' => [$this->corporate()]]);
 
         $this->assertStringContainsString('company_name, contact_name required', $missing['tenants'][10]);
         $this->assertStringContainsString('Registration Number', $existing['tenants'][10]);
+        $this->assertNull($matching['tenants'][10]);
     }
 
     public function test_lease_dates_must_be_strict_yyyy_mm_dd(): void
