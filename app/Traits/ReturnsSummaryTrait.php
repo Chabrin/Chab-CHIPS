@@ -171,6 +171,10 @@ trait ReturnsSummaryTrait
      */
     protected function deleteUnapprovedReturnsForPeriod(string $returnPeriod, ?int $propertyId = null): array
     {
+        // Protect a processed property return and its processed merged parent before deleting any lines.
+        if ($this->approvedReturnsExistForPeriod($returnPeriod, $propertyId)) {
+            throw new \RuntimeException('Approved or paid returns cannot be regenerated. Record any correction in a new return.');
+        }
         // Get return codes to delete (for resetting landlord account)
         if ($propertyId) {
             $returnsToDelete = DB::select("
@@ -324,7 +328,11 @@ trait ReturnsSummaryTrait
                 FROM cb_returns_summary rs
                 JOIN sys_pm_properties p ON p.reference_number = rs.property_code
                 WHERE rs.return_period = ?
-                  AND rs.approved_status = 1
+                  AND (rs.approved_status = 1 OR rs.paid_status = 1 OR EXISTS (
+                      SELECT 1 FROM cb_returns_summary parent
+                      WHERE parent.return_code = rs.parent_return_code
+                        AND (parent.approved_status = 1 OR parent.paid_status = 1)
+                  ))
                   AND p.id = ?
             ", [$returnPeriod, $propertyId]);
         } else {
@@ -332,7 +340,7 @@ trait ReturnsSummaryTrait
                 SELECT COUNT(*) AS cnt
                 FROM cb_returns_summary
                 WHERE return_period = ?
-                  AND approved_status = 1
+                  AND (approved_status = 1 OR paid_status = 1)
             ", [$returnPeriod]);
         }
 
