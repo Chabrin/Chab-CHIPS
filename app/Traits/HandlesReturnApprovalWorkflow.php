@@ -29,6 +29,9 @@ trait HandlesReturnApprovalWorkflow
      */
     protected function processFinalApproval($batch, $approvedBy, $comments = null)
     {
+        if (!app(\App\Services\ReturnAccessService::class)->canApproveDirectly((int) $approvedBy)) {
+            throw new \App\Exceptions\ReturnApprovalException('Final return approval is reserved for directors and the chief accountant.');
+        }
         try {
             Log::info('Starting final approval workflow', [
                 'batch_id' => $batch->id,

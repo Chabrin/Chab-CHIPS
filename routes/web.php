@@ -1244,6 +1244,7 @@ Route::middleware('throttle:5,1')->group(function () {
     // Client Returns Generation
     Route::get('/returns/generate', [App\Http\Controllers\ClientReturnsController::class, 'showGenerate'])->name('returns.generate.index');
     Route::post('/returns/generate', [App\Http\Controllers\ClientReturnsController::class, 'processGenerate'])->name('returns.generate.process');
+    Route::get('/returns/generate/merged-readiness', [App\Http\Controllers\ClientReturnsController::class, 'mergeReadiness'])->name('returns.generate.merged-readiness');
 
     // Processed Returns
     Route::get('/processed/returns', [App\Http\Controllers\ClientReturnsController::class, 'processedReturns'])->name('processed.returns.index');

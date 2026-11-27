@@ -40,13 +40,16 @@ trait PostgresReturnFixtures
             new ServiceAgreement, new ReturnClient, new ReturnSummary] as $model) {
             $fields = array_unique(array_merge($model->getFillable(), $model instanceof ReturnClient ? ['commission_amount', 'server_time', 'user_id'] : []));
             if ($model instanceof ReturnSummary) {
-                $fields = array_unique(array_merge($fields, ['payable_amount', 'non_payable_amount', 'payable_units', 'total_units', 'parent_return_code']));
+                $fields = array_unique(array_merge($fields, ['payable_amount', 'non_payable_amount', 'payable_units', 'total_units', 'parent_return_code', 'is_merged']));
             }
             $columns = ['id bigserial PRIMARY KEY'];
             foreach (array_diff($fields, ['id']) as $field) {
                 $numeric = preg_match('/amount|balance|percentage|^commission_rate$|^vat_per$|^comm_per$|_total$|^total_credit$|^total_debit$|payable_units|total_units/', $field);
                 $integer = str_ends_with($field, '_id') || in_array($field, ['client_d', 'created_by', 'return_period', 'year', 'month', 'approved_status', 'paid_status', 'payable_status']);
                 $type = $integer ? 'bigint' : ($numeric ? 'numeric(18,2)' : 'text');
+                if ($field === 'is_merged') {
+                    $type = 'boolean DEFAULT FALSE';
+                }
                 if (in_array($field, ['returns_period', 'date_start', 'date_end'])) {
                     $type = 'date';
                 }

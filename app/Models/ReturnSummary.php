@@ -88,4 +88,25 @@ class ReturnSummary extends Model
     {
         return $query->where('paid_status', 0);
     }
+
+    /** Batch members cannot be paid individually, including before their merged return has been created. */
+    public function scopeEligibleForVoucher($query)
+    {
+        return $query->whereRaw('COALESCE(cb_returns_summary.is_merged, FALSE) = FALSE')
+            ->whereRaw("COALESCE(cb_returns_summary.parent_return_code, '') = ''")
+            ->where(function ($q) {
+                $q->whereNull('cb_returns_summary.return_type')
+                    ->orWhereNotIn('cb_returns_summary.return_type', ['MAINRETURN', 'UTILITYRETURN'])
+                    ->orWhereNotExists(function ($batch) {
+                        $batch->selectRaw('1')->from('cb_returns_merge_batch_items as mbi')
+                            ->join('cb_returns_merge_batches as mb', 'mb.id', '=', 'mbi.batch_id')
+                            ->join('sys_pm_properties as p', 'p.id', '=', 'mbi.property_id')
+                            ->whereColumn('p.reference_number', 'cb_returns_summary.property_code')
+                            ->where(function ($owner) {
+                                $owner->whereColumn('mbi.landlord_ref', 'cb_returns_summary.landlord_code')
+                                    ->orWhereNull('mbi.landlord_ref');
+                            });
+                    });
+            });
+    }
 }

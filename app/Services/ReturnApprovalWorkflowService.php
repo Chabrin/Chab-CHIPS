@@ -15,7 +15,8 @@ use Illuminate\Support\Facades\DB;
  *
  * A return waiting for approval has one row in cb_approval_items. cb_item_approvers only records who acted: the user who
  * generated the return (level 0) and each user who checked or approved it at a level. Nobody who has not acted is saved.
- * The person who generated a return cannot check or approve it, and nobody who acted at a level can act at a higher one.
+ * In the normal review path, the forwarding user cannot approve the return or act again at a higher level.
+ * Directors and the Chief Accountant use the separate, explicitly audited direct-final-approval path.
  */
 class ReturnApprovalWorkflowService
 {
@@ -298,6 +299,15 @@ class ReturnApprovalWorkflowService
      * @return string|null
      */
     public function actorRefusal(object $approvalItem, int $level, int $userId): ?string {
+        $access = app(ReturnAccessService::class);
+        if (!$access->canApproveDirectly($userId)) {
+            $roles = $access->roles($userId);
+            if ($level === 1 && (!in_array('zone_manager', $roles, true) || !in_array($userId, $this->zoneManagerUserIds((string) $approvalItem->item_reference), true))) {
+                return 'Only the property\'s zone manager can verify the return at level 1.';
+            }
+            if ($level === 2 && !in_array('internal_auditor', $roles, true)) return 'Only an internal auditor can verify the return at level 2.';
+            if ($level >= 3) return 'Final approval is reserved for directors and the chief accountant.';
+        }
         $isEligible = in_array($userId, $this->eligibleUserIds($approvalItem, $level), true);
 
         return self::refusal($userId, (int) $approvalItem->initiated_by, $this->earlierActorIds((int) $approvalItem->id, $level), $isEligible);
@@ -548,11 +558,10 @@ class ReturnApprovalWorkflowService
      * @return string|null
      */
     public function zoneRefusal(int $propertyId): ?string {
-        if (\App\Models\Client::zoneAccessState() === null) {
-            return null;
-        }
-
-        return \App\Models\Property::whereKey($propertyId)->exists() ? null : 'That property is not in your zone, so you cannot forward its returns.';
+        $access = app(ReturnAccessService::class);
+        $userId = (int) auth()->id();
+        if (!$access->canForward($userId)) return 'Only field officers can forward returns to the zone manager.';
+        return $access->fieldOfficerOwnsProperty($userId, $propertyId) ? null : 'Only the assigned field officer can forward this property\'s returns.';
     }
 
     /**
@@ -581,6 +590,11 @@ class ReturnApprovalWorkflowService
         $propertyId = (int) DB::table('sys_pm_properties')->where('reference_number', $return->property_code)->value('id');
         if (!$propertyId) {
             throw new ReturnApprovalException('The property of this return was not found.');
+        }
+
+        $access = app(ReturnAccessService::class);
+        if (!$access->canForward($userId) || !$access->fieldOfficerOwnsProperty($userId, $propertyId)) {
+            throw new ReturnApprovalException('Only the assigned field officer can forward this property\'s returns.');
         }
 
         if ($this->createItems((string) $return->return_period, $userId, $ipAddress, $propertyId, (int) $return->id) === 0) {

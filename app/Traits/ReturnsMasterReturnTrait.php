@@ -39,19 +39,20 @@ trait ReturnsMasterReturnTrait
     ];
 
     /**
-     * Generate MASTERRETURN summaries for all active merge batches.
+     * Generate MASTERRETURN summaries for one batch, after its readiness check has passed under lock.
      */
     protected function generateMasterReturns(
         string $returnPeriod,
         string $transactionDate,
         int $generatedBy,
         int $returnYear,
-        int $returnMonth
+        int $returnMonth,
+        int $batchId
     ): int {
         // The rent returns of a merge batch are merged into one payment; so are the utility returns of a client who has
         // them (an RU1 return per property), into a second, utility payment.
-        return $this->generateMasterReturnsOfKind(false, $returnPeriod, $transactionDate, $generatedBy, $returnYear, $returnMonth)
-            + $this->generateMasterReturnsOfKind(true, $returnPeriod, $transactionDate, $generatedBy, $returnYear, $returnMonth);
+        return $this->generateMasterReturnsOfKind(false, $returnPeriod, $transactionDate, $generatedBy, $returnYear, $returnMonth, $batchId)
+            + $this->generateMasterReturnsOfKind(true, $returnPeriod, $transactionDate, $generatedBy, $returnYear, $returnMonth, $batchId);
     }
 
     /**
@@ -65,8 +66,8 @@ trait ReturnsMasterReturnTrait
      * @param int $returnYear
      * @param int $returnMonth
      */
-    protected function generateMasterReturnsOfKind(bool $utility, string $returnPeriod, string $transactionDate, int $generatedBy, int $returnYear, int $returnMonth): int {
-        $batches = $this->collectMasterBatchAggregates($returnPeriod, $utility);
+    protected function generateMasterReturnsOfKind(bool $utility, string $returnPeriod, string $transactionDate, int $generatedBy, int $returnYear, int $returnMonth, int $batchId): int {
+        $batches = $this->collectMasterBatchAggregates($returnPeriod, $utility, $batchId);
 
         if (empty($batches)) {
             return 0;
@@ -210,7 +211,7 @@ trait ReturnsMasterReturnTrait
      * Skips any batch that resolves to a single MAINRETURN (nothing to merge). With $utility the children are the
      * batch's utility returns (UTILITYRETURN) instead of its main returns.
      */
-    protected function collectMasterBatchAggregates(string $returnPeriod, bool $utility = false): array
+    protected function collectMasterBatchAggregates(string $returnPeriod, bool $utility, int $batchId): array
     {
         return DB::select("
             WITH child_returns AS (
@@ -236,6 +237,11 @@ trait ReturnsMasterReturnTrait
                                            AND rs.return_period = ?
                                            AND rs.return_type   = ?
                                            AND COALESCE(rs.is_merged, FALSE) = FALSE
+                                           AND COALESCE(rs.parent_return_code, '') = ''
+                                           AND rs.approved_status = 1
+                                           AND COALESCE(rs.paid_status, 0) = 0
+                                           AND COALESCE(rs.voucher_generated, 0) = 0
+                WHERE mb.id = ?
             )
             SELECT
                 cr.batch_id,
@@ -257,9 +263,9 @@ trait ReturnsMasterReturnTrait
             FROM child_returns cr
             LEFT JOIN sys_pm_clients cl ON cl.id = cr.batch_client_id
             GROUP BY cr.batch_id, cr.batch_code, cr.batch_name, cr.batch_client_id, cl.reference_number, cl.names
-            HAVING COUNT(*) > 1
+            HAVING COUNT(*) > " . ($utility ? '0' : '1') . "
             ORDER BY cr.batch_id
-        ", [$returnPeriod, $utility ? 'UTILITYRETURN' : 'MAINRETURN']);
+        ", [$returnPeriod, $utility ? 'UTILITYRETURN' : 'MAINRETURN', $batchId]);
     }
 
     /**

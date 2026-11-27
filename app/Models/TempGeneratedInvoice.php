@@ -28,7 +28,8 @@ class TempGeneratedInvoice extends Model
 
     protected $casts = [
         'pushed_to_main' => 'boolean',
-        'returns_period' => 'date',
-        'date_due' => 'date',
+        // Calendar dates must reach the staging table without a UTC conversion.
+        'returns_period' => 'date:Y-m-d',
+        'date_due' => 'date:Y-m-d',
     ];
 }

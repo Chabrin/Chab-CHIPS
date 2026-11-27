@@ -685,9 +685,7 @@ class PaymentVouchersController extends Controller
                 ->where('cb_returns_summary.paid_status', 0)
                 ->where('cb_returns_summary.voucher_generated', 0)
                 ->where('cb_returns_summary.net_balance', '>', 0)
-                // A property return inside a merged return is paid with it, by the merged return's one voucher
-                ->whereRaw('COALESCE(cb_returns_summary.is_merged, FALSE) = FALSE')
-                ->whereRaw("COALESCE(cb_returns_summary.parent_return_code, '') = ''")
+                ->eligibleForVoucher()
                 ->where('cb_returns_summary.year', $year)
                 ->where('cb_returns_summary.month', $month)
                 ->orderBy('cb_returns_summary.landlord_code')
@@ -775,6 +773,11 @@ class PaymentVouchersController extends Controller
             if (!$return || (int) $return->approved_status !== 1 || (int) $return->paid_status !== 0 || (int) $return->voucher_generated !== 0) {
                 DB::rollBack();
                 return response()->json(['success' => false, 'message' => 'This return is not approved, or it already has a payment voucher.'], 422);
+            }
+
+            if (!ReturnSummary::whereKey($return->id)->eligibleForVoucher()->exists()) {
+                DB::rollBack();
+                return response()->json(['success' => false, 'message' => 'This property return must be paid through its merged return. Generate the merged return after all batch members are approved.'], 422);
             }
 
             $splitTotal = round((float) collect($validated['split_entries'] ?? [])->sum('amount'), 2);
