@@ -333,7 +333,7 @@
                                         <i class="fa fa-info-circle me-2"></i><span id="approvals-no-workflow-msg">No approval workflow found</span>
                                     </div>
                                     <button type="button" class="btn btn-primary btn-sm" id="forward-btn" style="display: none;">
-                                        <i class="fa fa-share me-1"></i> Forward to manager
+                                        <i class="fa fa-share me-1"></i> Forward to zone manager
                                     </button>
                                 </div>
                             </div><!-- /approvals-content -->
@@ -741,6 +741,11 @@
                     $('#approvals-loader').hide();
                     if (response.success) {
                         var data = response.data;
+                        $('#forward-btn').hide();
+                        $('#direct-approval-notice').remove();
+                        if (data.direct_approval) {
+                            $('#comments-trail').before('<div id="direct-approval-notice" class="alert alert-info py-2">You can give final approval directly. This skips the remaining review levels and is recorded as a direct approval.</div>');
+                        }
                         renderCompactTimeline(data.timeline);
                         renderCommentsTrail(data.timeline);
 
@@ -807,6 +812,7 @@
                 html += '</div>';
                 html += '<div class="flex-grow-1">';
                 html += '<div style="font-size:0.8rem;font-weight:600;color:#495057;">Level ' + item.level + ' - ' + escapeHtml(item.approver_name) + '</div>';
+                if (item.status === 'Skipped') html += '<div class="text-muted" style="font-size:0.7rem;">Skipped by direct final approval</div>';
                 if (item.actions) {
                     item.actions.forEach(function(a) {
                         html += '<div style="font-size:0.7rem;color:#6c757d;">' + escapeHtml(a.action) + ' - ' + formatDate(a.action_timestamp);

@@ -163,6 +163,11 @@ class ReturnPostingService
      * @param int $userId the approver
      */
     public function postPayout(ReturnSummary $return, PaymentVoucherHeader $voucher, int $userId): void {
+        // Also protects pre-existing pending vouchers if the property was placed in a merge batch afterwards.
+        $return = ReturnSummary::whereKey($return->id)->lockForUpdate()->firstOrFail();
+        if (!ReturnSummary::whereKey($return->id)->eligibleForVoucher()->exists()) {
+            throw new ClientAccountException('This property return must be paid through its merged return.');
+        }
         $code = (string) $return->return_code;
 
         if ((int) $return->approved_status !== 1) {

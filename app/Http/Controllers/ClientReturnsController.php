@@ -10,6 +10,8 @@ use App\Services\ReturnApprovalWorkflowService;
 use App\Services\MiniReturnService;
 use App\Services\ReturnStatementService;
 use App\Services\UtilityReturnsService;
+use App\Services\MergedReturnGenerationService;
+use App\Services\ReturnListService;
 use App\Exports\ReturnStatementExport;
 use App\Exceptions\ReturnApprovalException;
 use App\Exceptions\MiniReturnException;
@@ -115,9 +117,8 @@ class ClientReturnsController extends Controller
                 } else {
                     // Allowed property reference_numbers (assigned to this staff)
                     $allowedPropertyCodes = DB::table('sys_pm_properties as spp')
-                        ->join('sys_pm_zones_assignments as spza', 'spza.property_id', '=', 'spp.id')
-                        ->where('spza.staff_id', $staffId)
-                        ->where('spza.current_status_id', 1)
+                        ->leftJoin('sys_set_zones as spz', 'spz.id', '=', 'spp.zone_id')
+                        ->where(fn ($q) => \App\Models\Client::addZoneAccessPredicate($q, (int) $staffId))
                         ->distinct()
                         ->pluck('spp.reference_number')
                         ->all();
@@ -125,9 +126,8 @@ class ClientReturnsController extends Controller
                     // Allowed landlord reference_numbers (landlords who own at least one assigned property)
                     $allowedLandlordCodes = DB::table('sys_pm_clients as spc')
                         ->join('sys_pm_properties as spp', 'spp.client_id', '=', 'spc.id')
-                        ->join('sys_pm_zones_assignments as spza', 'spza.property_id', '=', 'spp.id')
-                        ->where('spza.staff_id', $staffId)
-                        ->where('spza.current_status_id', 1)
+                        ->leftJoin('sys_set_zones as spz', 'spz.id', '=', 'spp.zone_id')
+                        ->where(fn ($q) => \App\Models\Client::addZoneAccessPredicate($q, (int) $staffId))
                         ->distinct()
                         ->pluck('spc.reference_number')
                         ->all();
@@ -193,83 +193,14 @@ class ClientReturnsController extends Controller
             //log count of returns fetched
             Log::info("Fetched {$returns->count()} returns for year={$year}, month={$month}, user_id={$userId}");
 
-            // Properties each return covers (a master return has none of its own, so it carries its children's)
-            $coveredCodes = $this->returnPropertyCodes($returns, (int) $year, (int) $month);
-            if ($allowedPropertyCodes !== null) {
-                $coveredCodes = array_map(fn($codes) => array_values(array_intersect($codes, $allowedPropertyCodes)), $coveredCodes);
+            // Approval levels follow the current workflow. Migrated records remain readable if it is not configured.
+            try {
+                $levels = $this->returnApprovals->totalLevels();
+            } catch (ReturnApprovalException $e) {
+                $levels = null;
             }
-
-            $propertyCodes = collect($coveredCodes)->flatten()->unique()->filter();
-            $propertyNames = DB::table('sys_pm_properties')
-                ->whereIn('reference_number', $propertyCodes)
-                ->pluck('property_name', 'reference_number');
-
-            $landlordCodes = $returns->pluck('landlord_code')->unique()->filter();
-            $clientNames = DB::table('sys_pm_clients')
-                ->whereIn('reference_number', $landlordCodes)
-                ->pluck('names', 'reference_number');
-
-            // Why units of each return are not payable, in words (a master return has no lines of its own)
-            $whyNotPayable = $this->notPayableSummaries($returns->where('return_type', '!=', 'MASTERRETURN')->pluck('return_code')->all());
-
-            // Where each return is in its approval: a draft has not been forwarded to the manager yet
-            $items = DB::table('cb_approval_items')
-                ->where('item_type', 'return_summary')
-                ->whereIn('item_id', $returns->pluck('id'))
-                ->get(['item_id', 'status', 'current_level'])
-                ->keyBy('item_id');
-            $lastLevel = $this->returnApprovals->totalLevels();
-
-            return response()->json([
-                'success' => true,
-                'count' => $returns->count(),
-                'properties' => $propertyCodes
-                    ->map(fn($code) => ['code' => $code, 'name' => $propertyNames[$code] ?? $code])
-                    ->sortBy(fn($p) => strtolower($p['name']))
-                    ->values(),
-                'data' => $returns->map(function ($r) use ($propertyNames, $clientNames, $coveredCodes, $whyNotPayable, $items, $lastLevel) {
-                    $isMaster = $r->return_type === 'MASTERRETURN';
-                    $item = $items->get($r->id);
-                    $isDraft = !$isMaster && (int) $r->approved_status === 0 && !$item;
-                    if ((int) $r->approved_status === 1) {
-                        $stage = 'Approved';
-                    } elseif ($isDraft) {
-                        $stage = 'Draft';
-                    } elseif ($item) {
-                        $stage = (int) $item->current_level < $lastLevel ? 'Waiting verification' : 'Waiting approval';
-                    } else {
-                        $stage = 'Waiting approval';
-                    }
-
-                    $name = $clientNames[$r->landlord_code] ?? '-';
-                    $num = preg_replace('/^LAN-?/i', '', $r->landlord_code ?? '');
-                    return [
-                        'id' => $r->id,
-                        'encrypted_id' => encrypt($r->id),
-                        'return_code' => $r->return_code,
-                        'landlord_code' => $r->landlord_code,
-                        'client_name' => $name . ' (' . $num . ')',
-                        'property_code' => $r->property_code ?? '-',
-                        'property_codes' => $coveredCodes[$r->id] ?? [],
-                        'property_name' => $propertyNames[$r->property_code] ?? '-',
-                        'return_type' => $r->return_type ?? '-',
-                        'period' => str_pad($r->month, 2, '0', STR_PAD_LEFT) . '/' . $r->year,
-                        'commission_rate' => number_format($r->commission_rate ?? 0, 2),
-                        'total_credit' => number_format($r->total_credit ?? 0, 2),
-                        'total_debit' => number_format($r->total_debit ?? 0, 2),
-                        'commission_amount' => number_format($r->commission_amount ?? 0, 2),
-                        'net_amount' => number_format($r->net_amount ?? 0, 2),
-                        'payable_units' => ($r->payable_units ?? 0) . '/' . ($r->total_units ?? 0),
-                        'withheld' => number_format($r->non_payable_amount ?? 0, 2),
-                        'not_payable_reason' => $whyNotPayable[$r->return_code] ?? '',
-                        'prepared_by' => $r->prepared_by ?? '-',
-                        'approved_status' => $r->approved_status,
-                        'prepared_status' => $r->prepared_status,
-                        'stage' => $stage,
-                        'is_draft' => $isDraft,
-                    ];
-                })
-            ]);
+            $list = app(ReturnListService::class)->present($returns, $allowedPropertyCodes, $levels);
+            return response()->json(['success' => true] + app(\App\Services\ReturnListContextService::class)->enrich($list, $levels));
         } catch (Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error fetching returns list data: ' . $e->getMessage());
@@ -304,50 +235,6 @@ class ClientReturnsController extends Controller
         $paid = max((float) $line->total_amount - (float) $line->current_balance, 0);
 
         return 'Previous rent invoice ' . number_format($paid, 2) . ' of ' . number_format((float) $line->total_amount, 2) . " paid ({$percent}%); 85% needed";
-    }
-
-    /**
-     * Say in words, per return, why units of the return are not payable. Counts the rent units held back by the 85%
-     * rule, the units marked with a recovery status by hand, and the bill lines the tenant has not paid yet. A return
-     * with nothing held back has no entry.
-     *
-     * @param array $returnCodes the return codes listed on the page
-     * @return array return code => text
-     */
-    private function notPayableSummaries(array $returnCodes): array {
-        $summaries = [];
-
-        foreach (array_chunk(array_values(array_unique($returnCodes)), 500) as $codes) {
-            $lines = DB::table('cb_returns_clients')
-                ->whereIn('return_code', $codes)
-                ->where('dr_cr', 'CR')
-                ->where(fn($q) => $q->where('payable_status', 0)->orWhereIn('payable_status', [34, 35, 36, 37]))
-                ->get(['return_code', 'entry_type', 'payable_status', 'payable_status_reason', 'unit_id'])
-                ->groupBy('return_code');
-
-            foreach ($lines as $code => $group) {
-                $held = $group->filter(fn($l) => (int) $l->payable_status === 0);
-                $rentUnits = $held->where('entry_type', 'RENT CURRENT')->pluck('unit_id')->unique()->count();
-                $bills = $held->where('entry_type', '!=', 'RENT CURRENT')->count();
-                $parts = [];
-
-                if ($rentUnits > 0) {
-                    $parts[] = $rentUnits . ($rentUnits === 1 ? ' unit' : ' units') . ' held back: previous rent invoice under 85% paid';
-                }
-                foreach ($group->filter(fn($l) => (int) $l->payable_status !== 0)->groupBy('payable_status_reason') as $reason => $marked) {
-                    $parts[] = $marked->count() . ($marked->count() === 1 ? ' unit' : ' units') . ' marked ' . ($reason !== '' ? $reason : 'recovered');
-                }
-                if ($bills > 0) {
-                    $parts[] = $bills . ($bills === 1 ? ' bill' : ' bills') . ' not paid by the tenant yet';
-                }
-
-                if ($parts) {
-                    $summaries[$code] = implode('; ', $parts);
-                }
-            }
-        }
-
-        return $summaries;
     }
 
     /**
@@ -884,6 +771,8 @@ class ClientReturnsController extends Controller
             $search = $request->search;
 
             $properties = Property::select(['id', 'property_name', 'reference_number', 'description'])
+                ->when(!app(\App\Services\ReturnAccessService::class)->canApproveDirectly((int) Auth::id()), fn ($q) =>
+                    $q->whereIn('field_officer_id', DB::table('sys_user_staff_links')->where('user_id', Auth::id())->select('staff_id')))
                 ->when($search, function ($query, $search) {
                     $query->where(function ($q) use ($search) {
                         $q->where('property_name', 'ILIKE', "%{$search}%")
@@ -912,6 +801,9 @@ class ClientReturnsController extends Controller
      */
     public function showGenerate()
     {
+        if (!app(\App\Services\ReturnAccessService::class)->canGenerate((int) Auth::id())) {
+            return $this->denied();
+        }
         try {
             return view('property.returns.generate-returns');
         } catch (Exception $e) {
@@ -919,6 +811,62 @@ class ClientReturnsController extends Controller
             Log::error('Error loading returns generation page: ' . $e->getMessage());
             return redirect()->back()->with('error', 'Failed to load returns generation page');
         }
+    }
+
+    /** Read-only review of a configured batch for the selected month. */
+    public function mergeReadiness(Request $request)
+    {
+        if (!app(\App\Services\ReturnAccessService::class)->canGenerate((int) Auth::id()) || !$this->menuAllowed('/returns/generate')) {
+            return $this->denied('json');
+        }
+        $values = $request->validate([
+            'returns_month' => 'required|date_format:Y-m',
+            'property_id' => 'required|integer|exists:sys_pm_properties,id',
+        ]);
+        try {
+            $batch = $this->mergedGenerationBatch((int) $values['property_id']);
+            $state = app(MergedReturnGenerationService::class)
+                ->readiness($batch['batch_id'], str_replace('-', '', $values['returns_month']));
+            $this->assertMergeGenerationAccess(array_column($state['properties'], 'property_id'));
+            return response()->json(['success' => true] + $state);
+        } catch (ReturnApprovalException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        }
+    }
+
+    private function mergedGenerationBatch(?int $propertyId): array
+    {
+        if (!$propertyId || !($batch = $this->getMergeBatchInfo($propertyId))) {
+            throw new ReturnApprovalException('Choose a property belonging to a configured merge batch.');
+        }
+        $this->assertMergeGenerationAccess($batch['property_ids']);
+        return $batch;
+    }
+
+    private function assertMergeGenerationAccess(array $propertyIds): void
+    {
+        foreach ($propertyIds as $id) {
+            if ($this->generationRefusal((int) $id) !== null) {
+                throw new ReturnApprovalException('You must have access to every property in the batch to generate its merged return. Ask the chief accountant or a director to generate it.');
+            }
+        }
+    }
+
+    private function generateMergedReturn(Request $request, ?int $propertyId, string $period, int $userId)
+    {
+        $batch = $this->mergedGenerationBatch($propertyId);
+        $ids = DB::transaction(function () use ($batch, $request, $propertyId, $period, $userId) {
+            DB::table('cb_returns_merge_batches')->where('id', $batch['batch_id'])->lockForUpdate()->first();
+            // Recheck every member's access while batch edits are excluded, before generating anything.
+            $lockedBatch = $this->mergedGenerationBatch($propertyId);
+            return app(MergedReturnGenerationService::class)->generate($lockedBatch['batch_id'], $period, $userId, $request->input('preview_token'));
+        });
+        return response()->json([
+            'success' => true,
+            'message' => count($ids) . ' merged return(s) generated from approved individual returns. The payment voucher still follows its approval process.',
+            'master_count' => count($ids),
+            'redirect_url' => $this->generationRedirectUrl($ids, (int) substr($period, 0, 4), (int) substr($period, 4, 2)),
+        ]);
     }
 
     /**
@@ -929,19 +877,21 @@ class ClientReturnsController extends Controller
      * 2) Update pay threshold percentages (ReturnsPayThresholdTrait)
      * 3) Insert deductions: advances, recoveries, collections (ReturnsDeductionsTrait)
      * 4) Insert MAINRETURN summaries (ReturnsSummaryTrait)
-     * 5) Generate MASTERRETURNs for batched properties (ReturnsMasterReturnTrait)
+     * Merged returns are generated separately, only after individual final approvals.
      * 6) Mark landlord account entries as recovered (ReturnsDeductionsTrait)
-     * 7) Create approval workflow items
+     * 7) Leave drafts for the field officer to forward for approval
      * 
      * Supports optional property_id for single-property generation.
      */
     public function processGenerate(Request $request)
     {
+        $generationTransactionStarted = false;
         try {
             $request->validate([
                 'returns_month' => 'required|date_format:Y-m',
-                'property_id'   => 'nullable|integer|exists:sys_pm_properties,id',
-                'return_type'   => 'nullable|in:main,mini'
+                'property_id'   => 'required_if:return_type,merged|nullable|integer|exists:sys_pm_properties,id',
+                'return_type'   => 'nullable|in:main,mini,merged',
+                'preview_token' => 'required_if:return_type,merged|string|size:64'
             ]);
 
             // Parse input parameters
@@ -959,6 +909,16 @@ class ClientReturnsController extends Controller
             $transactionDate = date('d-M-Y', strtotime($returnsMonth . '-05'));
             $preparedByName = DB::table('josya_users')->where('id', $generatedBy)->value('name') ?? 'System';
 
+            // A field officer generates for one property of their own zone; a director or chief accountant for any property
+            $generationRefusal = $this->generationRefusal($requestedPropertyId);
+            if ($generationRefusal !== null) {
+                return response()->json(['success' => false, 'message' => $generationRefusal], 403);
+            }
+
+            if ($request->input('return_type') === 'merged') {
+                return $this->generateMergedReturn($request, $requestedPropertyId, $returnPeriod, (int) $generatedBy);
+            }
+
             // The approvers come from the 'returns_approval' workflow: do not generate returns nobody can approve
             try {
                 $this->returnApprovals->assertConfigured();
@@ -966,51 +926,40 @@ class ClientReturnsController extends Controller
                 return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
             }
 
-            // A field officer generates for one property of their own zone; a director or accountant for any property
-            $generationRefusal = $this->generationRefusal($requestedPropertyId);
-            if ($generationRefusal !== null) {
-                return response()->json(['success' => false, 'message' => $generationRefusal], 403);
-            }
-
             // A mini return carries only the money that came in late for one property
             if ($request->input('return_type') === 'mini') {
                 return $this->generateMiniReturn($requestedPropertyId, $returnsMonth, (int) $generatedBy);
             }
 
-            // ═══════════════════════════════════════════════════════════════════
-            // CHECK FOR MERGE BATCH: If single property is in merge batch, get all partners
-            // ═══════════════════════════════════════════════════════════════════
-            $mergeInfo = null;
-            $propertyIds = [];
-            $isMergeBatchMode = false;
-
-            if ($requestedPropertyId) {
-                $mergeInfo = $this->getMergeBatchInfo($requestedPropertyId);
-                if ($mergeInfo) {
-                    $propertyIds = $mergeInfo['property_ids'];
-                    $isMergeBatchMode = true;
-                    Log::info("Merge batch detected", [
-                        'requested_property' => $requestedPropertyId,
-                        'batch_reference' => $mergeInfo['batch_reference'],
-                        'all_properties' => $propertyIds
-                    ]);
-                } else {
-                    $propertyIds = [$requestedPropertyId];
-                }
-            }
+            // Individual generation never expands to the other properties of a configured merge batch.
+            $propertyIds = $requestedPropertyId ? [$requestedPropertyId] : Property::query()->pluck('id')->all();
 
             DB::beginTransaction();
+            $generationTransactionStarted = true;
 
             // ═══════════════════════════════════════════════════════════════════
             // VALIDATION: Check for approved invoices
             // ═══════════════════════════════════════════════════════════════════
-            $totalInvoices = 0;
-            if ($isMergeBatchMode) {
-                foreach ($propertyIds as $pid) {
-                    $totalInvoices += $this->countApprovedInvoices($monthStart, $pid);
+            // Lock before checking approval so concurrent requests cannot rebuild a return being approved.
+            $propertyIds = DB::table('sys_pm_properties')->whereIn('id', $propertyIds)->orderBy('id')
+                ->lockForUpdate()->pluck('id')->all();
+            $protectedProperties = [];
+            foreach ($propertyIds as $pid) {
+                ReturnSummary::where('return_period', $returnPeriod)
+                    ->where('property_code', DB::table('sys_pm_properties')->where('id', $pid)->value('reference_number'))
+                    ->orderBy('id')->lockForUpdate()->get();
+                if ($this->approvedReturnsExistForPeriod($returnPeriod, $pid)) {
+                    if ($requestedPropertyId) {
+                        DB::rollBack();
+                        return response()->json(['success' => false, 'message' => 'This property already has approved, paid or merged returns for this period and cannot be regenerated.'], 422);
+                    }
+                    $protectedProperties[] = $pid;
                 }
-            } else {
-                $totalInvoices = $this->countApprovedInvoices($monthStart, $requestedPropertyId);
+            }
+            $propertyIds = array_values(array_diff($propertyIds, $protectedProperties));
+            $totalInvoices = 0;
+            foreach ($propertyIds as $pid) {
+                $totalInvoices += $this->countApprovedInvoices($monthStart, $pid);
             }
 
             if ($totalInvoices == 0) {
@@ -1027,59 +976,18 @@ class ClientReturnsController extends Controller
                 'returns_month'    => $returnsMonth,
                 'total_invoices'   => $totalInvoices,
                 'property_id'      => $requestedPropertyId,
-                'merge_batch_mode' => $isMergeBatchMode,
                 'property_ids'     => $propertyIds ?: null,
             ]);
 
             // ═══════════════════════════════════════════════════════════════════
             // VALIDATION & DELETE: Check approved returns and delete unapproved
             // ═══════════════════════════════════════════════════════════════════
-            if ($isMergeBatchMode) {
-                // Check and delete for ALL properties in merge batch
-                foreach ($propertyIds as $pid) {
-                    if ($this->approvedReturnsExistForPeriod($returnPeriod, $pid)) {
-                        DB::rollBack();
-                        $propName = DB::table('sys_pm_properties')->where('id', $pid)->value('property_name') ?? "ID {$pid}";
-                        return response()->json([
-                            'success' => false,
-                            'message' => "Returns for {$monthName} {$returnYear} have been approved for merge partner '{$propName}' and cannot be regenerated."
-                        ], 422);
-                    }
-                }
-                foreach ($propertyIds as $pid) {
-                    $deleted = $this->deleteUnapprovedReturnsForPeriod($returnPeriod, $pid);
-                    if ($deleted['summaries'] > 0) {
-                        Log::info("Pre-generation cleanup: Deleted unapproved returns for merge partner", [
-                            'period' => $returnPeriod,
-                            'property_id' => $pid,
-                            'deleted' => $deleted
-                        ]);
-                    }
-                }
-            } else {
-                $propMsg = $requestedPropertyId ? ' for this property' : '';
-                if ($this->approvedReturnsExistForPeriod($returnPeriod, $requestedPropertyId)) {
-                    DB::rollBack();
-                    return response()->json([
-                        'success' => false,
-                        'message' => "Returns for {$monthName} {$returnYear} have been approved{$propMsg} and cannot be regenerated."
-                    ], 422);
-                }
-                $deleted = $this->deleteUnapprovedReturnsForPeriod($returnPeriod, $requestedPropertyId);
-                if ($deleted['summaries'] > 0) {
-                    Log::info("Pre-generation cleanup: Deleted unapproved returns", [
-                        'period' => $returnPeriod,
-                        'property_id' => $requestedPropertyId,
-                        'deleted' => $deleted
-                    ]);
-                }
+            foreach ($propertyIds as $pid) {
+                $this->deleteUnapprovedReturnsForPeriod($returnPeriod, $pid);
             }
 
-            // Get next return_id base
-            $baseReturnId = $this->getNextReturnIdBase();
-
             // ═══════════════════════════════════════════════════════════════════
-            // GENERATION: Process properties (loop for merge batch, single otherwise)
+            // GENERATION: Process only the selected, unapproved individual properties
             // ═══════════════════════════════════════════════════════════════════
             $rentInserted = 0;
             $advancesInserted = 0;
@@ -1088,9 +996,10 @@ class ClientReturnsController extends Controller
             $commissionsInserted = 0;
             $summaryCount = 0;
 
-            $propertiesToProcess = $isMergeBatchMode ? $propertyIds : [$requestedPropertyId];
+            $propertiesToProcess = $propertyIds;
 
             foreach ($propertiesToProcess as $propertyId) {
+                $baseReturnId = $this->getNextReturnIdBase();
                 // STEP 1: INSERT RENT LINES
                 $rentInserted += $this->insertRentLines(
                     $returnPeriod,
@@ -1172,8 +1081,7 @@ class ClientReturnsController extends Controller
                 // STEP 7: the returns stay drafts. They go under approval only when the field officer forwards them to the manager.
 
                 Log::info("Processed property", [
-                    'property_id' => $propertyId,
-                    'merge_batch_mode' => $isMergeBatchMode
+                    'property_id' => $propertyId
                 ]);
             }
 
@@ -1194,29 +1102,12 @@ class ClientReturnsController extends Controller
                 'summaries' => $summaryCount
             ]);
 
-            // ═══════════════════════════════════════════════════════════════════
-            // STEP 5: GENERATE MASTERRETURNs (ReturnsMasterReturnTrait)
-            // Generate if: all properties OR merge batch mode (all batch properties processed)
-            // ═══════════════════════════════════════════════════════════════════
+            // Merging is a separate action after all required individual returns have final approval.
             $masterReturnCount = 0;
-            if (!$requestedPropertyId || $isMergeBatchMode) {
-                $masterReturnCount = $this->generateMasterReturns(
-                    $returnPeriod,
-                    $transactionDate,
-                    $generatedBy,
-                    $returnYear,
-                    $returnMonthNum
-                );
-                Log::info("Step 5: MASTERRETURNs generated", ['count' => $masterReturnCount]);
-            } else {
-                Log::info("Step 5: MASTERRETURN generation skipped (single property not in merge batch)");
-            }
 
             $generatedReturns = ReturnSummary::where('return_period', $returnPeriod)
                 ->whereIn('return_type', ['MAINRETURN', 'UTILITYRETURN'])
-                ->when($requestedPropertyId, function ($query) use ($propertyIds) {
-                    $query->whereIn('property_code', DB::table('sys_pm_properties')->whereIn('id', $propertyIds)->select('reference_number'));
-                })
+                ->whereIn('property_code', DB::table('sys_pm_properties')->whereIn('id', $propertyIds)->select('reference_number'))
                 ->get(['id', 'parent_return_code']);
             $generatedIds = $generatedReturns->pluck('id')->all();
             $masterIds = ReturnSummary::whereIn('return_code', $generatedReturns->pluck('parent_return_code')->filter()->unique())
@@ -1224,6 +1115,7 @@ class ClientReturnsController extends Controller
             $generatedIds = array_values(array_unique(array_merge($generatedIds, $masterIds)));
 
             DB::commit();
+            $generationTransactionStarted = false;
 
             Log::info("=== RETURN GENERATION COMPLETE ===", [
                 'rent_lines'       => $rentInserted,
@@ -1234,28 +1126,17 @@ class ClientReturnsController extends Controller
                 'master_returns'   => $masterReturnCount,
                 'returns_month'    => $returnsMonth,
                 'requested_property' => $requestedPropertyId,
-                'merge_batch_mode' => $isMergeBatchMode,
                 'properties_processed' => count($propertiesToProcess)
             ]);
 
             // Build response message
-            $totalLines = $rentInserted + $advancesInserted + $recoveriesInserted + $collectionsInserted;
-            if ($isMergeBatchMode) {
-                $propNames = DB::table('sys_pm_properties')
-                    ->whereIn('id', $propertyIds)
-                    ->pluck('property_name')
-                    ->toArray();
-                $propLabel = " for merge batch '{$mergeInfo['batch_reference']}' (" . count($propertyIds) . " properties: " . implode(', ', $propNames) . ")";
-            } elseif ($requestedPropertyId) {
+            if ($requestedPropertyId) {
                 $propLabel = " for property ID {$requestedPropertyId}";
             } else {
                 $propLabel = "";
             }
 
             $message = "Client returns generated successfully{$propLabel}: {$summaryCount} MAINRETURN(s)";
-            if ($masterReturnCount > 0) {
-                $message .= ", {$masterReturnCount} MASTERRETURN(s)";
-            }
             $message .= " ({$rentInserted} rent + {$advancesInserted} advance + {$recoveriesInserted} recovery + {$collectionsInserted} collection lines). They are drafts: forward them to the manager from the Returns List.";
 
             return response()->json([
@@ -1266,19 +1147,21 @@ class ClientReturnsController extends Controller
                 'properties_count'   => $summaryCount,
                 'master_count'       => $masterReturnCount,
                 'property_id'        => $requestedPropertyId,
-                'merge_batch'        => $isMergeBatchMode ? [
-                    'batch_reference' => $mergeInfo['batch_reference'],
-                    'property_ids'    => $propertyIds,
-                    'properties_count' => count($propertyIds)
-                ] : null
+                'merge_batch'        => null
             ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw $e;
         } catch (ReturnApprovalException $e) {
             // A zone with no manager login (or an incomplete workflow): nothing is generated, and the message says what to fix
-            DB::rollBack();
+            if ($generationTransactionStarted) {
+                DB::rollBack();
+            }
 
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         } catch (Exception $e) {
-            DB::rollBack();
+            if ($generationTransactionStarted) {
+                DB::rollBack();
+            }
             ErrorDispatcher::dispatch($e);
             Log::error('Error generating returns: ' . $e->getMessage());
 
@@ -1387,17 +1270,7 @@ class ClientReturnsController extends Controller
      * @param int|null $propertyId the one property asked for, or null for every property
      */
     protected function generationRefusal(?int $propertyId): ?string {
-        if (\App\Models\Client::zoneAccessState() === null) {
-            return null;
-        }
-        if (!$propertyId) {
-            return 'You can generate returns for one property at a time: choose one of the properties in your zone.';
-        }
-        if (!Property::whereKey($propertyId)->exists()) {
-            return 'That property is not in your zone, so you cannot generate its returns.';
-        }
-
-        return null;
+        return app(\App\Services\ReturnAccessService::class)->generationRefusal((int) Auth::id(), $propertyId);
     }
 
     /**
@@ -1406,7 +1279,7 @@ class ClientReturnsController extends Controller
      */
     public function forwardReturn($encryptedId)
     {
-        if (!$this->menuAllowed('/returns/generate')) {
+        if (!app(\App\Services\ReturnAccessService::class)->canForward((int) Auth::id()) || !$this->menuAllowed('/returns/generate')) {
             return $this->denied('json');
         }
 
@@ -1427,7 +1300,7 @@ class ClientReturnsController extends Controller
      */
     public function forwardReturns(Request $request)
     {
-        if (!$this->menuAllowed('/returns/generate')) {
+        if (!app(\App\Services\ReturnAccessService::class)->canForward((int) Auth::id()) || !$this->menuAllowed('/returns/generate')) {
             return $this->denied('json');
         }
 

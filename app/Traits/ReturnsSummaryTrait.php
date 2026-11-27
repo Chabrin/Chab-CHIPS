@@ -203,36 +203,8 @@ trait ReturnsSummaryTrait
             }
         }
 
-        // Also find any orphan MASTERRETURNs with empty property_code for this period/landlord
-        if ($propertyId && !empty($returnsToDelete)) {
-            // Get landlord codes for the properties being deleted
-            $landlordCodes = DB::select("
-                SELECT DISTINCT rs.landlord_code
-                FROM cb_returns_summary rs
-                JOIN sys_pm_properties p ON p.reference_number = rs.property_code
-                WHERE rs.return_period = ?
-                  AND rs.approved_status != 1
-                  AND p.id = ?
-            ", [$returnPeriod, $propertyId]);
-
-            foreach ($landlordCodes as $lc) {
-                // Find unapproved MASTERRETURNs for this landlord
-                $orphanMasters = DB::select("
-                    SELECT return_code
-                    FROM cb_returns_summary
-                    WHERE return_period = ?
-                      AND return_type = 'MASTERRETURN'
-                      AND landlord_code = ?
-                      AND approved_status != 1
-                ", [$returnPeriod, $lc->landlord_code]);
-
-                foreach ($orphanMasters as $m) {
-                    if (!in_array($m->return_code, $returnCodes)) {
-                        $returnCodes[] = $m->return_code;
-                    }
-                }
-            }
-        }
+        // A pending legacy master may belong to another batch of the same landlord. Only explicitly linked
+        // parents above are candidates; never infer deletions from landlord and month alone.
 
         if (empty($returnCodes)) {
             return ['clients' => 0, 'summaries' => 0, 'landlord_reset' => 0];
@@ -328,7 +300,8 @@ trait ReturnsSummaryTrait
                 FROM cb_returns_summary rs
                 JOIN sys_pm_properties p ON p.reference_number = rs.property_code
                 WHERE rs.return_period = ?
-                  AND (rs.approved_status = 1 OR rs.paid_status = 1 OR EXISTS (
+                  AND (rs.approved_status = 1 OR rs.paid_status = 1 OR COALESCE(rs.is_merged, FALSE) = TRUE
+                    OR COALESCE(rs.parent_return_code, '') <> '' OR EXISTS (
                       SELECT 1 FROM cb_returns_summary parent
                       WHERE parent.return_code = rs.parent_return_code
                         AND (parent.approved_status = 1 OR parent.paid_status = 1)

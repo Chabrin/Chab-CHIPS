@@ -271,6 +271,9 @@ class ReturnsApprovalController extends Controller
      */
     public function approveBatch($encryptedId, Request $request)
     {
+        if (!app(\App\Services\ReturnAccessService::class)->canApproveDirectly((int) auth()->id())) {
+            return response()->json(['success' => false, 'message' => 'Use the individual return approval workflow. Only directors and the chief accountant can approve a legacy batch directly.'], 403);
+        }
         try {
             $id = decrypt($encryptedId);
             $batch = ClientReturnsBatch::findOrFail($id);
@@ -480,6 +483,14 @@ class ReturnsApprovalController extends Controller
                 ->first();
 
             if (!$approvalItem) {
+                if (app(\App\Services\ReturnAccessService::class)->canApproveDirectly((int) auth()->id())
+                    && $returnSummary->return_type !== 'MASTERRETURN' && (int) $returnSummary->approved_status !== 1 && (int) $returnSummary->paid_status !== 1 && (int) $returnSummary->voucher_generated !== 1) {
+                    return response()->json(['success' => true, 'data' => [
+                        'timeline' => [], 'action_label' => 'Approve directly', 'direct_approval' => true,
+                        'can_approve' => true, 'can_reject' => false, 'available_reject_levels' => [],
+                        'waiting_for_previous' => false, 'waiting_message' => null,
+                    ]]);
+                }
                 // A return that has not been forwarded is a draft: it is under no one's approval yet
                 $draft = $this->returnApprovals->forwardRefusal($returnSummary) === null;
                 $canForward = false;
@@ -516,10 +527,12 @@ class ReturnsApprovalController extends Controller
                 ->map(fn ($rows) => $rows->first());
             $actionsByLevel = DB::table('cb_approval_actions')
                 ->where('approval_item_id', $approvalItem->id)
-                ->where('from_level', '>=', 1)
+                ->where(fn ($q) => $q->where('from_level', '>=', 1)->orWhere('comments', 'like', 'Direct final approval%'))
                 ->orderBy('sequence_number', 'asc')
                 ->get()
-                ->groupBy('from_level');
+                ->groupBy(fn ($action) => str_starts_with((string) $action->comments, 'Direct final approval') ? $action->to_level : $action->from_level);
+            $wasDirectlyApproved = $approvalItem->status === 'Approved' && $actionsByLevel->flatten(1)
+                ->contains(fn ($action) => str_starts_with((string) $action->comments, 'Direct final approval'));
 
             $canApprove = false;
             $canReject = false;
@@ -565,7 +578,7 @@ class ReturnsApprovalController extends Controller
                     'level' => $level,
                     'approver_name' => $actor->approver_name ?? $label,
                     'approver_email' => $actor->approver_email ?? '',
-                    'status' => $actor->approval_status ?? 'Pending',
+                    'status' => $actor->approval_status ?? ($wasDirectlyApproved ? 'Skipped' : 'Pending'),
                     'assigned_at' => $approvalItem->initiated_at,
                     'actioned_at' => $actor->actioned_at ?? null,
                     'actions' => $actions,
@@ -574,7 +587,16 @@ class ReturnsApprovalController extends Controller
                 ];
             }
 
-            if ($canApprove && $currentLevel >= 2) {
+            $directApproval = app(\App\Services\ReturnAccessService::class)->canApproveDirectly($currentUserId)
+                && $returnSummary->return_type !== 'MASTERRETURN' && (int) $returnSummary->approved_status !== 1
+                && (int) $returnSummary->paid_status !== 1 && (int) $returnSummary->voucher_generated !== 1;
+            if ($directApproval) {
+                $canApprove = true;
+                $waitingForPrevious = false;
+                $waitingMessage = null;
+            }
+
+            if ($canApprove && $currentLevel >= 2 && (!$directApproval || $this->returnApprovals->actorRefusal($approvalItem, $currentLevel, $currentUserId) === null)) {
                 $canReject = true;
                 for ($i = 1; $i < $currentLevel; $i++) {
                     $availableRejectLevels[] = [
@@ -589,7 +611,8 @@ class ReturnsApprovalController extends Controller
                 'data' => [
                     'approval_item' => $approvalItem,
                     'timeline' => $timeline,
-                    'action_label' => $this->returnApprovals->actionLabel($currentLevel),
+                    'action_label' => $directApproval ? 'Approve directly' : $this->returnApprovals->actionLabel($currentLevel),
+                    'direct_approval' => $directApproval,
                     'can_approve' => $canApprove,
                     'can_reject' => $canReject,
                     'available_reject_levels' => $availableRejectLevels,
@@ -612,6 +635,7 @@ class ReturnsApprovalController extends Controller
      * Whether the signed-in user holds the Generate Returns menu, which is what lets a user forward a return to the manager.
      */
     protected function canForwardMenu(): bool {
+        if (!app(\App\Services\ReturnAccessService::class)->canForward((int) auth()->id())) return false;
         $subModuleIds = DB::table('cb_sub_modules')->where('sub_module_url', '/returns/generate')->pluck('id');
         $roleIds = DB::table('cb_role_user')->where('user_id', auth()->id())->pluck('role_id');
 
@@ -630,6 +654,11 @@ class ReturnsApprovalController extends Controller
             $returnSummary = ReturnSummary::findOrFail($id);
 
             $request->validate(['comments' => 'nullable|string|max:1000']);
+
+            if (app(\App\Services\ReturnAccessService::class)->canApproveDirectly((int) auth()->id())) {
+                app(\App\Services\DirectReturnApprovalService::class)->approve((int) $id, (int) auth()->id(), $request->input('comments'), $request->ip());
+                return response()->json(['success' => true, 'message' => 'Return approved directly (Final Approval).']);
+            }
 
             $approvalItem = DB::table('cb_approval_items')
                 ->where('item_type', 'return_summary')
@@ -653,6 +682,14 @@ class ReturnsApprovalController extends Controller
 
             DB::beginTransaction();
             try {
+                // Serialise normal and direct approval of the same return, then recheck the current state.
+                $returnSummary = ReturnSummary::whereKey($id)->lockForUpdate()->firstOrFail();
+                $approvalItem = DB::table('cb_approval_items')->where('id', $approvalItem->id)->lockForUpdate()->first();
+                if (!in_array($approvalItem->status, ['Pending', 'InProgress']) || (int) $returnSummary->approved_status === 1 || (int) $returnSummary->paid_status === 1) {
+                    throw new ReturnApprovalException('This return has already been processed.');
+                }
+                $level = $this->returnApprovals->effectiveLevel($approvalItem);
+                if ($refusal = $this->returnApprovals->actorRefusal($approvalItem, $level, (int) auth()->id())) throw new ReturnApprovalException($refusal);
                 $actorRowId = $this->returnApprovals->recordActor((int) $approvalItem->id, $level, (int) auth()->id(), 'Approved');
 
                 DB::table('cb_approval_actions')->insert([

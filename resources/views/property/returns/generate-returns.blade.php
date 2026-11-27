@@ -20,6 +20,7 @@
                             <select class="form-select form-select-sm" id="return_type" name="return_type" aria-describedby="return_type_help">
                                 <option value="main">Main return</option>
                                 <option value="mini">Mini return</option>
+                                <option value="merged">Merged return from approved individuals</option>
                             </select>
                             <p class="text-muted mt-2 mb-0" id="return_type_help">Uses approved invoices for the selected month.</p>
                         </div>
@@ -33,7 +34,9 @@
                             <label class="form-label mb-1" for="property_selection">Property scope</label>
                             <select class="form-select form-select-sm" id="property_selection" name="property_selection">
                                 <option value="one">Specific property</option>
+                                @if(app(\App\Services\ReturnAccessService::class)->canApproveDirectly((int) auth()->id()))
                                 <option value="all">All properties</option>
+                                @endif
                             </select>
                         </div>
                         <div class="col-md-8" id="property_selector">
@@ -62,6 +65,16 @@
                     <dt class="col-4">Property scope</dt><dd class="col-8" id="review_scope"></dd>
                 </dl>
                 <p class="mb-2" id="review_note"></p>
+                <div id="merge_review" hidden>
+                    <p class="fw-semibold mb-2" id="merge_readiness_summary"></p>
+                    <ul id="merge_property_statuses" class="mb-3"></ul>
+                    <dl class="row mb-2" id="merge_totals" hidden>
+                        <dt class="col-7">Approved rent net</dt><dd class="col-5" id="merge_rent_net"></dd>
+                        <dt class="col-7">Approved utility net</dt><dd class="col-5" id="merge_utility_net"></dd>
+                        <dt class="col-7">Landlord deductions</dt><dd class="col-5" id="merge_deductions"></dd>
+                        <dt class="col-7">Combined net payable</dt><dd class="col-5" id="merge_net"></dd>
+                    </dl>
+                </div>
                 <p class="mb-0" id="generation_status" role="status"></p>
                 <p class="text-danger mb-0" id="generation_error" role="alert"></p>
             </div>
@@ -117,15 +130,17 @@
 
         const monthLabel = new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
         const miniHelp = 'Uses late payments that are still off the return. The main return for the period must already be approved.';
+        const mergedHelp = 'Choose any property in the batch. Every required individual return for the selected month must have final approval before merging.';
 
         function updateScope() {
             const mini = type.val() === 'mini';
-            if (mini) scope.val('one');
-            scope.find('option[value="all"]').prop('disabled', mini);
+            const merged = type.val() === 'merged';
+            if (mini || merged) scope.val('one');
+            scope.find('option[value="all"]').prop('disabled', mini || merged);
             const specificProperty = scope.val() === 'one';
             $('#property_selector').prop('hidden', !specificProperty);
             property.prop('disabled', !specificProperty);
-            $('#return_type_help').text(mini ? miniHelp : 'Uses approved invoices for the selected month.');
+            $('#return_type_help').text(merged ? mergedHelp : (mini ? miniHelp : 'Generates individual property returns. Merged returns are generated separately after final approval.'));
         }
 
         type.add(scope).on('change', updateScope);
@@ -159,6 +174,7 @@
             }
 
             const mini = type.val() === 'mini';
+            const merged = type.val() === 'merged';
             requestData = {
                 _token: form.find('[name="_token"]').val(),
                 return_type: type.val(),
@@ -171,11 +187,39 @@
             $('#review_type').text(type.find(':selected').text());
             $('#review_period').text(monthLabel.format(new Date(selectedPeriod + '-01T00:00:00Z')));
             $('#review_scope').text(specificProperty ? property.find(':selected').text() : 'All properties');
-            $('#review_note').text(mini ? miniHelp : 'Generation can replace unapproved returns for this period.' +
-                (specificProperty ? ' If the property belongs to a merge batch, its linked properties are generated together.' : ''));
-            generate.text(mini ? 'Generate mini return' : (specificProperty ? 'Generate main return' : 'Generate for all properties'));
+            $('#review_note').text(merged ? mergedHelp : (mini ? miniHelp : 'Generation can replace unapproved individual returns for this period. Approved, paid and merged returns are preserved.'));
+            generate.text(merged ? 'Generate merged return' : (mini ? 'Generate mini return' : (specificProperty ? 'Generate main return' : 'Generate for all properties')));
+            generate.add(back).prop('hidden', false).prop('disabled', false);
+            view.prop('hidden', true);
+            $('#merge_review').prop('hidden', !merged);
             status.text('');
             error.text('');
+            if (merged) {
+                review.prop('disabled', true);
+                $.ajax({
+                    url: '{{ route("returns.generate.merged-readiness") }}',
+                    dataType: 'json',
+                    data: { property_id: requestData.property_id, returns_month: selectedPeriod }
+                }).done(function(response) {
+                    if (!response.success) {
+                        showFormError(response.message || 'Could not review this batch.', propertyControl);
+                        return;
+                    }
+                    requestData.preview_token = response.preview_token;
+                    $('#merge_readiness_summary').text(response.batch_reference + ': ' + response.approved + ' of ' + response.total + ' properties ready');
+                    const list = $('#merge_property_statuses').empty();
+                    response.properties.forEach(item => $('<li>').text(item.name + ': ' + item.status).appendTo(list));
+                    $('#merge_totals').prop('hidden', !response.ready);
+                    const money = new Intl.NumberFormat('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                    ['rent_net', 'utility_net', 'deductions', 'net'].forEach(key => $('#merge_' + key).text(money.format(response[key])));
+                    generate.prop('disabled', !response.ready);
+                    if (!response.ready) error.text('Cannot generate merged return. ' + response.blockers.join(' '));
+                    dialog.show(review[0]);
+                }).fail(function(xhr) {
+                    showFormError(xhr.responseJSON?.message || 'Could not review the batch. Try again.', propertyControl);
+                }).always(function() { review.prop('disabled', false); });
+                return;
+            }
             dialog.show(review[0]);
         });
 
